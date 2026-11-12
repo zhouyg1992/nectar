@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 Pin a version or choose an install directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.1
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.2
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -156,6 +156,14 @@ feishu websocket connected; ready to receive messages
 
 Send `/help` first to verify the Feishu path without invoking Codex. Direct messages work without a mention; group messages require @Bot.
 
+`/help`, `/commands`, and short questions like “what commands are available” return a command card without invoking Codex.
+
+All built-in command results (`/new`, `/status`, `/stop`, and command errors) use platform cards; platforms without card support fall back to text.
+
+During a Codex run, intermediate agent messages update the `🐝 Working...` card in real time (throttled). The final `🍯 Complete` card contains only the last Codex answer, not the intermediate narration.
+
+> Help/command cards and real-time progress require v0.1.2 or later.
+
 ### Background service
 
 After editing `~/.nectar/config.toml`:
@@ -178,7 +186,7 @@ Service mode reads Feishu credentials from the config file, not from shell envir
 | `/new`, `/reset` | Start a new Codex thread |
 | `/status` | Show the current thread ID |
 | `/stop` | Cancel the current run |
-| `/help` | Show help |
+| `/help`, `/commands` | Show the command card without invoking Codex |
 
 ## Docs
 

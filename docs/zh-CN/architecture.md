@@ -31,6 +31,7 @@ graph LR
 
 - 位置：`internal/core`
 - `Router`：命令处理、消息路由、Agent 执行、卡片生命周期。
+- `/help`、`/commands`、短命令问句以及所有内置命令结果在 Router 本地处理，直接返回平台卡片，不进入引擎。
 - `SessionStore`：三元组会话键 `(channel, chatID, agentID) → engine session ID`。
 - `Queue`：同一会话 FIFO 串行，不同会话并发。
 - 卡片流程：先发 `🐝 Thinking...`，工具调用时更新 `🐝 Working...`，结束时 PATCH 为 `🍯 Complete` 或 `⚠️ Failed`。
@@ -74,9 +75,11 @@ graph LR
 卡片是飞书 `interactive` 消息：
 
 1. 发送初始 Thinking 卡片，拿到 `message_id`。
-2. 工具调用时按 2 秒节流 PATCH 整张卡片。
-3. Agent 完成后 PATCH 为最终状态。
+2. 工具调用和中间 `agent_message` 按 2 秒节流 PATCH 整张卡片，实时显示执行过程。
+3. Agent 完成后 PATCH 为最终状态；最终内容只使用最后一条非 commentary 消息（优先 `final_answer` phase）。
 4. 如果 PATCH 失败，降级为发送新的最终卡片。
+
+飞书卡片正文使用 `markdown` 组件，而不是 `div + lark_md`，以支持反引号行内代码和代码块。
 
 ### 上下文与模型
 

@@ -25,10 +25,11 @@ const (
 )
 
 type RouterConfig struct {
-	AgentID       string
-	ModelName     string
-	ContextWindow int
-	EngineOptions engine.EngineOptions
+	AgentID            string
+	ModelName          string
+	ContextWindow      int
+	CardUpdateInterval time.Duration
+	EngineOptions      engine.EngineOptions
 }
 
 type Router struct {
@@ -59,6 +60,9 @@ func NewRouter(
 	if cfg.AgentID == "" {
 		cfg.AgentID = "codex"
 	}
+	if cfg.CardUpdateInterval <= 0 {
+		cfg.CardUpdateInterval = 2 * time.Second
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -83,21 +87,23 @@ func (r *Router) Handle(msg platform.Message) {
 	switch text {
 	case "/new", "/reset":
 		r.sessions.Delete(key)
-		r.reply(msg, "已开始新会话。")
+		r.sendCommandResult(msg, platform.CardInfo, "🔄 New Session", "已开始新会话。")
 		return
 	case "/status":
-		r.reply(msg, r.status(key))
+		r.sendCommandResult(msg, platform.CardInfo, "📊 Session Status", r.status(key))
 		return
 	case "/stop":
 		r.stop(key, msg)
 		return
-	case "/help":
-		r.reply(msg, helpText)
+	}
+
+	if isHelpRequest(text) {
+		r.sendHelp(msg)
 		return
 	}
 
 	if text == "" {
-		r.reply(msg, "只支持文本消息。")
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Unsupported Message", "只支持文本消息。")
 		return
 	}
 
@@ -111,7 +117,7 @@ func (r *Router) Handle(msg platform.Message) {
 func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	workdir, err := r.workspaces.ForChat(msg.ChatID)
 	if err != nil {
-		r.reply(msg, "❌ 无法创建工作目录: "+err.Error())
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ 无法创建工作目录: "+err.Error())
 		return
 	}
 
@@ -162,10 +168,31 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		return
 	}
 
-	var output strings.Builder
+	var stream strings.Builder
+	var finalMessage string
+	var lastAgentMessage string
+	var explicitFinal string
 	var errTexts []string
 	var usage *tokenUsage
 	var lastCardUpdate time.Time
+
+	updateProgress := func(title, body string) {
+		if cardID == "" || time.Since(lastCardUpdate) < r.cfg.CardUpdateInterval {
+			return
+		}
+		card := &platform.Card{
+			Status: platform.CardThinking,
+			Title:  title,
+			Body:   body,
+			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
+		}
+		if err := r.platform.Update(r.ctx, cardID, platform.Reply{Card: card}); err != nil {
+			r.logger.Debug("update progress card failed", "error", err)
+		} else {
+			lastCardUpdate = time.Now()
+		}
+	}
+
 	for ev := range events {
 		switch ev.Type {
 		case engine.EventSessionStarted:
@@ -173,27 +200,22 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 				r.sessions.Set(key, ev.SessionID)
 			}
 		case engine.EventMessage:
-			if output.Len() > 0 {
-				output.WriteString("\n\n")
+			lastAgentMessage = ev.Text
+			phase, _ := ev.Meta["phase"].(string)
+			if phase == "final_answer" {
+				explicitFinal = ev.Text
 			}
-			output.WriteString(ev.Text)
+			if phase != "commentary" {
+				finalMessage = ev.Text
+			}
+			updateProgress(cardTitleWorking, ev.Text)
 		case engine.EventTextDelta:
-			output.WriteString(ev.Text)
+			stream.WriteString(ev.Text)
+			lastAgentMessage = stream.String()
+			updateProgress(cardTitleWorking, stream.String())
 		case engine.EventToolCall:
 			r.logger.Debug("agent tool call", "chat", msg.ChatID, "command", ev.Text)
-			if cardID != "" && time.Since(lastCardUpdate) >= 2*time.Second {
-				card := &platform.Card{
-					Status: platform.CardThinking,
-					Title:  cardTitleWorking,
-					Body:   "正在执行：`" + strings.ReplaceAll(truncateOneLine(ev.Text, 200), "`", "'") + "`",
-					Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
-				}
-				if err := r.platform.Update(r.ctx, cardID, platform.Reply{Card: card}); err != nil {
-					r.logger.Debug("update progress card failed", "error", err)
-				} else {
-					lastCardUpdate = time.Now()
-				}
-			}
+			updateProgress(cardTitleWorking, "正在执行：`"+strings.ReplaceAll(truncateOneLine(ev.Text, 200), "`", "'")+"`")
 		case engine.EventToolResult:
 			r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)
 		case engine.EventError:
@@ -205,7 +227,19 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		}
 	}
 
-	answer := strings.TrimSpace(output.String())
+	// Codex exec does not reliably mark the final answer in JSONL. Prefer an
+	// explicit final_answer phase, then the last non-commentary message, then
+	// the last streamed/received message.
+	answer := strings.TrimSpace(explicitFinal)
+	if answer == "" {
+		answer = strings.TrimSpace(finalMessage)
+	}
+	if answer == "" {
+		answer = strings.TrimSpace(stream.String())
+	}
+	if answer == "" {
+		answer = strings.TrimSpace(lastAgentMessage)
+	}
 	if answer == "" {
 		if len(errTexts) > 0 {
 			answer = "❌ " + strings.Join(errTexts, "\n")
@@ -260,14 +294,14 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 func (r *Router) stop(key SessionKey, msg platform.Message) {
 	sessionID, ok := r.sessions.Get(key)
 	if !ok {
-		r.reply(msg, "当前会话还没有正在运行的 Agent。")
+		r.sendCommandResult(msg, platform.CardInfo, "⏹ Stop", "当前会话还没有正在运行的 Agent。")
 		return
 	}
 	if err := r.engine.Cancel(r.ctx, sessionID); err != nil {
-		r.reply(msg, "停止失败: "+err.Error())
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Stop Failed", "停止失败: "+err.Error())
 		return
 	}
-	r.reply(msg, "已请求停止当前任务。")
+	r.sendCommandResult(msg, platform.CardInfo, "⏹ Stop Requested", "已请求停止当前任务。")
 }
 
 func (r *Router) status(key SessionKey) string {
@@ -286,6 +320,83 @@ func (r *Router) reply(msg platform.Message, text string) {
 	if err != nil {
 		r.logger.Error("send reply failed", "chat", msg.ChatID, "error", err)
 	}
+}
+
+func (r *Router) sendHelp(msg platform.Message) {
+	r.sendCardOrText(msg, helpCard(), helpText)
+}
+
+func (r *Router) sendCommandResult(msg platform.Message, status platform.CardStatus, title, body string) {
+	r.sendCardOrText(msg, &platform.Card{
+		Status: status,
+		Title:  title,
+		Body:   body,
+	}, body)
+}
+
+func (r *Router) sendCardOrText(msg platform.Message, card *platform.Card, fallback string) {
+	if caps := r.platform.Capabilities(); caps.Card {
+		if _, err := r.platform.Send(r.ctx, platform.Reply{
+			ChatID: msg.ChatID,
+			Card:   card,
+		}); err == nil {
+			return
+		} else {
+			r.logger.Error("send command card failed", "chat", msg.ChatID, "title", card.Title, "error", err)
+		}
+	}
+	r.reply(msg, fallback)
+}
+
+func helpCard() *platform.Card {
+	return &platform.Card{
+		Status: platform.CardInfo,
+		Title:  "🍯 Nectar Commands",
+		Body:   helpCardBody,
+		Footer: "发送其他消息即可交给 Codex 执行",
+	}
+}
+
+func isHelpRequest(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	normalized = strings.Trim(normalized, " \t\r\n。！？!?.,，;；:：")
+	if normalized == "" {
+		return false
+	}
+
+	exact := []string{
+		"/help", "/commands", "help", "commands",
+		"帮助", "命令", "指令", "用法", "怎么用", "如何使用",
+		"有什么命令", "有哪些命令", "有什么指令", "有哪些指令",
+		"命令列表", "指令列表", "命令有哪些", "指令有哪些", "可用命令",
+		"你能做什么", "你可以做什么", "你会什么", "能做什么", "nectar能做什么",
+		"怎么使用", "有哪些功能", "有什么功能", "命令帮助",
+		"what can you do", "what commands", "what commands are available",
+		"what commands do you have", "which commands", "list commands",
+		"show commands", "show me the commands", "command list",
+		"commands list", "how to use", "what can nectar do",
+	}
+	for _, item := range exact {
+		if normalized == item {
+			return true
+		}
+	}
+
+	if len([]rune(normalized)) > 40 {
+		return false
+	}
+	contains := []string{
+		"有哪些命令", "有哪些指令", "有什么命令", "有什么指令",
+		"命令列表", "指令列表", "命令有哪些", "指令有哪些",
+		"可用命令", "支持哪些命令", "支持哪些指令", "nectar命令", "nectar有哪些命令",
+		"what commands does nectar", "nectar commands", "nectar help",
+	}
+	for _, item := range contains {
+		if strings.Contains(normalized, item) {
+			return true
+		}
+	}
+	return false
 }
 
 type tokenUsage struct {
@@ -384,10 +495,19 @@ func (r *Router) recordLesson(msg platform.Message, prompt, errText string) {
 	}
 }
 
+const helpCardBody = "**会话**\n" +
+	"- `/new` / `/reset` — 开始新会话\n" +
+	"- `/status` — 查看当前会话\n" +
+	"- `/stop` — 停止当前任务\n" +
+	"- `/help` / `/commands` — 显示这张命令卡片\n\n" +
+	"**使用**\n" +
+	"- 普通消息会交给 Codex 执行\n" +
+	"- 群聊需要 @Bot"
+
 const helpText = `Nectar 命令:
-/new    开始新会话
-/status 查看当前会话
-/stop   停止当前任务
-/help   显示帮助
+/new、/reset    开始新会话
+/status         查看当前会话
+/stop           停止当前任务
+/help、/commands 显示命令卡片
 
 其他消息会发送给 Codex 执行。`

@@ -26,8 +26,8 @@ func TestParseCodexEvents(t *testing.T) {
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	if len(got) != 5 {
-		t.Fatalf("got %d events, want 5: %#v", len(got), got)
+	if len(got) != 6 {
+		t.Fatalf("got %d events, want 6: %#v", len(got), got)
 	}
 	if got[0].Type != engine.EventSessionStarted || got[0].SessionID != "thread-1" {
 		t.Fatalf("first event = %#v", got[0])
@@ -38,11 +38,14 @@ func TestParseCodexEvents(t *testing.T) {
 	if got[2].Type != engine.EventToolResult || got[2].Text != "a.go" {
 		t.Fatalf("tool result = %#v", got[2])
 	}
-	if got[3].Type != engine.EventMessage || got[3].Text != "done" {
-		t.Fatalf("message = %#v", got[3])
+	if got[3].Type != engine.EventMessage || got[3].Text != "working" || got[3].Meta["phase"] != "commentary" {
+		t.Fatalf("commentary = %#v", got[3])
 	}
-	if got[4].Type != engine.EventDone {
-		t.Fatalf("last event = %#v", got[4])
+	if got[4].Type != engine.EventMessage || got[4].Text != "done" {
+		t.Fatalf("message = %#v", got[4])
+	}
+	if got[5].Type != engine.EventDone {
+		t.Fatalf("last event = %#v", got[5])
 	}
 }
 

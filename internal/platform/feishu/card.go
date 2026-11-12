@@ -13,6 +13,8 @@ const maxCardBodyBytes = 24 << 10
 func renderCard(card *platform.Card) (string, error) {
 	template := "blue"
 	switch card.Status {
+	case platform.CardInfo:
+		template = "wathet"
 	case platform.CardComplete:
 		template = "green"
 	case platform.CardError:
@@ -23,8 +25,8 @@ func renderCard(card *platform.Card) (string, error) {
 	body := truncateCardBody(card.Body)
 	if body != "" {
 		elements = append(elements, map[string]any{
-			"tag":  "div",
-			"text": map[string]string{"tag": "lark_md", "content": body},
+			"tag":     "markdown",
+			"content": body,
 		})
 	}
 	if card.Footer != "" {

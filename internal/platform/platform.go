@@ -6,6 +6,7 @@ type CardStatus string
 
 const (
 	CardThinking CardStatus = "thinking"
+	CardInfo     CardStatus = "info"
 	CardComplete CardStatus = "complete"
 	CardError    CardStatus = "error"
 )

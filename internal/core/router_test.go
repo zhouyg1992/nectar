@@ -77,6 +77,12 @@ func (f *fakePlatform) cardUpdateCount() int {
 	return len(f.updates)
 }
 
+func (f *fakePlatform) cardSendCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sentCards)
+}
+
 func (f *fakePlatform) lastUpdate() platform.Card {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -148,6 +154,31 @@ func (f *fakeEngine) counts() (int, int, string) {
 	return f.starts, f.resumes, f.lastResume
 }
 
+type scriptedEngine struct {
+	events []engine.Event
+}
+
+func (s *scriptedEngine) Name() string { return "scripted" }
+
+func (s *scriptedEngine) Start(context.Context, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	return s.stream(), nil
+}
+
+func (s *scriptedEngine) Resume(context.Context, string, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	return s.stream(), nil
+}
+
+func (s *scriptedEngine) Cancel(context.Context, string) error { return nil }
+
+func (s *scriptedEngine) stream() <-chan engine.Event {
+	ch := make(chan engine.Event, len(s.events))
+	for _, event := range s.events {
+		ch <- event
+	}
+	close(ch)
+	return ch
+}
+
 func newTestRouter(t *testing.T, eng engine.EngineAdapter, plat platform.PlatformAdapter) (*Router, *comb.FileStore) {
 	t.Helper()
 	ws, err := execguard.NewWorkspace(t.TempDir(), false)
@@ -196,6 +227,30 @@ func waitForCardUpdates(t *testing.T, plat *fakePlatform, want int) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("got %d card updates, want %d", plat.cardUpdateCount(), want)
+}
+
+func waitForCardSends(t *testing.T, plat *fakePlatform, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if plat.cardSendCount() >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("got %d card sends, want %d", plat.cardSendCount(), want)
+}
+
+func waitForCardStatus(t *testing.T, plat *fakePlatform, status platform.CardStatus) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if plat.cardUpdateCount() > 0 && plat.lastUpdate().Status == status {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("card did not reach status %q", status)
 }
 
 func TestRouterStartsThenResumes(t *testing.T) {
@@ -300,5 +355,158 @@ func TestDisplayModelName(t *testing.T) {
 	}
 	if got := displayModelName("gpt-5.2-codex"); got != "gpt-5.2-codex" {
 		t.Fatalf("displayModelName() = %q", got)
+	}
+}
+
+func TestRouterHelpCardBypassesEngine(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/help"})
+	waitForCardSends(t, plat, 1)
+
+	plat.mu.Lock()
+	card := plat.sentCards[0]
+	plat.mu.Unlock()
+	if card.Status != platform.CardInfo || card.Title != "🍯 Nectar Commands" {
+		t.Fatalf("help card = %#v", card)
+	}
+	if !strings.Contains(card.Body, "/new") || !strings.Contains(card.Body, "/commands") {
+		t.Fatalf("help card body = %q", card.Body)
+	}
+	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
+		t.Fatalf("help invoked engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterNaturalLanguageHelpBypassesEngine(t *testing.T) {
+	for _, text := range []string{
+		"nectar 有哪些命令",
+		"有哪些可用命令",
+		"what commands are available",
+	} {
+		t.Run(text, func(t *testing.T) {
+			plat := &fakePlatform{cards: true}
+			eng := &fakeEngine{}
+			router, _ := newTestRouter(t, eng, plat)
+			router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: text})
+			waitForCardSends(t, plat, 1)
+			if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
+				t.Fatalf("help invoked engine: starts=%d resumes=%d", starts, resumes)
+			}
+		})
+	}
+}
+
+func TestRouterHelpFallsBackToText(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/help"})
+	waitForReplies(t, plat, 1)
+	if got := plat.lastReply(); !strings.Contains(got, "/new") {
+		t.Fatalf("help text = %q", got)
+	}
+	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
+		t.Fatalf("help invoked engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterCommandResultsUseCards(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	cases := []struct {
+		text     string
+		status   platform.CardStatus
+		title    string
+		bodyPart string
+	}{
+		{"/new", platform.CardInfo, "🔄 New Session", "已开始新会话"},
+		{"/status", platform.CardInfo, "📊 Session Status", "新会话"},
+		{"/stop", platform.CardInfo, "⏹ Stop", "还没有正在运行的 Agent"},
+		{"", platform.CardError, "⚠️ Unsupported Message", "只支持文本消息"},
+	}
+
+	for i, tc := range cases {
+		router.Handle(platform.Message{
+			Channel:   "feishu",
+			ChatID:    "c1",
+			MessageID: "m1",
+			Text:      tc.text,
+		})
+		waitForCardSends(t, plat, i+1)
+		plat.mu.Lock()
+		card := plat.sentCards[i]
+		plat.mu.Unlock()
+		if card.Status != tc.status || card.Title != tc.title || !strings.Contains(card.Body, tc.bodyPart) {
+			t.Fatalf("command %q card = %#v", tc.text, card)
+		}
+	}
+
+	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
+		t.Fatalf("commands invoked engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterStreamsProgressAndFinalOnly(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventMessage, Text: "Checking files..."},
+		{Type: engine.EventToolCall, Text: "rg foo"},
+		{Type: engine.EventMessage, Text: "Reading router..."},
+		{Type: engine.EventMessage, Text: "Final answer only"},
+		{Type: engine.EventDone},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.CardUpdateInterval = time.Nanosecond
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "analyze"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	final := plat.lastUpdate()
+	if final.Body != "Final answer only" {
+		t.Fatalf("final card body = %q", final.Body)
+	}
+
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	foundProgress := false
+	for _, card := range plat.updates {
+		if strings.Contains(card.Body, "Checking files") || strings.Contains(card.Body, "Reading router") {
+			foundProgress = true
+			break
+		}
+	}
+	if !foundProgress {
+		t.Fatalf("intermediate output was not streamed: %#v", plat.updates)
+	}
+}
+
+func TestIsHelpRequest(t *testing.T) {
+	positive := []string{
+		"/help", "/commands", "help", "命令",
+		"nectar 有哪些命令", "有哪些可用命令",
+		"what commands are available", "what can you do", "show commands",
+	}
+	for _, text := range positive {
+		if !isHelpRequest(text) {
+			t.Fatalf("expected help intent: %q", text)
+		}
+	}
+	negative := []string{
+		"help me fix this bug",
+		"写一个命令解析器",
+		"这个命令怎么用",
+		"请实现 /help 命令",
+		"what commands does this shell support",
+	}
+	for _, text := range negative {
+		if isHelpRequest(text) {
+			t.Fatalf("unexpected help intent: %q", text)
+		}
 	}
 }

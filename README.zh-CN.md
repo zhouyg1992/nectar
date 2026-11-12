@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.1
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.2
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -176,6 +176,14 @@ feishu websocket connected; ready to receive messages
 
 如果网络抖动导致首次连接失败，SDK 会自动重连；连接成功前发送的消息不会补发。建议先发 `/help` 验证入站链路，`/help` 不经过 Codex。
 
+`/help`、`/commands`，以及“有哪些命令”这类短问句会直接返回命令卡片，不调用 Codex。
+
+所有内置命令结果（`/new`、`/status`、`/stop` 和命令错误）都使用平台卡片；不支持卡片的平台自动降级为文本。
+
+Codex 执行过程中，中间 agent 消息会实时更新 `🐝 Working...` 卡片（带节流）；最终 `🍯 Complete` 卡片只显示 Codex 的最后一条结果，不再混入中间叙述。
+
+> 帮助/命令卡片和实时进度需要 v0.1.2 及以上版本。
+
 - 单聊直接发消息
 - 群聊需要 @Bot
 
@@ -201,7 +209,7 @@ nectar service install
 | `/new`、`/reset` | 清空当前会话，下一条消息启动新的 Codex thread |
 | `/status` | 查看当前 Codex thread ID |
 | `/stop` | 中断当前任务 |
-| `/help` | 显示帮助 |
+| `/help`、`/commands` | 显示命令卡片，不调用 Codex |
 
 ## 文档
 

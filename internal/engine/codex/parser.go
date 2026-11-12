@@ -85,9 +85,12 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			}
 			switch ev.Item.Type {
 			case "agent_message":
-				// Commentary is progress chatter; v1 only reports the final answer.
-				if ev.Item.Text != "" && ev.Item.Phase != "commentary" {
-					emit(engine.Event{Type: engine.EventMessage, Text: ev.Item.Text})
+				if ev.Item.Text != "" {
+					meta := map[string]any{}
+					if ev.Item.Phase != "" {
+						meta["phase"] = ev.Item.Phase
+					}
+					emit(engine.Event{Type: engine.EventMessage, Text: ev.Item.Text, Meta: meta})
 				}
 			case "command_execution":
 				meta := map[string]any{

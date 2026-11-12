@@ -14,6 +14,7 @@ func TestRenderCardStatusAndBody(t *testing.T) {
 		template string
 	}{
 		{platform.CardThinking, "blue"},
+		{platform.CardInfo, "wathet"},
 		{platform.CardComplete, "green"},
 		{platform.CardError, "red"},
 	}
@@ -47,6 +48,9 @@ func TestRenderCardStatusAndBody(t *testing.T) {
 		}
 		if len(payload.Elements) != 2 {
 			t.Fatalf("%s elements = %d, want 2", tc.status, len(payload.Elements))
+		}
+		if payload.Elements[0]["tag"] != "markdown" {
+			t.Fatalf("%s body tag = %v, want markdown", tc.status, payload.Elements[0]["tag"])
 		}
 	}
 }
