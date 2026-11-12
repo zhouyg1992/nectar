@@ -57,9 +57,21 @@ context_window = 0             # 0 = read context_window from the result event
 auto_approve = true            # --dangerously-skip-permissions; required for headless runs
 per_chat_workspace = false
 
+[pi]
+path = "pi"
+# provider = "anthropic"
+# model = "claude-sonnet-4-5"   # empty = Pi default model
+# thinking = "high"             # off | minimal | low | medium | high | xhigh | max
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0             # 0 = unknown; footer omits context percentage
+trust_workspace = true         # --approve; load project-local Pi resources
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-engine = "codex"              # codex | opencode | cursor | claude
+engine = "codex"              # codex | opencode | cursor | claude | pi
 agent_id = "codex"            # legacy; defaults to engine
 # Feishu open_id list. When non-empty, DMs are restricted to these users.
 admin_users = []

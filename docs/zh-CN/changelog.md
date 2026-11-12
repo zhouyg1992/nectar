@@ -4,6 +4,9 @@
 
 ### 新增
 
+- Pi 引擎适配器：`--mode json`、`--session` 续接、工具事件与 token usage 映射
+- `[pi]` 配置段、`PI_PATH` 环境变量与 `bot.engine = "pi"`
+- Pi 的 `provider`、`model`、`thinking` 与 `trust_workspace`（`--approve`）
 - Claude Code 引擎适配器：`-p --output-format stream-json`、`--resume` 续接、工具事件与 token usage 映射
 - `[claude]` 配置段、`CLAUDE_PATH` 环境变量与 `bot.engine = "claude"`
 - Claude Code 的 `auto_approve`（`--dangerously-skip-permissions`）、`permission_mode`、`fallback_model` 与 `max_turns`

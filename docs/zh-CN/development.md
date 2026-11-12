@@ -3,7 +3,7 @@
 ## 环境
 
 - Go 1.22+
-- Codex CLI、OpenCode CLI、Cursor Agent CLI 或 Claude Code（真实端到端测试需要）
+- Codex CLI、OpenCode CLI、Cursor Agent CLI、Claude Code 或 Pi（真实端到端测试需要）
 - 飞书自建应用（真实端到端测试需要）
 
 ## 常用命令
@@ -42,6 +42,8 @@ install.sh                  # 一键安装脚本
 - Cursor 适配器真实子进程（用假 shell 脚本）
 - Claude Code stream-json 解析、工具事件、usage/context_window 与参数组装
 - Claude Code 适配器真实子进程（用假 shell 脚本）
+- Pi JSON 事件解析、工具事件、usage 与参数组装
+- Pi 适配器真实子进程（用假 shell 脚本）
 - Router 会话复用、FIFO 队列、卡片更新、教训记录
 - 飞书消息规范化与 dispatcher 接线
 - 教训文件存储、上下文窗口解析

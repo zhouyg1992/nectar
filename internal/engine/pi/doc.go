@@ -1,2 +1,2 @@
-// Package pi is reserved for the Pi engine adapter.
+// Package pi adapts the Pi coding agent CLI to Nectar's engine interface.
 package pi

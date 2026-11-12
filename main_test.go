@@ -39,3 +39,39 @@ func TestSetupOpenCodeEngine(t *testing.T) {
 		t.Fatalf("options = %#v", setup.options)
 	}
 }
+
+func TestSetupPiEngine(t *testing.T) {
+	cfg := config.Config{
+		Bot: config.BotConfig{Engine: "pi"},
+		Pi: config.PiConfig{
+			Path:           "pi",
+			Provider:       "anthropic",
+			Model:          "claude-sonnet-4-5",
+			Thinking:       "high",
+			WorkingDir:     "/tmp/nectar-pi",
+			Timeout:        "10m",
+			MaxOutputBytes: 4096,
+			ContextWindow:  200000,
+			TrustWorkspace: true,
+		},
+	}
+	setup, err := setupEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if setup.adapter == nil {
+		t.Fatal("missing engine adapter")
+	}
+	if setup.name != "pi" || setup.model != "claude-sonnet-4-5" {
+		t.Fatalf("setup = %#v", setup)
+	}
+	if setup.contextWindow != 200000 {
+		t.Fatalf("context window = %d", setup.contextWindow)
+	}
+	if setup.options.WorkingDir != "/tmp/nectar-pi" || setup.options.Timeout != 10*time.Minute {
+		t.Fatalf("options = %#v", setup.options)
+	}
+	if setup.adapter.Name() != "pi" {
+		t.Fatalf("adapter name = %q", setup.adapter.Name())
+	}
+}

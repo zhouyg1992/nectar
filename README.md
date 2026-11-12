@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar forwards Feishu messages to Codex CLI, OpenCode, Cursor Agent, or Claude Code and streams the result back as an interactive card. v1 supports Feishu with any of these engines.
+Nectar forwards Feishu messages to Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi and streams the result back as an interactive card. v1 supports Feishu with any of these engines.
 
 ## Support matrix
 
-**v1 supports Feishu / Lark with Codex CLI, OpenCode, Cursor Agent, or Claude Code.**
+**v1 supports Feishu / Lark with Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi.**
 
 Legend: ✅ supported · 🚧 planned
 
@@ -45,7 +45,7 @@ Legend: ✅ supported · 🚧 planned
 | OpenCode | ✅ Supported (next release) | `run --format json` / `--session` |
 | Cursor Agent CLI | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ Supported | `-p --output-format stream-json` / `--resume` |
-| Pi | 🚧 Planned | CLI adapter |
+| Pi | ✅ Supported | `--mode json` / `--session` |
 | Kimi Code | 🚧 Planned | Local server API adapter |
 | More engines | 🚧 Planned | Implement `EngineAdapter` |
 
@@ -116,6 +116,13 @@ claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
+- Or Pi installed and logged in:
+
+```bash
+pi auth check --provider anthropic
+pi --mode json "Reply with exactly OK"
+```
+
 ## Configuration
 
 Edit `~/.nectar/config.toml`:
@@ -176,9 +183,21 @@ max_turns = 0                 # 0 = no limit
 auto_approve = true           # --dangerously-skip-permissions
 per_chat_workspace = false
 
+[pi]
+path = "pi"
+provider = ""                 # optional provider override
+model = ""                    # e.g. claude-sonnet-4-5; empty = Pi default
+thinking = ""                 # off | minimal | low | medium | high | xhigh | max
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0            # 0 = unknown; footer omits context percentage
+trust_workspace = true        # --approve; load project-local Pi resources
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-engine = "codex"              # codex | opencode | cursor | claude
+engine = "codex"              # codex | opencode | cursor | claude | pi
 agent_id = "codex"            # legacy fallback; defaults to engine
 admin_users = []
 allowed_chats = []
@@ -197,6 +216,8 @@ For Cursor, set `bot.engine = "cursor"`; Nectar runs `cursor-agent -p --output-f
 
 For Claude Code, set `bot.engine = "claude"`; Nectar runs `claude -p --output-format stream-json --verbose --include-partial-messages`, passes the prompt on stdin, and resumes sessions with `--resume`. `auto_approve` maps to `--dangerously-skip-permissions`; when it is off, `permission_mode` is passed through. Token usage and the context window are read from the final `result` event, so `claude.context_window` is only needed as an override. Attachments are referenced by local path in the prompt.
 
+For Pi, set `bot.engine = "pi"`; Nectar runs `pi --mode json`, passes the prompt on stdin, and resumes sessions with `--session`. `provider`, `model`, and `thinking` map directly to Pi flags. `trust_workspace` maps to `--approve`, which lets Pi load project-local settings, skills, context files, and extensions. Token usage is read from assistant message events; set `pi.context_window` if you want the context percentage in the footer. Attachments are referenced by local path in the prompt.
+
 Environment overrides:
 
 ```bash
@@ -206,6 +227,7 @@ export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
 export CURSOR_AGENT_PATH=cursor-agent
 export CLAUDE_PATH=claude
+export PI_PATH=pi
 export NECTAR_ENGINE=codex
 export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace

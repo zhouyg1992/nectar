@@ -13,6 +13,7 @@
 - OpenCode `run --format json` / `--session`（下个版本）
 - Cursor Agent `-p --output-format stream-json` / `--resume`
 - Claude Code `-p --output-format stream-json` / `--resume`
+- Pi `--mode json` / `--session`
 - JSONL 事件解析
 - 会话键与同会话 FIFO 队列
 - 交互卡片：Thinking / Working / Complete / Failed
@@ -51,7 +52,7 @@
 ### 更远
 
 - 钉钉、Telegram、微信、Slack
-- Kimi、Pi
+- Kimi
 - Jev 决策服务
 - Agent Teams / Multi-Bot Relay
 
