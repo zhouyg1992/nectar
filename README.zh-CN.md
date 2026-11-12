@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.3
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.2.0
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
