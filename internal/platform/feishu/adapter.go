@@ -475,6 +475,9 @@ func parseRawPost(raw, messageID string) (string, []attachment.Resource, bool) {
 	}
 
 	attachments := make([]attachment.Resource, 0)
+	seenFiles := make(map[string]struct{})
+	addPostFiles(body, messageID, &attachments, seenFiles)
+	addPostFiles(content, messageID, &attachments, seenFiles)
 	imageNumber := 0
 	addImage := func(key string) string {
 		imageNumber++
@@ -562,6 +565,30 @@ func parseRawPost(raw, messageID string) (string, []attachment.Resource, bool) {
 	return text, attachments, true
 }
 
+func addPostFiles(content map[string]any, messageID string, attachments *[]attachment.Resource, seen map[string]struct{}) {
+	files, _ := content["files"].([]any)
+	for _, fileValue := range files {
+		file, ok := fileValue.(map[string]any)
+		if !ok || isTrue(file["is_folder"]) {
+			continue
+		}
+		key := stringValue(file["file_key"])
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		*attachments = append(*attachments, attachment.Resource{
+			Kind:      attachment.KindFile,
+			Key:       key,
+			Name:      stringValue(file["file_name"]),
+			MessageID: messageID,
+		})
+	}
+}
+
 func selectPostBody(content map[string]any) map[string]any {
 	if hasPostBody(content) {
 		return content
@@ -632,6 +659,11 @@ func derefString(value *string) string {
 func stringValue(value any) string {
 	text, _ := value.(string)
 	return text
+}
+
+func isTrue(value any) bool {
+	flag, _ := value.(bool)
+	return flag
 }
 
 func attachmentKind(resourceType, rawContentType string) (attachment.Kind, bool) {

@@ -210,6 +210,35 @@ func TestToPlatformMessageParsesLocaleRichPostMarkdownImage(t *testing.T) {
 	}
 }
 
+func TestToPlatformMessageParsesFlatRichPostFiles(t *testing.T) {
+	msg := &channeltypes.NormalizedMessage{
+		MessageID:      "m1",
+		ChatID:         "c1",
+		ChatType:       "p2p",
+		Content:        "[rich text message]",
+		RawContentType: "post",
+		RawEvent: rawMessageEvent(
+			"m1",
+			"post",
+			`{"title":"","content":[[{"tag":"text","text":"这个文件是什么内容"}]],"content_v2":[[{"tag":"text","text":"这个文件是什么内容"}]],"files":[{"file_key":"file_1","file_name":"info.log","is_folder":false},{"file_key":"file_2","file_name":"folder","is_folder":true}]}`,
+		),
+	}
+	got := toPlatformMessage(msg)
+	if got.Text != "这个文件是什么内容" {
+		t.Fatalf("text = %q", got.Text)
+	}
+	if len(got.Attachments) != 1 {
+		t.Fatalf("attachments = %#v", got.Attachments)
+	}
+	item := got.Attachments[0]
+	if item.Kind != attachment.KindFile ||
+		item.Key != "file_1" ||
+		item.Name != "info.log" ||
+		item.MessageID != "m1" {
+		t.Fatalf("file attachment = %#v", item)
+	}
+}
+
 func rawMessageEvent(messageID, messageType, content string) *larkim.P2MessageReceiveV1 {
 	return &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
