@@ -29,5 +29,13 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
+.idea/
 # .vscode/
+
+# Nectar local state
+/nectar
+/.nectar/
+config.toml
+
+# Release build output
+/dist/

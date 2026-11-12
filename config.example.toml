@@ -1,0 +1,31 @@
+# Nectar configuration
+# Default location: ~/.nectar/config.toml
+
+[feishu]
+app_id = "cli_xxxxxxxxxxxxxxxx"
+app_secret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+log_level = "info"
+
+[codex]
+path = "codex"
+# model = "gpt-5.2-codex"
+# effort = "high"
+sandbox = "workspace-write"
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+# 0 = auto-detect from Codex model catalog; set e.g. 258000 to override
+context_window = 0
+per_chat_workspace = false
+bypass_approvals = false
+
+[bot]
+name = "Nectar"
+agent_id = "codex"
+# Feishu open_id list. When non-empty, DMs are restricted to these users.
+admin_users = []
+# Feishu chat_id list. When non-empty, only these groups are served.
+allowed_chats = []
+
+[storage]
+data_dir = "~/.nectar"

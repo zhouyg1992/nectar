@@ -1,0 +1,51 @@
+# 路线图与待实现
+
+## v1 已完成
+
+- 飞书 WebSocket 长连接
+- 单聊和群聊 @Bot
+- Codex `exec --json` / `resume`
+- JSONL 事件解析
+- 三元组会话键与同会话 FIFO 队列
+- 交互卡片：Thinking / Working / Complete / Failed
+- 完成卡片上下文占比、模型、耗时和 token
+- `/new`、`/status`、`/stop`、`/help`
+- 失败教训记录（pending，不注入）
+- 一键安装脚本与 GitHub Release 流水线
+
+## v1 明确不做
+
+- 逐 token 流式输出
+- 会话持久化
+- 入站图片/文件转交给 Codex
+- 教训注入与审核卡片
+- 定时任务
+- 云同步
+- 多平台/多引擎实现
+
+## 后续
+
+### v1.1
+
+- 定时任务
+- 教训日志检索
+- 更细的流式输出
+
+### v1.2
+
+- 飞书审核卡片
+- 教训 `pending → active` 后才注入
+
+### v1.3
+
+- Pollen 云同步：Comb、`AGENTS.md`、skills
+- 多设备冲突处理
+
+### 更远
+
+- 钉钉、Telegram、微信、Slack
+- Claude Code、Kimi、OpenCode、Pi
+- Jev 决策服务
+- Agent Teams / Multi-Bot Relay
+
+历史变更见 [changelog.md](changelog.md)。
