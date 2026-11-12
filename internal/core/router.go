@@ -177,6 +177,7 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	var lastAgentMessage string
 	var explicitFinal string
 	var errTexts []string
+	var toolErrors []string
 	var usage *tokenUsage
 	var lastCardUpdate time.Time
 
@@ -222,6 +223,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			updateProgress(cardTitleWorking, "正在执行：`"+strings.ReplaceAll(truncateOneLine(ev.Text, 200), "`", "'")+"`")
 		case engine.EventToolResult:
 			r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)
+			if status, _ := ev.Meta["status"].(string); status == "error" {
+				toolErrors = append(toolErrors, ev.Text)
+			}
 		case engine.EventError:
 			if strings.TrimSpace(ev.Text) != "" {
 				errTexts = append(errTexts, ev.Text)
@@ -247,6 +251,8 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	if answer == "" {
 		if len(errTexts) > 0 {
 			answer = "❌ " + strings.Join(errTexts, "\n")
+		} else if len(toolErrors) > 0 {
+			answer = "❌ " + strings.Join(toolErrors, "\n")
 		} else {
 			answer = "（Agent 没有返回文本输出）"
 		}
@@ -258,7 +264,8 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	}
 
 	elapsed := time.Since(startedAt)
-	if len(errTexts) > 0 {
+	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
+	if failed {
 		r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
@@ -414,8 +421,9 @@ func isHelpRequest(text string) bool {
 }
 
 type tokenUsage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens   int
+	OutputTokens  int
+	ContextTokens int
 }
 
 func parseUsage(meta map[string]any) *tokenUsage {
@@ -427,23 +435,31 @@ func parseUsage(meta map[string]any) *tokenUsage {
 		return nil
 	}
 	var decoded struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens   int `json:"input_tokens"`
+		OutputTokens  int `json:"output_tokens"`
+		ContextTokens int `json:"context_tokens"`
 	}
 	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
 		return nil
 	}
-	if decoded.InputTokens == 0 && decoded.OutputTokens == 0 {
+	if decoded.InputTokens == 0 && decoded.OutputTokens == 0 && decoded.ContextTokens == 0 {
 		return nil
 	}
-	return &tokenUsage{InputTokens: decoded.InputTokens, OutputTokens: decoded.OutputTokens}
+	return &tokenUsage{
+		InputTokens:   decoded.InputTokens,
+		OutputTokens:  decoded.OutputTokens,
+		ContextTokens: decoded.ContextTokens,
+	}
 }
 
 func cardFooter(model string, elapsed time.Duration, usage *tokenUsage, contextWindow int) string {
 	model = displayModelName(model)
 	parts := make([]string, 0, 5)
 	if usage != nil && contextWindow > 0 {
-		used := usage.InputTokens + usage.OutputTokens
+		used := usage.ContextTokens
+		if used == 0 {
+			used = usage.InputTokens + usage.OutputTokens
+		}
 		percent := float64(used) / float64(contextWindow) * 100
 		parts = append(parts, fmt.Sprintf(
 			"ctx: %s/%s (%.1f%%)",

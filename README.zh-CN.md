@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Memory that grows with you.</strong><br>
-  Go 编写的飞书 ↔ Codex Agent 桥接器
+  Go 编写的飞书 ↔ Codex/OpenCode Agent 桥接器
 </p>
 
 <p align="center">
@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar 把飞书消息交给 Codex CLI 执行，再以交互卡片把结果回传到飞书。v1 支持飞书 + Codex，安装后一条命令即可启动。
+Nectar 把飞书消息交给 Codex CLI 或 OpenCode 执行，再以交互卡片把结果回传到飞书。v1 支持飞书 + Codex/OpenCode，安装后一条命令即可启动。
 
 ## 支持矩阵
 
-**v1 当前仅支持：飞书 / Lark + Codex CLI。**
+**v1 支持：飞书 / Lark + Codex CLI / OpenCode。**
 
 图例：✅ 已支持 · 🚧 计划中
 
@@ -42,8 +42,8 @@ Nectar 把飞书消息交给 Codex CLI 执行，再以交互卡片把结果回�
 | 引擎 | 状态 | 说明 |
 |---|---|---|
 | Codex CLI | ✅ 已支持 | `exec --json` / `resume` |
+| OpenCode | ✅ 已支持（下个版本） | `run --format json` / `--session` |
 | Claude Code | 🚧 计划中 | CLI / Agent SDK 适配 |
-| OpenCode | 🚧 计划中 | CLI 适配 |
 | Pi | 🚧 计划中 | CLI 适配 |
 | Kimi Code | 🚧 计划中 | 本地 Server API 适配 |
 | 更多引擎 | 🚧 计划中 | 通过 `EngineAdapter` 扩展 |
@@ -102,6 +102,14 @@ Linux 额外加 `--linger` 可开机启动，无需登录。
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
+### OpenCode CLI
+
+安装 OpenCode，配置好 provider/model，并确认下面的命令可以正常运行：
+
+```bash
+opencode run --format json "Reply with exactly OK"
+```
+
 ## 配置
 
 安装脚本会创建 `~/.nectar/config.toml`。从源码运行时可以手动复制：
@@ -131,9 +139,22 @@ context_window = 0            # 0 = 从 Codex 模型目录自动解析，也可�
 per_chat_workspace = false    # true 时每个 chat 使用工作目录子目录
 bypass_approvals = false      # 谨慎开启
 
+[opencode]
+path = "opencode"
+model = ""                    # 例如 provider/model#variant
+agent = ""                    # 可选 OpenCode agent
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0            # 0 = 从 OpenCode 配置自动解析
+standalone = true             # 每次运行使用私有 server
+auto_approve = true           # 非交互 bot 场景需要
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-agent_id = "codex"
+engine = "codex"              # codex | opencode
+agent_id = "codex"            # legacy，默认跟随 engine
 admin_users = []              # open_id 白名单；非空时限制单聊
 allowed_chats = []            # chat_id 白名单；非空时限制群聊
 
@@ -145,12 +166,16 @@ data_dir = "~/.nectar"
 
 页脚的模型名优先使用 `codex.model`，为空时读取 Codex 自身配置；显示时取模型标识的最后一段，例如 `deepseek/deepseek-flash` 显示为 `deepseek-flash`。
 
+使用 OpenCode 时设置 `bot.engine = "opencode"`，Nectar 会读取 `[opencode]`；`model` 为空时从 `~/.config/opencode/opencode.json` 读取，并通过 `opencode session export` 获取最后一轮 assistant 的 token 用量。上下文上限从模型的 `limit.context` 自动读取；模型未在 OpenCode 配置中声明时，可用 `opencode.context_window` 手动指定。
+
 也可以用环境变量覆盖：
 
 ```bash
 export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export CODEX_PATH=codex
+export OPENCODE_PATH=opencode
+export NECTAR_ENGINE=codex
 export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace
 ```
@@ -174,13 +199,13 @@ go build -o nectar .
 feishu websocket connected; ready to receive messages
 ```
 
-如果网络抖动导致首次连接失败，SDK 会自动重连；连接成功前发送的消息不会补发。建议先发 `/help` 验证入站链路，`/help` 不经过 Codex。
+如果网络抖动导致首次连接失败，SDK 会自动重连；连接成功前发送的消息不会补发。建议先发 `/help` 验证入站链路，`/help` 不经过引擎。
 
-`/help`、`/commands`，以及“有哪些命令”这类短问句会直接返回命令卡片，不调用 Codex。
+`/help`、`/commands`，以及“有哪些命令”这类短问句会直接返回命令卡片，不调用引擎。
 
 所有内置命令结果（`/new`、`/status`、`/stop` 和命令错误）都使用平台卡片；不支持卡片的平台自动降级为文本。
 
-Codex 执行过程中，中间 agent 消息会实时更新 `🐝 Working...` 卡片（带节流）；最终 `🍯 Complete` 卡片只显示 Codex 的最后一条结果，不再混入中间叙述。
+Agent 执行过程中，中间消息会实时更新 `🐝 Working...` 卡片（带节流）；最终 `🍯 Complete` 卡片只显示最后一条结果，不再混入中间叙述。
 
 > 帮助/命令卡片和实时进度需要 v0.1.2 及以上版本。
 
@@ -210,10 +235,10 @@ nectar service install
 
 | 命令 | 作用 |
 |---|---|
-| `/new`、`/reset` | 清空当前会话，下一条消息启动新的 Codex thread |
-| `/status` | 查看当前 Codex thread ID |
+| `/new`、`/reset` | 清空当前会话，下一条消息启动新的 agent thread |
+| `/status` | 查看当前 agent thread ID |
 | `/stop` | 中断当前任务 |
-| `/help`、`/commands` | 显示命令卡片，不调用 Codex |
+| `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
 ## 文档
 

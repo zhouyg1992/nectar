@@ -41,8 +41,9 @@ graph LR
 
 - 位置：`internal/engine`
 - 统一 `Event` 流：会话开始、文本、工具调用/结果、完成、错误。
-- v1 实现：Codex CLI。
-- 占位：Claude Code、Kimi、OpenCode、Pi。
+- 已实现：Codex CLI、OpenCode。
+- 占位：Claude Code、Kimi、Pi。
+- OpenCode 通过 `session export` 读取最后一轮 assistant token，并从模型配置的 `limit.context` 解析上下文上限，附加到 `EventDone` 的 usage。
 
 ### Exec
 
@@ -80,7 +81,7 @@ graph LR
 3. Agent 完成后 PATCH 为最终状态；最终内容只使用最后一条非 commentary 消息（优先 `final_answer` phase）。
 4. 如果 PATCH 失败，降级为发送新的最终卡片。
 
-飞书卡片正文使用 `markdown` 组件，而不是 `div + lark_md`，以支持反引号行内代码和代码块。
+飞书卡片使用 Card 2.0：标题、引用、行内代码、代码块等交给原生 `markdown` 元素渲染，不再逐行改写。表格使用原生 `table` 组件；仅保留必要的图片/尖括号清洗，避免外链图片的非法 image key 导致卡片更新失败。
 
 飞书话题消息会通过 `ReplyMessageReqBody.reply_in_thread=true` 回复，保证卡片和文本留在原话题内。
 

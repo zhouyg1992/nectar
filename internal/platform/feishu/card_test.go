@@ -29,16 +29,22 @@ func TestRenderCardStatusAndBody(t *testing.T) {
 			t.Fatal(err)
 		}
 		var payload struct {
+			Schema string `json:"schema"`
 			Header struct {
 				Template string `json:"template"`
 				Title    struct {
 					Content string `json:"content"`
 				} `json:"title"`
 			} `json:"header"`
-			Elements []map[string]any `json:"elements"`
+			Body struct {
+				Elements []map[string]any `json:"elements"`
+			} `json:"body"`
 		}
 		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 			t.Fatal(err)
+		}
+		if payload.Schema != "2.0" {
+			t.Fatalf("%s schema = %q", tc.status, payload.Schema)
 		}
 		if payload.Header.Template != tc.template {
 			t.Fatalf("%s template = %q, want %q", tc.status, payload.Header.Template, tc.template)
@@ -46,11 +52,11 @@ func TestRenderCardStatusAndBody(t *testing.T) {
 		if payload.Header.Title.Content != "title" {
 			t.Fatalf("%s title = %q", tc.status, payload.Header.Title.Content)
 		}
-		if len(payload.Elements) != 2 {
-			t.Fatalf("%s elements = %d, want 2", tc.status, len(payload.Elements))
+		if len(payload.Body.Elements) != 2 {
+			t.Fatalf("%s elements = %d, want 2", tc.status, len(payload.Body.Elements))
 		}
-		if payload.Elements[0]["tag"] != "markdown" {
-			t.Fatalf("%s body tag = %v, want markdown", tc.status, payload.Elements[0]["tag"])
+		if payload.Body.Elements[0]["tag"] != "markdown" || payload.Body.Elements[1]["tag"] != "markdown" {
+			t.Fatalf("%s body tags = %v, %v", tc.status, payload.Body.Elements[0]["tag"], payload.Body.Elements[1]["tag"])
 		}
 	}
 }
@@ -63,5 +69,34 @@ func TestTruncateCardBody(t *testing.T) {
 	}
 	if !strings.Contains(got, "已截断") {
 		t.Fatal("missing truncation marker")
+	}
+}
+
+func TestRenderCardIncludesNativeTable(t *testing.T) {
+	raw, err := renderCard(&platform.Card{
+		Status: platform.CardInfo,
+		Title:  "table",
+		Body:   "intro\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\noutro",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Schema string `json:"schema"`
+		Body   struct {
+			Elements []map[string]any `json:"elements"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Schema != "2.0" {
+		t.Fatalf("schema = %q", payload.Schema)
+	}
+	if len(payload.Body.Elements) != 3 {
+		t.Fatalf("elements = %#v", payload.Body.Elements)
+	}
+	if payload.Body.Elements[0]["tag"] != "markdown" || payload.Body.Elements[1]["tag"] != "table" || payload.Body.Elements[2]["tag"] != "markdown" {
+		t.Fatalf("element tags = %v, %v, %v", payload.Body.Elements[0]["tag"], payload.Body.Elements[1]["tag"], payload.Body.Elements[2]["tag"])
 	}
 }

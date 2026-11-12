@@ -3,7 +3,7 @@
 ## 环境
 
 - Go 1.22+
-- Codex CLI（真实端到端测试需要）
+- Codex CLI 或 OpenCode CLI（真实端到端测试需要）
 - 飞书自建应用（真实端到端测试需要）
 
 ## 常用命令
@@ -36,12 +36,14 @@ install.sh                  # 一键安装脚本
 
 - Codex JSONL 解析与参数组装
 - Codex 适配器真实子进程（用假 shell 脚本）
+- OpenCode JSONL 解析与参数组装
+- OpenCode 适配器真实子进程（用假 shell 脚本）
 - Router 会话复用、FIFO 队列、卡片更新、教训记录
 - 飞书消息规范化与 dispatcher 接线
 - 教训文件存储、上下文窗口解析
 - launchd plist / systemd unit 模板渲染
 
-不需要真实飞书应用或 Codex 登录即可运行大部分测试。
+不需要真实飞书应用或引擎登录即可运行大部分测试。
 
 ## 本地模拟 Release
 

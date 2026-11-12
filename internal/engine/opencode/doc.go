@@ -1,2 +1,2 @@
-// Package opencode is reserved for the OpenCode engine adapter.
+// Package opencode implements the OpenCode CLI engine adapter.
 package opencode

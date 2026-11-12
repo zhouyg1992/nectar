@@ -19,9 +19,22 @@ context_window = 0
 per_chat_workspace = false
 bypass_approvals = false
 
+[opencode]
+path = "opencode"
+# model = "provider/model#variant"
+# agent = "build"
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0            # 0 = read limit.context from OpenCode config
+standalone = true
+auto_approve = true
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-agent_id = "codex"
+engine = "codex"              # codex | opencode
+agent_id = "codex"            # legacy; defaults to engine
 # Feishu open_id list. When non-empty, DMs are restricted to these users.
 admin_users = []
 # Feishu chat_id list. When non-empty, only these groups are served.

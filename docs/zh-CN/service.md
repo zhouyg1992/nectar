@@ -111,15 +111,15 @@ sudo loginctl enable-linger "$USER"
 - `PATH`（包含 Nectar 所在目录和常见系统路径）
 - `CODEX_HOME`（如果当前 shell 设置了）
 
-如果 `codex` 通过 nvm、asdf 或其他版本管理器安装，确保其 Node 目录在安装服务时的 `PATH` 里，或者在 `~/.nectar/config.toml` 中把 `codex.path` 指向可执行文件。
+如果 `codex` / `opencode` 通过 nvm、asdf 或其他版本管理器安装，确保其目录在安装服务时的 `PATH` 里，或者在 `~/.nectar/config.toml` 中把对应引擎的 `path` 指向可执行文件。
 
 ## 排查
 
 | 现象 | 排查 |
 |---|---|
 | 服务安装失败，提示占位配置 | 先编辑 `~/.nectar/config.toml` |
-| 服务启动后立即退出 | `nectar service logs` 查看 Codex/飞书错误 |
-| Codex 找不到 | 检查服务 `PATH`，或在配置里设置 `codex.path` |
+| 服务启动后立即退出 | `nectar service logs` 查看引擎/飞书错误 |
+| 引擎 CLI 找不到 | 检查服务 `PATH`，或在配置里设置 `codex.path` / `opencode.path` |
 | 两个实例抢飞书事件 | 停掉手动运行的 `nectar`，只保留服务实例 |
 | macOS 睡眠后消息丢失 | 睡眠期间长连接会断，唤醒后自动重连；睡眠中消息不会补发 |
 | Linux 开机没启动 | 检查 `loginctl show-user "$USER" -p Linger` 是否为 `yes` |
@@ -127,5 +127,5 @@ sudo loginctl enable-linger "$USER"
 ## 安全
 
 - 服务文件不包含 `app_secret`；凭证仍在 `~/.nectar/config.toml`，权限保持 `0600`。
-- 不要用 root 运行个人 Nectar；Codex 凭证和工作区都在用户目录下。
+- 不要用 root 运行个人 Nectar；引擎凭证和工作区都在用户目录下。
 - 日志可能包含 chat id、模型信息和错误上下文，注意文件权限和轮转。

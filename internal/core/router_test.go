@@ -593,6 +593,47 @@ func TestRouterStreamsProgressAndFinalOnly(t *testing.T) {
 	}
 }
 
+func TestRouterRendersEngineUsage(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventMessage, Text: "answer"},
+		{Type: engine.EventDone, Meta: map[string]any{
+			"usage": `{"input_tokens":120,"output_tokens":30,"context_tokens":180}`,
+		}},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.ContextWindow = 1000
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "hello"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	final := plat.lastUpdate()
+	for _, want := range []string{"ctx: 180/1k (18.0%)", "↑120", "↓30"} {
+		if !strings.Contains(final.Footer, want) {
+			t.Fatalf("footer = %q, want %q", final.Footer, want)
+		}
+	}
+}
+
+func TestRouterRecoverableToolErrorStillCompletes(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventToolResult, Text: "read failed", Meta: map[string]any{"status": "error"}},
+		{Type: engine.EventMessage, Text: "Final answer"},
+		{Type: engine.EventDone},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "hello"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	final := plat.lastUpdate()
+	if final.Status != platform.CardComplete || final.Body != "Final answer" {
+		t.Fatalf("final card = %#v", final)
+	}
+}
+
 func TestIsHelpRequest(t *testing.T) {
 	positive := []string{
 		"/help", "/commands", "help", "命令",
