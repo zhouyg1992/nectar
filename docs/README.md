@@ -2,10 +2,10 @@
 
 ## Languages
 
-- [简体中文](zh-CN/README.md)
 - [English](en/README.md)（translation in progress）
+- [简体中文](zh-CN/README.md)
 
-返回项目主页：[README](../README.md)
+Project home: [English README](../README.md) · [中文 README](../README.zh-CN.md)
 
 ## Adding a language
 

@@ -8,4 +8,4 @@
 - [路线图与待实现](roadmap.md)
 - [Changelog](changelog.md)
 
-返回项目主页：[README](../../README.md)
+返回：[中文 README](../../README.zh-CN.md) · [English README](../../README.md)

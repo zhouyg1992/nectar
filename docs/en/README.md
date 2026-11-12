@@ -12,4 +12,4 @@ For now, the Chinese documentation is the source of truth:
 - [Roadmap](../zh-CN/roadmap.md)
 - [Changelog](../zh-CN/changelog.md)
 
-Back to [English README](../../README.en.md) · [项目主页](../../README.md)
+Back to [English README](../../README.md) · [中文 README](../../README.zh-CN.md)

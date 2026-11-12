@@ -54,7 +54,7 @@ jobs:
             -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}" \
             -o "dist/${NAME}/nectar" .
-          cp config.example.toml README.md README.en.md LICENSE "dist/${NAME}/"
+          cp config.example.toml README.md README.zh-CN.md LICENSE "dist/${NAME}/"
           cp -R docs "dist/${NAME}/"
           tar -C "dist/${NAME}" -czf "dist/${NAME}.tar.gz" .
       - uses: actions/upload-artifact@v4

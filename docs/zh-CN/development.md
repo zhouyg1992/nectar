@@ -54,7 +54,7 @@ CGO_ENABLED=0 go build \
   -ldflags "-X main.version=v0.0.1" \
   -o /tmp/nectar-release/pkg/nectar .
 
-cp config.example.toml README.md README.en.md LICENSE /tmp/nectar-release/pkg/
+cp config.example.toml README.md README.zh-CN.md LICENSE /tmp/nectar-release/pkg/
 cp -R docs /tmp/nectar-release/pkg/
 tar -C /tmp/nectar-release/pkg -czf \
   /tmp/nectar-release/nectar_0.0.1_darwin_arm64.tar.gz .
