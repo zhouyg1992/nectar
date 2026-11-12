@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"encoding/json"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/zhouyg1992/nectar/internal/platform"
@@ -21,30 +22,31 @@ func renderCard(card *platform.Card) (string, error) {
 		template = "red"
 	}
 
-	elements := make([]any, 0, 2)
-	body := truncateCardBody(card.Body)
-	if body != "" {
-		elements = append(elements, map[string]any{
-			"tag":     "markdown",
-			"content": body,
-		})
-	}
+	elements := buildCardElements(truncateCardBody(card.Body))
 	if card.Footer != "" {
 		elements = append(elements, map[string]any{
-			"tag": "note",
-			"elements": []any{
-				map[string]string{"tag": "plain_text", "content": card.Footer},
-			},
+			"tag":        "markdown",
+			"content":    `<font color="grey">` + escapeAngles(card.Footer) + `</font>`,
+			"text_align": "right",
 		})
 	}
 
 	payload := map[string]any{
-		"config": map[string]bool{"wide_screen_mode": true},
+		"schema": "2.0",
+		"config": map[string]any{
+			"width_mode":     "default",
+			"enable_forward": true,
+			"update_multi":   true,
+		},
 		"header": map[string]any{
 			"template": template,
 			"title":    map[string]string{"tag": "plain_text", "content": card.Title},
 		},
-		"elements": elements,
+		"body": map[string]any{
+			"direction":        "vertical",
+			"vertical_spacing": "4px",
+			"elements":         elements,
+		},
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -61,5 +63,15 @@ func truncateCardBody(body string) string {
 	for cut > 0 && !utf8.RuneStart(body[cut]) {
 		cut--
 	}
-	return body[:cut] + "\n\n…（内容过长，已截断）"
+	// Cut on a line boundary when possible so the tail is not a half row.
+	if idx := strings.LastIndexByte(body[:cut], '\n'); idx > maxCardBodyBytes/2 {
+		cut = idx
+	}
+	head := body[:cut]
+	// Never leave a fenced block open: Feishu would render the truncation
+	// marker (and anything appended later) as code.
+	if strings.Count(head, "```")%2 == 1 {
+		head += "\n```"
+	}
+	return head + "\n\n…（内容过长，已截断）"
 }

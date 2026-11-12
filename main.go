@@ -15,6 +15,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	"github.com/zhouyg1992/nectar/internal/engine/codex"
+	"github.com/zhouyg1992/nectar/internal/engine/opencode"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
 	"github.com/zhouyg1992/nectar/internal/platform/feishu"
@@ -70,12 +71,10 @@ func runBot(configPath string) error {
 	if err != nil {
 		return err
 	}
-	timeout, err := cfg.Timeout()
+	setup, err := setupEngine(cfg)
 	if err != nil {
 		return err
 	}
-	contextWindow := codex.ResolveContextWindow(cfg.Codex.Model, cfg.Codex.ContextWindow)
-	effectiveModel := codex.ResolveModel(cfg.Codex.Model)
 
 	logger := newLogger(cfg.Feishu.LogLevel)
 	slog.SetDefault(logger)
@@ -87,21 +86,11 @@ func runBot(configPath string) error {
 	if err != nil {
 		return err
 	}
-	workspaces, err := execguard.NewWorkspace(cfg.Codex.WorkingDir, cfg.Codex.PerChatWorkspace)
+	workspaces, err := execguard.NewWorkspace(setup.workspaceDir, setup.perChatWorkspace)
 	if err != nil {
 		return err
 	}
 
-	codexEngine := codex.NewAdapter(codex.Config{
-		Executable:      cfg.Codex.Path,
-		Model:           cfg.Codex.Model,
-		Effort:          cfg.Codex.Effort,
-		Sandbox:         cfg.Codex.Sandbox,
-		WorkingDir:      cfg.Codex.WorkingDir,
-		Timeout:         timeout,
-		MaxOutputBytes:  cfg.Codex.MaxOutputBytes,
-		BypassApprovals: cfg.Codex.BypassApprovals,
-	})
 	platformAdapter, err := feishu.New(feishu.Config{
 		AppID:        cfg.Feishu.AppID,
 		AppSecret:    cfg.Feishu.AppSecret,
@@ -119,7 +108,7 @@ func runBot(configPath string) error {
 	router := core.NewRouter(
 		ctx,
 		platformAdapter,
-		codexEngine,
+		setup.adapter,
 		core.NewSessionStore(),
 		core.NewQueue(),
 		workspaces,
@@ -128,34 +117,27 @@ func runBot(configPath string) error {
 		logger,
 		core.RouterConfig{
 			AgentID:       cfg.Bot.AgentID,
-			ModelName:     effectiveModel,
-			ContextWindow: contextWindow,
-			EngineOptions: engine.EngineOptions{
-				Model:          cfg.Codex.Model,
-				Effort:         cfg.Codex.Effort,
-				Sandbox:        cfg.Codex.Sandbox,
-				WorkingDir:     cfg.Codex.WorkingDir,
-				Timeout:        timeout,
-				MaxOutputBytes: cfg.Codex.MaxOutputBytes,
-			},
+			ModelName:     setup.model,
+			ContextWindow: setup.contextWindow,
+			EngineOptions: setup.options,
 		},
 	)
 
 	logger.Info("nectar starting",
 		"version", version,
 		"platform", "feishu",
-		"engine", "codex",
+		"engine", setup.name,
 		"workspace", workspaces.Root(),
 		"data_dir", cfg.Storage.DataDir,
-		"model", effectiveModel,
-		"context_window", contextWindow,
+		"model", setup.model,
+		"context_window", setup.contextWindow,
 	)
 	logger.Info("connecting to feishu; wait for 'feishu websocket connected' before sending messages")
-	if contextWindow == 0 {
+	if setup.name == "codex" && setup.contextWindow == 0 {
 		logger.Warn("codex context window unknown; card footer will omit context usage (set codex.context_window to override)")
 	}
 	if len(cfg.Bot.AdminUsers) == 0 && len(cfg.Bot.AllowedChats) == 0 {
-		logger.Warn("no user/chat allowlist configured; anyone outside Feishu app scope who can reach the bot can run Codex")
+		logger.Warn("no user/chat allowlist configured; anyone outside Feishu app scope who can reach the bot can run the configured agent")
 	}
 
 	errCh := make(chan error, 1)
@@ -176,6 +158,84 @@ func runBot(configPath string) error {
 			return err
 		}
 		return nil
+	}
+}
+
+type engineSetup struct {
+	adapter          engine.EngineAdapter
+	options          engine.EngineOptions
+	name             string
+	model            string
+	contextWindow    int
+	workspaceDir     string
+	perChatWorkspace bool
+}
+
+func setupEngine(cfg config.Config) (engineSetup, error) {
+	switch cfg.Bot.Engine {
+	case "codex":
+		timeout, err := cfg.Timeout()
+		if err != nil {
+			return engineSetup{}, err
+		}
+		return engineSetup{
+			adapter: codex.NewAdapter(codex.Config{
+				Executable:      cfg.Codex.Path,
+				Model:           cfg.Codex.Model,
+				Effort:          cfg.Codex.Effort,
+				Sandbox:         cfg.Codex.Sandbox,
+				WorkingDir:      cfg.Codex.WorkingDir,
+				Timeout:         timeout,
+				MaxOutputBytes:  cfg.Codex.MaxOutputBytes,
+				BypassApprovals: cfg.Codex.BypassApprovals,
+			}),
+			options: engine.EngineOptions{
+				Model:          cfg.Codex.Model,
+				Effort:         cfg.Codex.Effort,
+				Sandbox:        cfg.Codex.Sandbox,
+				WorkingDir:     cfg.Codex.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Codex.MaxOutputBytes,
+			},
+			name:             "codex",
+			model:            codex.ResolveModel(cfg.Codex.Model),
+			contextWindow:    codex.ResolveContextWindow(cfg.Codex.Model, cfg.Codex.ContextWindow),
+			workspaceDir:     cfg.Codex.WorkingDir,
+			perChatWorkspace: cfg.Codex.PerChatWorkspace,
+		}, nil
+	case "opencode":
+		timeout, err := cfg.OpenCodeTimeout()
+		if err != nil {
+			return engineSetup{}, err
+		}
+		model := opencode.ResolveModel(cfg.OpenCode.Model)
+		if model == "" {
+			model = "opencode"
+		}
+		return engineSetup{
+			adapter: opencode.NewAdapter(opencode.Config{
+				Executable:     cfg.OpenCode.Path,
+				Model:          cfg.OpenCode.Model,
+				Agent:          cfg.OpenCode.Agent,
+				WorkingDir:     cfg.OpenCode.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.OpenCode.MaxOutputBytes,
+				Standalone:     cfg.OpenCode.Standalone,
+				AutoApprove:    cfg.OpenCode.AutoApprove,
+			}),
+			options: engine.EngineOptions{
+				Model:          cfg.OpenCode.Model,
+				WorkingDir:     cfg.OpenCode.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.OpenCode.MaxOutputBytes,
+			},
+			name:             "opencode",
+			model:            model,
+			workspaceDir:     cfg.OpenCode.WorkingDir,
+			perChatWorkspace: cfg.OpenCode.PerChatWorkspace,
+		}, nil
+	default:
+		return engineSetup{}, fmt.Errorf("unsupported engine %q", cfg.Bot.Engine)
 	}
 }
 

@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar forwards Feishu messages to Codex CLI and streams the result back as an interactive card. v1 supports Feishu + Codex.
+Nectar forwards Feishu messages to Codex CLI or OpenCode and streams the result back as an interactive card. v1 supports Feishu with Codex or OpenCode.
 
 ## Support matrix
 
-**v1 currently supports Feishu / Lark + Codex CLI only.**
+**v1 supports Feishu / Lark with Codex CLI or OpenCode.**
 
 Legend: ✅ supported · 🚧 planned
 
@@ -42,8 +42,8 @@ Legend: ✅ supported · 🚧 planned
 | Engine | Status | Notes |
 |---|---|---|
 | Codex CLI | ✅ Supported | `exec --json` / `resume` |
+| OpenCode | ✅ Supported (next release) | `run --format json` / `--session` |
 | Claude Code | 🚧 Planned | CLI / Agent SDK adapter |
-| OpenCode | 🚧 Planned | CLI adapter |
 | Pi | 🚧 Planned | CLI adapter |
 | Kimi Code | 🚧 Planned | Local server API adapter |
 | More engines | 🚧 Planned | Implement `EngineAdapter` |
@@ -94,6 +94,12 @@ On Linux, add `--linger` to start at boot without a login session.
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
+- Or OpenCode installed, configured with a provider/model, and working:
+
+```bash
+opencode run --format json "Reply with exactly OK"
+```
+
 ## Configuration
 
 Edit `~/.nectar/config.toml`:
@@ -116,9 +122,21 @@ context_window = 0
 per_chat_workspace = false
 bypass_approvals = false
 
+[opencode]
+path = "opencode"
+model = ""                    # e.g. provider/model#variant
+agent = ""                    # optional OpenCode agent
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+standalone = true             # private server per run
+auto_approve = true           # required for non-interactive bot use
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-agent_id = "codex"
+engine = "codex"              # codex | opencode
+agent_id = "codex"            # legacy fallback; defaults to engine
 admin_users = []
 allowed_chats = []
 
@@ -130,12 +148,16 @@ data_dir = "~/.nectar"
 
 The footer model name uses `codex.model` when set, otherwise the model from Codex's config. The last path segment is displayed, e.g. `deepseek/deepseek-flash` becomes `deepseek-flash`.
 
+For OpenCode, set `bot.engine = "opencode"`; Nectar uses `[opencode]`, resolves the model from `~/.config/opencode/opencode.json` when unset, and reads session token usage from `opencode session export`. Context percentage is not shown yet.
+
 Environment overrides:
 
 ```bash
 export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export CODEX_PATH=codex
+export OPENCODE_PATH=opencode
+export NECTAR_ENGINE=codex
 export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace
 ```
@@ -154,13 +176,13 @@ Wait for:
 feishu websocket connected; ready to receive messages
 ```
 
-Send `/help` first to verify the Feishu path without invoking Codex. Direct messages work without a mention; group messages require @Bot.
+Send `/help` first to verify the Feishu path without invoking the engine. Direct messages work without a mention; group messages require @Bot.
 
-`/help`, `/commands`, and short questions like “what commands are available” return a command card without invoking Codex.
+`/help`, `/commands`, and short questions like “what commands are available” return a command card without invoking the engine.
 
 All built-in command results (`/new`, `/status`, `/stop`, and command errors) use platform cards; platforms without card support fall back to text.
 
-During a Codex run, intermediate agent messages update the `🐝 Working...` card in real time (throttled). The final `🍯 Complete` card contains only the last Codex answer, not the intermediate narration.
+During an agent run, intermediate agent messages update the `🐝 Working...` card in real time (throttled). The final `🍯 Complete` card contains only the last agent answer, not the intermediate narration.
 
 > Help/command cards and real-time progress require v0.1.2 or later.
 
@@ -187,10 +209,10 @@ Service mode reads Feishu credentials from the config file, not from shell envir
 
 | Command | Description |
 |---|---|
-| `/new`, `/reset` | Start a new Codex thread |
-| `/status` | Show the current thread ID |
+| `/new`, `/reset` | Start a new agent thread |
+| `/status` | Show the current agent thread ID |
 | `/stop` | Cancel the current run |
-| `/help`, `/commands` | Show the command card without invoking Codex |
+| `/help`, `/commands` | Show the command card without invoking the engine |
 
 ## Docs
 
