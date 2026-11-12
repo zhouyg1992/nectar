@@ -26,6 +26,7 @@ internal/engine/            # 引擎适配器
 internal/core/              # 路由、会话、队列、卡片
 internal/memory/comb/       # 教训日志
 internal/exec/              # 工作目录、输出限制
+internal/service/           # launchd / systemd 服务管理
 install.sh                  # 一键安装脚本
 ```
 
@@ -38,6 +39,7 @@ install.sh                  # 一键安装脚本
 - Router 会话复用、FIFO 队列、卡片更新、教训记录
 - 飞书消息规范化与 dispatcher 接线
 - 教训文件存储、上下文窗口解析
+- launchd plist / systemd unit 模板渲染
 
 不需要真实飞书应用或 Codex 登录即可运行大部分测试。
 

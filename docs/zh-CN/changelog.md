@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.1 — 2026-11-12
+
+### 新增
+
+- `nectar service install|uninstall|start|stop|restart|status|logs`
+- macOS LaunchAgent 支持
+- Linux systemd user service 支持，可选 `--linger`
+- `install.sh --service` / `--linger` / `--no-start`
+
 ## v0.1.0 — 2026-11-12
 
 首个可用版本（v1）。

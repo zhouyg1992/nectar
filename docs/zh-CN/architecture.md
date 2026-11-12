@@ -47,6 +47,13 @@ graph LR
 - 位置：`internal/exec`
 - 工作目录解析、每会话子目录、输出限制和超时辅助。
 
+### Service
+
+- 位置：`internal/service`
+- 管理 macOS LaunchAgent 和 Linux systemd user service。
+- 服务文件只包含二进制路径、配置路径、HOME/PATH，不写入飞书凭证。
+- 入口：`nectar service install|status|logs|restart|stop|uninstall`。
+
 ### Memory
 
 - `internal/memory/comb`：教训日志。v1 只记录 `pending`，不注入。

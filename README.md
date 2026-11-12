@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 Pin a version or choose an install directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.1
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -75,6 +75,16 @@ sh install.sh
 The installer verifies the SHA-256 checksum, installs to `~/.local/bin/nectar`, and creates `~/.nectar/config.toml` if it does not exist.
 
 Windows: use WSL or download a release manually. The repository must be public for anonymous `curl | sh`.
+
+The installer can also install the background service on a subsequent run, after `~/.nectar/config.toml` contains real credentials:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --service
+```
+
+On Linux, add `--linger` to start at boot without a login session.
+
+> Background service support requires v0.1.1 or later.
 
 ## Prerequisites
 
@@ -146,6 +156,21 @@ feishu websocket connected; ready to receive messages
 
 Send `/help` first to verify the Feishu path without invoking Codex. Direct messages work without a mention; group messages require @Bot.
 
+### Background service
+
+After editing `~/.nectar/config.toml`:
+
+```bash
+nectar service install
+```
+
+- macOS: installs a LaunchAgent; starts at login and restarts after crashes
+- Linux: installs a systemd user service; add `--linger` to start at boot without login
+- `--no-start` installs and enables the service without starting it immediately
+- Manage with `nectar service status|logs|restart|stop|uninstall`
+
+Service mode reads Feishu credentials from the config file, not from shell environment variables. See [service management](docs/zh-CN/service.md) for details.
+
 ### Commands
 
 | Command | Description |
@@ -159,6 +184,7 @@ Send `/help` first to verify the Feishu path without invoking Codex. Direct mess
 
 - [English docs](docs/en/README.md) (translation in progress)
 - [Chinese docs](docs/zh-CN/README.md)
+- [Service management](docs/zh-CN/service.md)
 - [Architecture](docs/zh-CN/architecture.md)
 - [Development](docs/zh-CN/development.md)
 - [Security](docs/zh-CN/security.md)

@@ -5,17 +5,23 @@ REPO="zhouyg1992/nectar"
 BIN_NAME="nectar"
 VERSION="${NECTAR_VERSION:-}"
 TMP_DIR=""
+SERVICE=0
+LINGER=0
+START=1
 
 usage() {
 	cat <<'EOF'
 Install Nectar from GitHub Releases.
 
 Usage:
-  install.sh [--version vX.Y.Z] [--dir DIR]
+  install.sh [--version vX.Y.Z] [--dir DIR] [--service] [--linger] [--no-start]
 
 Options:
   --version vX.Y.Z   install a specific release (default: latest)
   --dir DIR          install directory (default: ~/.local/bin)
+  --service          install and enable a background service
+  --linger           enable systemd user linger (Linux; implies --service)
+  --no-start         install the service but do not start it now
   -h, --help         show this help
 
 Environment:
@@ -56,6 +62,20 @@ while [ $# -gt 0 ]; do
 		[ $# -ge 2 ] || err "--dir requires a value"
 		BIN_DIR="$2"
 		shift 2
+		;;
+	--service)
+		SERVICE=1
+		shift
+		;;
+	--linger)
+		SERVICE=1
+		LINGER=1
+		shift
+		;;
+	--no-start)
+		SERVICE=1
+		START=0
+		shift
 		;;
 	-h | --help)
 		usage
@@ -196,6 +216,19 @@ if [ ! -f "$CONFIG_FILE" ] && [ -f "$TMP_DIR/pkg/config.example.toml" ]; then
 	log "created $CONFIG_FILE"
 fi
 
+if [ "$SERVICE" -eq 1 ]; then
+	set -- service install --config "$CONFIG_FILE" --binary "$BIN_DIR/$BIN_NAME"
+	if [ "$LINGER" -eq 1 ]; then
+		set -- "$@" --linger
+	fi
+	if [ "$START" -eq 0 ]; then
+		set -- "$@" --no-start
+	fi
+	if ! "$BIN_DIR/$BIN_NAME" "$@"; then
+		err "service install failed; edit $CONFIG_FILE and run: $BIN_DIR/$BIN_NAME service install"
+	fi
+fi
+
 log "installed $BIN_DIR/$BIN_NAME"
 case ":${PATH:-}:" in
 *":$BIN_DIR:"*) ;;
@@ -211,4 +244,5 @@ log "Next:"
 log "  1. edit $CONFIG_FILE with your Feishu app_id/app_secret"
 log "  2. make sure codex CLI is installed and logged in"
 log "  3. run: $BIN_NAME"
+log "  4. optional background service: $BIN_NAME service install"
 log "docs: https://github.com/${REPO}#readme"

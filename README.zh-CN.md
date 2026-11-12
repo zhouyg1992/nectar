@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.1
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -81,6 +81,16 @@ sh install.sh
 ```
 
 Windows 请使用 WSL，或从 Releases 手动下载。仓库必须是公开的，`curl | sh` 才能匿名访问。
+
+如果已经配置好 `~/.nectar/config.toml`，也可以让安装脚本顺便安装后台服务：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --service
+```
+
+Linux 额外加 `--linger` 可开机启动，无需登录。
+
+> 后台服务支持需要 v0.1.1 及以上版本。
 
 ## 前置条件
 
@@ -169,6 +179,21 @@ feishu websocket connected; ready to receive messages
 - 单聊直接发消息
 - 群聊需要 @Bot
 
+### 后台服务
+
+编辑好 `~/.nectar/config.toml` 后：
+
+```bash
+nectar service install
+```
+
+- macOS：安装 LaunchAgent，登录后启动，崩溃自动拉起
+- Linux：安装 systemd user service；加 `--linger` 可开机启动，无需登录
+- `--no-start`：安装并启用服务，但不立即启动
+- 管理命令：`nectar service status|logs|restart|stop|uninstall`
+
+服务模式从配置文件读取飞书凭证，不继承 shell 里的环境变量。详细说明见 [后台服务](docs/zh-CN/service.md)。
+
 ### 命令
 
 | 命令 | 作用 |
@@ -181,6 +206,7 @@ feishu websocket connected; ready to receive messages
 ## 文档
 
 - [飞书配置与排查](docs/zh-CN/feishu.md)
+- [后台服务](docs/zh-CN/service.md)
 - [架构与扩展点](docs/zh-CN/architecture.md)
 - [开发与测试](docs/zh-CN/development.md)
 - [安全边界](docs/zh-CN/security.md)

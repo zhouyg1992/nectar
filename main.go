@@ -23,23 +23,50 @@ import (
 var version = "dev"
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "nectar:", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	configPath := flag.String("config", "", "path to config.toml")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	flag.Parse()
+func run(args []string) error {
+	if len(args) > 0 && args[0] == "service" {
+		return runService(args[1:])
+	}
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+		printMainUsage()
+		return nil
+	}
+
+	fs := flag.NewFlagSet("nectar", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	configPath := fs.String("config", "", "path to config.toml")
+	showVersion := fs.Bool("version", false, "print version and exit")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
 
 	if *showVersion {
 		fmt.Println("nectar", version)
 		return nil
 	}
 
-	cfg, err := config.Load(*configPath)
+	return runBot(*configPath)
+}
+
+func printMainUsage() {
+	fmt.Print(`Usage:
+  nectar [-config PATH]
+  nectar -version
+  nectar service <install|uninstall|start|stop|restart|status|logs>
+`)
+}
+
+func runBot(configPath string) error {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
 	}
