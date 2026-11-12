@@ -12,6 +12,7 @@
 - Codex `exec --json` / `resume`
 - OpenCode `run --format json` / `--session`（下个版本）
 - Cursor Agent `-p --output-format stream-json` / `--resume`
+- Claude Code `-p --output-format stream-json` / `--resume`
 - JSONL 事件解析
 - 会话键与同会话 FIFO 队列
 - 交互卡片：Thinking / Working / Complete / Failed
@@ -27,7 +28,7 @@
 - 教训注入与审核卡片
 - 定时任务
 - 云同步
-- 多平台实现与 Codex/OpenCode/Cursor 之外的引擎
+- 多平台实现与 Codex/OpenCode/Cursor/Claude Code 之外的引擎
 
 ## 后续
 
@@ -50,7 +51,7 @@
 ### 更远
 
 - 钉钉、Telegram、微信、Slack
-- Claude Code、Kimi、Pi
+- Kimi、Pi
 - Jev 决策服务
 - Agent Teams / Multi-Bot Relay
 

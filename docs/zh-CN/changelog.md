@@ -4,6 +4,10 @@
 
 ### 新增
 
+- Claude Code 引擎适配器：`-p --output-format stream-json`、`--resume` 续接、工具事件与 token usage 映射
+- `[claude]` 配置段、`CLAUDE_PATH` 环境变量与 `bot.engine = "claude"`
+- Claude Code 的 `auto_approve`（`--dangerously-skip-permissions`）、`permission_mode`、`fallback_model` 与 `max_turns`
+- 引擎可在完成事件中返回运行时 `context_window`，卡片上下文占比自动适配
 - Cursor Agent CLI 引擎适配器：`-p --output-format stream-json`、`--resume` 续接、工具事件与 token usage 映射
 - `[cursor]` 配置段、`CURSOR_AGENT_PATH` 环境变量与 `bot.engine = "cursor"`
 - Cursor 的 `auto_approve`（`-f`）与 `trust_workspace`（`--trust`）非交互开关

@@ -145,3 +145,45 @@ func TestCursorRejectsInvalidModeAndSandbox(t *testing.T) {
 		})
 	}
 }
+
+func TestClaudeEngineSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(
+		"[bot]\nengine = \"claude\"\n\n[claude]\ncontext_window = 200000\npermission_mode = \"acceptEdits\"\nmax_turns = 12\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Engine != "claude" || cfg.Bot.AgentID != "claude" {
+		t.Fatalf("bot = %#v", cfg.Bot)
+	}
+	if cfg.Claude.Path != "claude" || cfg.Claude.MaxOutputBytes <= 0 {
+		t.Fatalf("claude defaults = %#v", cfg.Claude)
+	}
+	if !cfg.Claude.AutoApprove {
+		t.Fatalf("claude auto approve default = %#v", cfg.Claude)
+	}
+	if cfg.Claude.ContextWindow != 200000 || cfg.Claude.PermissionMode != "acceptEdits" || cfg.Claude.MaxTurns != 12 {
+		t.Fatalf("claude config = %#v", cfg.Claude)
+	}
+	timeout, err := cfg.ClaudeTimeout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if timeout != 30*time.Minute {
+		t.Fatalf("timeout = %v", timeout)
+	}
+}
+
+func TestClaudeRejectsInvalidPermissionMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[claude]\npermission_mode = \"yolo\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected validation error")
+	}
+}

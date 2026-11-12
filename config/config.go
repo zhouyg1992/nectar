@@ -16,6 +16,7 @@ type Config struct {
 	Codex    CodexConfig    `toml:"codex"`
 	OpenCode OpenCodeConfig `toml:"opencode"`
 	Cursor   CursorConfig   `toml:"cursor"`
+	Claude   ClaudeConfig   `toml:"claude"`
 	Bot      BotConfig      `toml:"bot"`
 	Storage  StorageConfig  `toml:"storage"`
 }
@@ -66,6 +67,20 @@ type CursorConfig struct {
 	PerChatWorkspace bool   `toml:"per_chat_workspace"`
 }
 
+type ClaudeConfig struct {
+	Path             string `toml:"path"`
+	Model            string `toml:"model"`
+	FallbackModel    string `toml:"fallback_model"`
+	PermissionMode   string `toml:"permission_mode"`
+	WorkingDir       string `toml:"working_dir"`
+	Timeout          string `toml:"timeout"`
+	MaxOutputBytes   int    `toml:"max_output_bytes"`
+	ContextWindow    int    `toml:"context_window"`
+	MaxTurns         int    `toml:"max_turns"`
+	AutoApprove      bool   `toml:"auto_approve"`
+	PerChatWorkspace bool   `toml:"per_chat_workspace"`
+}
+
 type BotConfig struct {
 	Name         string   `toml:"name"`
 	Engine       string   `toml:"engine"`
@@ -104,6 +119,13 @@ func defaults() Config {
 			MaxOutputBytes: 2 << 20,
 			AutoApprove:    true,
 			TrustWorkspace: true,
+		},
+		Claude: ClaudeConfig{
+			Path:           "claude",
+			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
+			Timeout:        "30m",
+			MaxOutputBytes: 2 << 20,
+			AutoApprove:    true,
 		},
 		Bot:     BotConfig{Name: "Nectar", AgentID: "codex"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
@@ -151,6 +173,10 @@ func (c Config) CursorTimeout() (time.Duration, error) {
 	return parseTimeout("cursor.timeout", c.Cursor.Timeout)
 }
 
+func (c Config) ClaudeTimeout() (time.Duration, error) {
+	return parseTimeout("claude.timeout", c.Claude.Timeout)
+}
+
 func parseTimeout(name, value string) (time.Duration, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -182,6 +208,9 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("CURSOR_AGENT_PATH"); v != "" {
 		cfg.Cursor.Path = v
 	}
+	if v := os.Getenv("CLAUDE_PATH"); v != "" {
+		cfg.Claude.Path = v
+	}
 	if v := os.Getenv("NECTAR_ENGINE"); v != "" {
 		cfg.Bot.Engine = v
 	}
@@ -192,6 +221,7 @@ func applyEnv(cfg *Config) {
 		cfg.Codex.WorkingDir = v
 		cfg.OpenCode.WorkingDir = v
 		cfg.Cursor.WorkingDir = v
+		cfg.Claude.WorkingDir = v
 	}
 }
 
@@ -209,6 +239,9 @@ func normalize(cfg *Config) error {
 	if cfg.Cursor.WorkingDir, err = expandHome(cfg.Cursor.WorkingDir); err != nil {
 		return err
 	}
+	if cfg.Claude.WorkingDir, err = expandHome(cfg.Claude.WorkingDir); err != nil {
+		return err
+	}
 	if cfg.Storage.DataDir == "" {
 		return errors.New("storage.data_dir is required")
 	}
@@ -221,6 +254,9 @@ func normalize(cfg *Config) error {
 	if cfg.Cursor.WorkingDir == "" {
 		return errors.New("cursor.working_dir is required")
 	}
+	if cfg.Claude.WorkingDir == "" {
+		return errors.New("claude.working_dir is required")
+	}
 	if strings.TrimSpace(cfg.Codex.Path) == "" {
 		cfg.Codex.Path = "codex"
 	}
@@ -229,6 +265,9 @@ func normalize(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Cursor.Path) == "" {
 		cfg.Cursor.Path = "cursor-agent"
+	}
+	if strings.TrimSpace(cfg.Claude.Path) == "" {
+		cfg.Claude.Path = "claude"
 	}
 	switch mode := strings.TrimSpace(cfg.Cursor.Mode); mode {
 	case "", "plan", "ask":
@@ -242,6 +281,15 @@ func normalize(cfg *Config) error {
 	default:
 		return fmt.Errorf("unsupported cursor.sandbox %q (supported: enabled, disabled)", sandbox)
 	}
+	switch mode := strings.TrimSpace(cfg.Claude.PermissionMode); mode {
+	case "", "acceptEdits", "auto", "bypassPermissions", "manual", "dontAsk", "plan":
+		cfg.Claude.PermissionMode = mode
+	default:
+		return fmt.Errorf("unsupported claude.permission_mode %q", mode)
+	}
+	if cfg.Claude.MaxTurns < 0 {
+		return errors.New("claude.max_turns must not be negative")
+	}
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
 	}
@@ -253,9 +301,9 @@ func normalize(cfg *Config) error {
 		engine = "codex"
 	}
 	switch engine {
-	case "codex", "opencode", "cursor":
+	case "codex", "opencode", "cursor", "claude":
 	default:
-		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor)", engine)
+		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor, claude)", engine)
 	}
 	cfg.Bot.Engine = engine
 	cfg.Bot.AgentID = engine
@@ -268,6 +316,9 @@ func normalize(cfg *Config) error {
 	if cfg.Cursor.MaxOutputBytes <= 0 {
 		return errors.New("cursor.max_output_bytes must be positive")
 	}
+	if cfg.Claude.MaxOutputBytes <= 0 {
+		return errors.New("claude.max_output_bytes must be positive")
+	}
 	if _, err := cfg.Timeout(); err != nil {
 		return err
 	}
@@ -275,6 +326,9 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	if _, err := cfg.CursorTimeout(); err != nil {
+		return err
+	}
+	if _, err := cfg.ClaudeTimeout(); err != nil {
 		return err
 	}
 	return nil
