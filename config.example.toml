@@ -31,9 +31,22 @@ standalone = true
 auto_approve = true
 per_chat_workspace = false
 
+[cursor]
+path = "cursor-agent"
+# model = "composer-2.5"
+# mode = "plan"                 # plan | ask; empty = normal agent mode
+# sandbox = "enabled"           # enabled | disabled; empty = Cursor default
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0
+auto_approve = true             # -f; required for non-interactive bot use
+trust_workspace = true          # --trust; required for headless runs
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-engine = "codex"              # codex | opencode
+engine = "codex"              # codex | opencode | cursor
 agent_id = "codex"            # legacy; defaults to engine
 # Feishu open_id list. When non-empty, DMs are restricted to these users.
 admin_users = []

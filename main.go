@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/zhouyg1992/nectar/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	"github.com/zhouyg1992/nectar/internal/engine/codex"
+	"github.com/zhouyg1992/nectar/internal/engine/cursor"
 	"github.com/zhouyg1992/nectar/internal/engine/opencode"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
@@ -234,6 +236,40 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 			contextWindow:    opencode.ResolveContextWindow(cfg.OpenCode.Model, cfg.OpenCode.ContextWindow),
 			workspaceDir:     cfg.OpenCode.WorkingDir,
 			perChatWorkspace: cfg.OpenCode.PerChatWorkspace,
+		}, nil
+	case "cursor":
+		timeout, err := cfg.CursorTimeout()
+		if err != nil {
+			return engineSetup{}, err
+		}
+		model := strings.TrimSpace(cfg.Cursor.Model)
+		if model == "" {
+			model = "cursor"
+		}
+		return engineSetup{
+			adapter: cursor.NewAdapter(cursor.Config{
+				Executable:     cfg.Cursor.Path,
+				Model:          cfg.Cursor.Model,
+				Mode:           cfg.Cursor.Mode,
+				Sandbox:        cfg.Cursor.Sandbox,
+				WorkingDir:     cfg.Cursor.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Cursor.MaxOutputBytes,
+				AutoApprove:    cfg.Cursor.AutoApprove,
+				TrustWorkspace: cfg.Cursor.TrustWorkspace,
+			}),
+			options: engine.EngineOptions{
+				Model:          cfg.Cursor.Model,
+				Sandbox:        cfg.Cursor.Sandbox,
+				WorkingDir:     cfg.Cursor.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Cursor.MaxOutputBytes,
+			},
+			name:             "cursor",
+			model:            model,
+			contextWindow:    cfg.Cursor.ContextWindow,
+			workspaceDir:     cfg.Cursor.WorkingDir,
+			perChatWorkspace: cfg.Cursor.PerChatWorkspace,
 		}, nil
 	default:
 		return engineSetup{}, fmt.Errorf("unsupported engine %q", cfg.Bot.Engine)

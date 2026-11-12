@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar forwards Feishu messages to Codex CLI or OpenCode and streams the result back as an interactive card. v1 supports Feishu with Codex or OpenCode.
+Nectar forwards Feishu messages to Codex CLI, OpenCode, or Cursor Agent and streams the result back as an interactive card. v1 supports Feishu with Codex, OpenCode, or Cursor.
 
 ## Support matrix
 
-**v1 supports Feishu / Lark with Codex CLI or OpenCode.**
+**v1 supports Feishu / Lark with Codex CLI, OpenCode, or Cursor Agent.**
 
 Legend: ✅ supported · 🚧 planned
 
@@ -43,6 +43,7 @@ Legend: ✅ supported · 🚧 planned
 |---|---|---|
 | Codex CLI | ✅ Supported | `exec --json` / `resume` |
 | OpenCode | ✅ Supported (next release) | `run --format json` / `--session` |
+| Cursor Agent CLI | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Claude Code | 🚧 Planned | CLI / Agent SDK adapter |
 | Pi | 🚧 Planned | CLI adapter |
 | Kimi Code | 🚧 Planned | Local server API adapter |
@@ -100,6 +101,14 @@ codex exec --json --skip-git-repo-check "reply with OK"
 opencode run --format json "Reply with exactly OK"
 ```
 
+- Or Cursor Agent CLI installed and logged in:
+
+```bash
+curl https://cursor.com/install -fsS | bash
+cursor-agent login
+cursor-agent -p --trust --mode ask "Reply with exactly OK"
+```
+
 ## Configuration
 
 Edit `~/.nectar/config.toml`:
@@ -134,9 +143,22 @@ standalone = true             # private server per run
 auto_approve = true           # required for non-interactive bot use
 per_chat_workspace = false
 
+[cursor]
+path = "cursor-agent"
+model = ""                    # e.g. composer-2.5; empty = Cursor default
+mode = ""                     # plan | ask; empty = normal agent mode
+sandbox = ""                  # enabled | disabled; empty = Cursor default
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0            # 0 = unknown; footer omits context percentage
+auto_approve = true           # -f; required for non-interactive bot use
+trust_workspace = true        # --trust; required for headless runs
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-engine = "codex"              # codex | opencode
+engine = "codex"              # codex | opencode | cursor
 agent_id = "codex"            # legacy fallback; defaults to engine
 admin_users = []
 allowed_chats = []
@@ -151,6 +173,8 @@ The footer model name uses `codex.model` when set, otherwise the model from Code
 
 For OpenCode, set `bot.engine = "opencode"`; Nectar uses `[opencode]`, resolves the model from `~/.config/opencode/opencode.json` when unset, and reads the last assistant turn's token usage from `opencode session export`. The context window is read from the model's `limit.context`; set `opencode.context_window` to override it when the model is not declared in OpenCode's config.
 
+For Cursor, set `bot.engine = "cursor"`; Nectar runs `cursor-agent -p --output-format stream-json --stream-partial-output` and resumes sessions with `--resume`. `auto_approve` maps to `-f`, and `trust_workspace` maps to `--trust`; both are required for unattended bot use. Attachments are referenced by local path in the prompt. Set `cursor.context_window` explicitly if you want the context percentage in the footer.
+
 Environment overrides:
 
 ```bash
@@ -158,6 +182,7 @@ export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
+export CURSOR_AGENT_PATH=cursor-agent
 export NECTAR_ENGINE=codex
 export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace
