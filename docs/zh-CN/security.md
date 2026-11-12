@@ -1,6 +1,6 @@
 # 安全边界
 
-Codex/OpenCode 会在配置的工作目录里读取、写入并执行命令。Nectar 只是桥接器，不能替代操作系统级隔离。
+Codex/OpenCode/Cursor 会在配置的工作目录里读取、写入并执行命令。Nectar 只是桥接器，不能替代操作系统级隔离。
 
 ## 必须做
 
@@ -10,11 +10,12 @@ Codex/OpenCode 会在配置的工作目录里读取、写入并执行命令。Ne
 - 在共享机器上，考虑用独立 Unix 用户运行 Nectar 和引擎 CLI。
 - 谨慎开启 `codex.bypass_approvals`。默认使用 `workspace-write` sandbox。
 - OpenCode 的 `opencode.auto_approve = true` 会自动批准工具权限；在不可信群聊中慎用。
+- Cursor 的 `cursor.auto_approve = true` 等价于 `-f`，会自动批准工具调用；`cursor.trust_workspace = true` 会跳过工作目录信任提示。两者默认开启，不可信环境请收紧。
 
 ## 已知限制
 
 - Nectar 会从引擎子进程环境里移除 `FEISHU_APP_SECRET`。
-- Codex/OpenCode 仍可能读取同一用户下的 `~/.nectar/config.toml`。高价值密钥建议放在独立用户或独立机器的配置里。
+- Codex/OpenCode/Cursor 仍可能读取同一用户下的 `~/.nectar/config.toml`。高价值密钥建议放在独立用户或独立机器的配置里。
 - 工作目录不是沙箱边界，只是引擎的默认工作根。真正的隔离需要独立用户、容器或系统级 sandbox。
 - 安装脚本通过 HTTPS 下载并校验 SHA-256，但 `curl | sh` 仍然是执行远程代码。建议先下载脚本检查再运行。
 

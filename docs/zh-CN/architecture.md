@@ -45,10 +45,11 @@ graph LR
 - 位置：`internal/engine`
 - 统一 `Event` 流：会话开始、文本、工具调用/结果、完成、错误。
 - 入站附件通过 `EngineOptions.Attachments` 交给引擎；引擎只决定如何映射到自己的 CLI 参数。
-- 已实现：Codex CLI、OpenCode。
-- Codex 将图片映射为 `--image`，OpenCode 映射为 `--file`；普通文件统一通过 prompt 中的本地路径引用。
+- 已实现：Codex CLI、OpenCode、Cursor Agent CLI。
+- Codex 将图片映射为 `--image`，OpenCode 映射为 `--file`；Cursor 和普通文件统一通过 prompt 中的本地路径引用。
 - 占位：Claude Code、Kimi、Pi。
 - OpenCode 通过 `session export` 读取最后一轮 assistant token，并从模型配置的 `limit.context` 解析上下文上限，附加到 `EventDone` 的 usage。
+- Cursor 使用 `-p --output-format stream-json --stream-partial-output`，从 `result` 事件读取 token usage，并用 `--resume` 续接会话。
 
 ### Exec
 

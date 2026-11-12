@@ -235,14 +235,14 @@ case ":${PATH:-}:" in
 *) log "add to PATH: export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
 
-if ! command -v codex >/dev/null 2>&1 && ! command -v opencode >/dev/null 2>&1; then
-	log "warning: neither codex nor opencode CLI found; install and log in to your engine before running nectar"
+if ! command -v codex >/dev/null 2>&1 && ! command -v opencode >/dev/null 2>&1 && ! command -v cursor-agent >/dev/null 2>&1; then
+	log "warning: codex, opencode, and cursor-agent CLI not found; install and log in to your engine before running nectar"
 fi
 
 log ""
 log "Next:"
 log "  1. edit $CONFIG_FILE with your Feishu app_id/app_secret"
-log "  2. make sure your engine CLI (codex or opencode) is installed and logged in"
+log "  2. make sure your engine CLI (codex, opencode, or cursor-agent) is installed and logged in"
 log "  3. run: $BIN_NAME"
 log "  4. optional background service: $BIN_NAME service install"
 log "docs: https://github.com/${REPO}#readme"

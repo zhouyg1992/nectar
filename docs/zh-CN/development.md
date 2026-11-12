@@ -3,7 +3,7 @@
 ## 环境
 
 - Go 1.22+
-- Codex CLI 或 OpenCode CLI（真实端到端测试需要）
+- Codex CLI、OpenCode CLI 或 Cursor Agent CLI（真实端到端测试需要）
 - 飞书自建应用（真实端到端测试需要）
 
 ## 常用命令
@@ -38,6 +38,8 @@ install.sh                  # 一键安装脚本
 - Codex 适配器真实子进程（用假 shell 脚本）
 - OpenCode JSONL 解析与参数组装
 - OpenCode 适配器真实子进程（用假 shell 脚本）
+- Cursor JSONL 解析、assistant 流式增量去重与参数组装
+- Cursor 适配器真实子进程（用假 shell 脚本）
 - Router 会话复用、FIFO 队列、卡片更新、教训记录
 - 飞书消息规范化与 dispatcher 接线
 - 教训文件存储、上下文窗口解析

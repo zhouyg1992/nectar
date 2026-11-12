@@ -1,5 +1,13 @@
 # Changelog
 
+## 未发布
+
+### 新增
+
+- Cursor Agent CLI 引擎适配器：`-p --output-format stream-json`、`--resume` 续接、工具事件与 token usage 映射
+- `[cursor]` 配置段、`CURSOR_AGENT_PATH` 环境变量与 `bot.engine = "cursor"`
+- Cursor 的 `auto_approve`（`-f`）与 `trust_workspace`（`--trust`）非交互开关
+
 ## v0.3.0 — 2026-11-12
 
 ### 新增
