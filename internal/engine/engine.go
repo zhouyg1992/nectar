@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"time"
+
+	"github.com/zhouyg1992/nectar/internal/attachment"
 )
 
 type EventType int
@@ -53,6 +55,7 @@ type EngineOptions struct {
 	WorkingDir     string
 	Timeout        time.Duration
 	MaxOutputBytes int
+	Attachments    []attachment.Local
 }
 
 // EngineAdapter is implemented once per coding agent CLI.

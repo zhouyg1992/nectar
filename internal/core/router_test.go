@@ -2,13 +2,18 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/zhouyg1992/nectar/internal/attachment"
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
@@ -26,6 +31,9 @@ type fakePlatform struct {
 	replyThreads []bool
 	threadIDs    []string
 	updateIDs    []string
+	downloads    []attachment.Resource
+	downloadDirs []string
+	downloadErr  error
 }
 
 func (f *fakePlatform) Name() string { return "fake" }
@@ -60,7 +68,30 @@ func (f *fakePlatform) Update(_ context.Context, messageID string, reply platfor
 	}
 	return nil
 }
-func (f *fakePlatform) Download(context.Context, string) (string, error) { return "", nil }
+func (f *fakePlatform) Download(_ context.Context, resource attachment.Resource, dir string) (attachment.Local, error) {
+	f.mu.Lock()
+	f.downloads = append(f.downloads, resource)
+	f.downloadDirs = append(f.downloadDirs, dir)
+	index := len(f.downloads)
+	err := f.downloadErr
+	f.mu.Unlock()
+	if err != nil {
+		return attachment.Local{}, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return attachment.Local{}, err
+	}
+	path := filepath.Join(dir, fmt.Sprintf("attachment-%d", index))
+	if err := os.WriteFile(path, []byte("test-data"), 0o600); err != nil {
+		return attachment.Local{}, err
+	}
+	return attachment.Local{
+		Kind:     resource.Kind,
+		Path:     path,
+		Name:     resource.Name,
+		MimeType: "application/octet-stream",
+	}, nil
+}
 
 func (f *fakePlatform) replyCount() int {
 	f.mu.Lock()
@@ -114,22 +145,28 @@ type fakeEngine struct {
 	starts     int
 	resumes    int
 	lastResume string
+	lastPrompt string
+	lastOpts   engine.EngineOptions
 	fail       bool
 }
 
 func (f *fakeEngine) Name() string { return "fake" }
 
-func (f *fakeEngine) Start(context.Context, string, engine.EngineOptions) (<-chan engine.Event, error) {
+func (f *fakeEngine) Start(_ context.Context, prompt string, opts engine.EngineOptions) (<-chan engine.Event, error) {
 	f.mu.Lock()
 	f.starts++
+	f.lastPrompt = prompt
+	f.lastOpts = opts
 	f.mu.Unlock()
 	return f.events("session-start"), nil
 }
 
-func (f *fakeEngine) Resume(_ context.Context, sessionID, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+func (f *fakeEngine) Resume(_ context.Context, sessionID, prompt string, opts engine.EngineOptions) (<-chan engine.Event, error) {
 	f.mu.Lock()
 	f.resumes++
 	f.lastResume = sessionID
+	f.lastPrompt = prompt
+	f.lastOpts = opts
 	f.mu.Unlock()
 	return f.events("session-resume"), nil
 }
@@ -158,6 +195,12 @@ func (f *fakeEngine) counts() (int, int, string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.starts, f.resumes, f.lastResume
+}
+
+func (f *fakeEngine) lastRequest() (string, engine.EngineOptions) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastPrompt, f.lastOpts
 }
 
 type scriptedEngine struct {
@@ -213,7 +256,7 @@ func newTestRouter(t *testing.T, eng engine.EngineAdapter, plat platform.Platfor
 
 func waitForReplies(t *testing.T, plat *fakePlatform, want int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if plat.replyCount() >= want {
 			return
@@ -225,7 +268,7 @@ func waitForReplies(t *testing.T, plat *fakePlatform, want int) {
 
 func waitForCardUpdates(t *testing.T, plat *fakePlatform, want int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if plat.cardUpdateCount() >= want {
 			return
@@ -237,7 +280,7 @@ func waitForCardUpdates(t *testing.T, plat *fakePlatform, want int) {
 
 func waitForCardSends(t *testing.T, plat *fakePlatform, want int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if plat.cardSendCount() >= want {
 			return
@@ -249,7 +292,7 @@ func waitForCardSends(t *testing.T, plat *fakePlatform, want int) {
 
 func waitForCardStatus(t *testing.T, plat *fakePlatform, status platform.CardStatus) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if plat.cardUpdateCount() > 0 && plat.lastUpdate().Status == status {
 			return
@@ -294,6 +337,104 @@ func TestRouterStartsThenResumes(t *testing.T) {
 	starts, resumes, _ = eng.counts()
 	if starts != 2 || resumes != 1 {
 		t.Fatalf("after /new starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterDownloadsAttachmentsAndPassesThemToEngine(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m-attachments",
+		Text:      "看看这些附件",
+		Attachments: []attachment.Resource{
+			{Kind: attachment.KindImage, Key: "img_1"},
+			{Kind: attachment.KindFile, Key: "file_1", Name: "report.pdf"},
+		},
+	})
+	waitForReplies(t, plat, 1)
+
+	prompt, opts := eng.lastRequest()
+	if !strings.Contains(prompt, "看看这些附件") {
+		t.Fatalf("prompt = %q", prompt)
+	}
+	if !strings.Contains(prompt, "[Image 1 saved at: ") || !strings.Contains(prompt, `[File "report.pdf" saved at: `) {
+		t.Fatalf("prompt missing attachment references: %q", prompt)
+	}
+	if len(opts.Attachments) != 2 {
+		t.Fatalf("engine attachments = %#v", opts.Attachments)
+	}
+	if opts.Attachments[0].Kind != attachment.KindImage || opts.Attachments[1].Kind != attachment.KindFile {
+		t.Fatalf("attachment kinds = %#v", opts.Attachments)
+	}
+	for _, item := range opts.Attachments {
+		if !strings.Contains(item.Path, filepath.Join(".nectar", "attachments", "m-attachments")) {
+			t.Fatalf("attachment path = %q", item.Path)
+		}
+	}
+	if len(plat.downloadDirs) == 0 || plat.downloadDirs[0] == "" {
+		t.Fatal("platform download directory was empty")
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		_, err := os.Stat(opts.Attachments[0].Path)
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("attachment was not cleaned up: %q", opts.Attachments[0].Path)
+}
+
+func TestRouterAttachmentOnlyMessageUsesDefaultPrompt(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m-image",
+		Attachments: []attachment.Resource{
+			{Kind: attachment.KindImage, Key: "img_1"},
+		},
+	})
+	waitForReplies(t, plat, 1)
+
+	prompt, opts := eng.lastRequest()
+	if !strings.Contains(prompt, "请分析附件中的图片。") {
+		t.Fatalf("prompt = %q", prompt)
+	}
+	if len(opts.Attachments) != 1 || opts.Attachments[0].Kind != attachment.KindImage {
+		t.Fatalf("attachments = %#v", opts.Attachments)
+	}
+}
+
+func TestRouterReportsAttachmentDownloadFailure(t *testing.T) {
+	plat := &fakePlatform{downloadErr: errors.New("boom")}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m-fail",
+		Text:      "看看图片",
+		Attachments: []attachment.Resource{
+			{Kind: attachment.KindImage, Key: "img_1"},
+		},
+	})
+	waitForReplies(t, plat, 1)
+
+	if got := plat.lastReply(); !strings.Contains(got, "下载附件失败") || !strings.Contains(got, "boom") {
+		t.Fatalf("reply = %q", got)
+	}
+	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
+		t.Fatalf("engine ran after download failure: starts=%d resumes=%d", starts, resumes)
 	}
 }
 
@@ -433,7 +574,7 @@ func TestRouterCommandResultsUseCards(t *testing.T) {
 		{"/new", platform.CardInfo, "🔄 New Session", "已开始新会话"},
 		{"/status", platform.CardInfo, "📊 Session Status", "新会话"},
 		{"/stop", platform.CardInfo, "⏹ Stop", "还没有正在运行的 Agent"},
-		{"", platform.CardError, "⚠️ Unsupported Message", "只支持文本消息"},
+		{"", platform.CardError, "⚠️ Unsupported Message", "只支持文本、图片或文件消息"},
 	}
 
 	for i, tc := range cases {

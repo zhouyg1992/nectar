@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zhouyg1992/nectar/internal/attachment"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 )
@@ -216,6 +217,11 @@ func (a *Adapter) buildArgs(sessionID string, opts engine.EngineOptions) []strin
 	}
 	if effort != "" {
 		args = append(args, "--config", "model_reasoning_effort="+strconv.Quote(effort))
+	}
+	for _, item := range opts.Attachments {
+		if item.Kind == attachment.KindImage && strings.TrimSpace(item.Path) != "" {
+			args = append(args, "--image", item.Path)
+		}
 	}
 
 	// "-" makes Codex read the prompt from stdin, avoiding argv limits.

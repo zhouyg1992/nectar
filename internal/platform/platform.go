@@ -1,6 +1,10 @@
 package platform
 
-import "context"
+import (
+	"context"
+
+	"github.com/zhouyg1992/nectar/internal/attachment"
+)
 
 type CardStatus string
 
@@ -21,15 +25,15 @@ type Card struct {
 
 // Message is the normalized form of an inbound chat message.
 type Message struct {
-	Channel   string
-	MessageID string
-	ChatID    string
-	ChatType  string
-	UserID    string
-	Text      string
-	MediaKeys []string
-	ReplyTo   string
-	ThreadID  string
+	Channel     string
+	MessageID   string
+	ChatID      string
+	ChatType    string
+	UserID      string
+	Text        string
+	Attachments []attachment.Resource
+	ReplyTo     string
+	ThreadID    string
 }
 
 // Reply is a message to send back to the chat platform.
@@ -69,5 +73,7 @@ type PlatformAdapter interface {
 
 	Send(ctx context.Context, reply Reply) (messageID string, err error)
 	Update(ctx context.Context, messageID string, reply Reply) error
-	Download(ctx context.Context, mediaKey string) (localPath string, err error)
+	// Download writes an inbound resource to dir and returns its local path.
+	// The adapter owns platform-specific naming and MIME detection.
+	Download(ctx context.Context, resource attachment.Resource, dir string) (attachment.Local, error)
 }

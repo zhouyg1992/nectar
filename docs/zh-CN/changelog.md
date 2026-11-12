@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### 新增
+
+- 飞书入站富文本：支持 `post` 图文混合，并保留文字与图片顺序
+- 飞书纯图片、文件消息下载后转交 Codex/OpenCode
+- Codex 通过 `--image`、OpenCode 通过 `--file` 接收图片附件
+- 平台无关的入站附件模型与 `EngineOptions.Attachments` 扩展点
+
+### 修复
+
+- 飞书扁平结构 `post` 消息不再退化为 `[rich text message]`，同时兼容语言包裹结构
+- 富文本中的 Markdown 图片和 `img` 元素都会提取为真实附件
+- 富文本顶层的 `files` 字段会提取为文件附件，覆盖“文字 + .txt/.log 文件”消息
+- 文本类文件内容会直接注入 prompt，避免 Agent 沿用历史上下文而不读取本轮附件
+
 ## v0.2.0 — 2026-11-12
 
 ### 新增
