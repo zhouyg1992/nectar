@@ -31,6 +31,12 @@ feishu websocket connected; ready to receive messages
 
 先发 `/help`。它不经过 Codex，可以直接验证飞书入站和卡片发送链路。然后再发普通消息测试 Codex。
 
+## 话题回复
+
+Nectar 会从消息原始事件里读取 `thread_id`。如果消息属于某个话题，所有回复和卡片都会使用飞书的 `reply_in_thread=true` 发送到同一话题；普通聊天消息仍然直接发送，不引用原消息。
+
+启动日志里会显示 `thread=`，方便确认消息是否被识别为话题消息。
+
 ## 没有回复时
 
 按顺序排查：

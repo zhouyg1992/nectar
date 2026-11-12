@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	channeltypes "github.com/larksuite/oapi-sdk-go/v3/channel/types"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
 func TestToPlatformMessageStripsMentions(t *testing.T) {
@@ -22,6 +23,25 @@ func TestToPlatformMessageStripsMentions(t *testing.T) {
 	}
 	if got.MessageID != "m1" || got.ChatID != "c1" || got.Channel != "feishu" {
 		t.Fatalf("message = %#v", got)
+	}
+}
+
+func TestToPlatformMessageExtractsThreadID(t *testing.T) {
+	threadID := "th1"
+	msg := &channeltypes.NormalizedMessage{
+		MessageID: "m1",
+		ChatID:    "c1",
+		ChatType:  "group",
+		Content:   "hello",
+		RawEvent: &larkim.P2MessageReceiveV1{
+			Event: &larkim.P2MessageReceiveV1Data{
+				Message: &larkim.EventMessage{ThreadId: &threadID},
+			},
+		},
+	}
+	got := toPlatformMessage(msg)
+	if got.ThreadID != "th1" {
+		t.Fatalf("thread id = %q, want th1", got.ThreadID)
 	}
 }
 

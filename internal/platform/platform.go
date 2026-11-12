@@ -29,15 +29,18 @@ type Message struct {
 	Text      string
 	MediaKeys []string
 	ReplyTo   string
+	ThreadID  string
 }
 
 // Reply is a message to send back to the chat platform.
 type Reply struct {
-	ChatID  string
-	ReplyTo string
-	Text    string
-	Card    *Card
-	Media   []Media
+	ChatID        string
+	ReplyTo       string
+	Text          string
+	Card          *Card
+	Media         []Media
+	ThreadID      string
+	ReplyInThread bool
 }
 
 // Media is a local file to upload back to the chat platform.

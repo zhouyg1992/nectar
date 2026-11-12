@@ -23,6 +23,8 @@ type fakePlatform struct {
 	sentCards    []platform.Card
 	updates      []platform.Card
 	replyTargets []string
+	replyThreads []bool
+	threadIDs    []string
 	updateIDs    []string
 }
 
@@ -37,6 +39,8 @@ func (f *fakePlatform) Send(_ context.Context, reply platform.Reply) (string, er
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.replyTargets = append(f.replyTargets, reply.ReplyTo)
+	f.replyThreads = append(f.replyThreads, reply.ReplyInThread)
+	f.threadIDs = append(f.threadIDs, reply.ThreadID)
 	if reply.Card != nil {
 		f.sentCards = append(f.sentCards, *reply.Card)
 		return "card-1", nil
@@ -48,6 +52,8 @@ func (f *fakePlatform) Update(_ context.Context, messageID string, reply platfor
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.replyTargets = append(f.replyTargets, reply.ReplyTo)
+	f.replyThreads = append(f.replyThreads, reply.ReplyInThread)
+	f.threadIDs = append(f.threadIDs, reply.ThreadID)
 	f.updateIDs = append(f.updateIDs, messageID)
 	if reply.Card != nil {
 		f.updates = append(f.updates, *reply.Card)
@@ -448,6 +454,107 @@ func TestRouterCommandResultsUseCards(t *testing.T) {
 
 	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
 		t.Fatalf("commands invoked engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterThreadRepliesStayInThread(t *testing.T) {
+	t.Run("help card", func(t *testing.T) {
+		plat := &fakePlatform{cards: true}
+		eng := &fakeEngine{}
+		router, _ := newTestRouter(t, eng, plat)
+		router.Handle(platform.Message{
+			Channel:   "feishu",
+			ChatID:    "c1",
+			MessageID: "m1",
+			ThreadID:  "th1",
+			Text:      "/help",
+		})
+		waitForCardSends(t, plat, 1)
+		plat.mu.Lock()
+		replyTo := plat.replyTargets[0]
+		inThread := plat.replyThreads[0]
+		threadID := plat.threadIDs[0]
+		plat.mu.Unlock()
+		if replyTo != "m1" || !inThread || threadID != "th1" {
+			t.Fatalf("thread reply = to:%q inThread:%v thread:%q", replyTo, inThread, threadID)
+		}
+	})
+
+	t.Run("agent card", func(t *testing.T) {
+		plat := &fakePlatform{cards: true}
+		eng := &fakeEngine{}
+		router, _ := newTestRouter(t, eng, plat)
+		router.Handle(platform.Message{
+			Channel:   "feishu",
+			ChatID:    "c1",
+			MessageID: "m1",
+			ThreadID:  "th1",
+			Text:      "hello",
+		})
+		waitForCardStatus(t, plat, platform.CardComplete)
+		plat.mu.Lock()
+		replyTo := plat.replyTargets[0]
+		inThread := plat.replyThreads[0]
+		threadID := plat.threadIDs[0]
+		plat.mu.Unlock()
+		if replyTo != "m1" || !inThread || threadID != "th1" {
+			t.Fatalf("thread reply = to:%q inThread:%v thread:%q", replyTo, inThread, threadID)
+		}
+	})
+
+	t.Run("text fallback", func(t *testing.T) {
+		plat := &fakePlatform{}
+		eng := &fakeEngine{}
+		router, _ := newTestRouter(t, eng, plat)
+		router.Handle(platform.Message{
+			Channel:   "feishu",
+			ChatID:    "c1",
+			MessageID: "m1",
+			ThreadID:  "th1",
+			Text:      "/help",
+		})
+		waitForReplies(t, plat, 1)
+		plat.mu.Lock()
+		replyTo := plat.replyTargets[0]
+		inThread := plat.replyThreads[0]
+		threadID := plat.threadIDs[0]
+		plat.mu.Unlock()
+		if replyTo != "m1" || !inThread || threadID != "th1" {
+			t.Fatalf("thread reply = to:%q inThread:%v thread:%q", replyTo, inThread, threadID)
+		}
+	})
+}
+
+func TestReplyTarget(t *testing.T) {
+	normal := replyTarget(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1"})
+	if normal.ReplyTo != "" || normal.ReplyInThread || normal.ThreadID != "" {
+		t.Fatalf("normal reply target = %#v", normal)
+	}
+	threaded := replyTarget(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1", ThreadID: "th1",
+	})
+	if threaded.ReplyTo != "m1" || !threaded.ReplyInThread || threaded.ThreadID != "th1" {
+		t.Fatalf("threaded reply target = %#v", threaded)
+	}
+}
+
+func TestRouterIsolatesTopicSessions(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "main"})
+	waitForReplies(t, plat, 1)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m2", ThreadID: "th1", Text: "topic one"})
+	waitForReplies(t, plat, 2)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m3", ThreadID: "th1", Text: "topic two"})
+	waitForReplies(t, plat, 3)
+
+	starts, resumes, _ := eng.counts()
+	if starts != 2 || resumes != 1 {
+		t.Fatalf("topic session isolation: starts=%d resumes=%d, want 2/1", starts, resumes)
 	}
 }
 

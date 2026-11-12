@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -97,11 +98,12 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 		a.logger.Error(ctx, fmt.Sprintf("[Nectar] feishu channel error: %v", err))
 	})
 	a.ch.OnMessage(func(_ context.Context, msg *channeltypes.NormalizedMessage) error {
+		normalized := toPlatformMessage(msg)
 		a.logger.Info(ctx, fmt.Sprintf(
-			"[Nectar] message received chat=%s type=%s sender=%s text_len=%d mentioned_bot=%v resources=%d",
-			msg.ChatID, msg.ChatType, msg.UserID, len(msg.Content), msg.MentionedBot, len(msg.Resources),
+			"[Nectar] message received chat=%s type=%s sender=%s text_len=%d mentioned_bot=%v resources=%d thread=%s",
+			msg.ChatID, msg.ChatType, msg.UserID, len(msg.Content), msg.MentionedBot, len(msg.Resources), normalized.ThreadID,
 		))
-		handler(toPlatformMessage(msg))
+		handler(normalized)
 		return nil
 	})
 	a.ch.OnReject(func(_ context.Context, event *channeltypes.RejectEvent) error {
@@ -116,6 +118,10 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 }
 
 func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error) {
+	if reply.ReplyInThread && reply.ReplyTo != "" {
+		return a.sendThreadReply(ctx, reply)
+	}
+
 	var firstID string
 	text := strings.TrimSpace(reply.Text)
 
@@ -151,24 +157,12 @@ func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error
 	}
 
 	for _, media := range reply.Media {
-		input := &channeltypes.SendInput{
-			ChatID:         reply.ChatID,
-			ReplyMessageID: reply.ReplyTo,
-		}
-		switch media.Type {
-		case "image":
-			input.MsgType = "image"
-			input.ImagePath = media.Path
-		default:
-			input.MsgType = "file"
-			input.FilePath = media.Path
-		}
-		res, err := a.ch.Send(ctx, input)
+		id, err := a.sendMedia(ctx, reply.ChatID, reply.ReplyTo, media)
 		if err != nil {
 			return firstID, fmt.Errorf("send media: %w", err)
 		}
 		if firstID == "" {
-			firstID = res.MessageID
+			firstID = id
 		}
 	}
 
@@ -176,6 +170,94 @@ func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error
 		return "", errors.New("empty reply")
 	}
 	return firstID, nil
+}
+
+func (a *Adapter) sendThreadReply(ctx context.Context, reply platform.Reply) (string, error) {
+	var firstID string
+	text := strings.TrimSpace(reply.Text)
+
+	if text != "" {
+		content, err := json.Marshal(map[string]string{"text": text})
+		if err != nil {
+			return "", fmt.Errorf("encode text: %w", err)
+		}
+		id, err := a.replyInThread(ctx, reply.ReplyTo, "text", string(content))
+		if err != nil {
+			return "", fmt.Errorf("reply text in thread: %w", err)
+		}
+		firstID = id
+	}
+
+	if reply.Card != nil {
+		cardJSON, err := renderCard(reply.Card)
+		if err != nil {
+			return firstID, fmt.Errorf("encode card: %w", err)
+		}
+		id, err := a.replyInThread(ctx, reply.ReplyTo, "interactive", cardJSON)
+		if err != nil {
+			return firstID, fmt.Errorf("reply card in thread: %w", err)
+		}
+		if firstID == "" {
+			firstID = id
+		}
+	}
+
+	for _, media := range reply.Media {
+		id, err := a.sendMedia(ctx, reply.ChatID, reply.ReplyTo, media)
+		if err != nil {
+			return firstID, fmt.Errorf("send media in thread: %w", err)
+		}
+		if firstID == "" {
+			firstID = id
+		}
+	}
+
+	if firstID == "" {
+		return "", errors.New("empty reply")
+	}
+	return firstID, nil
+}
+
+func (a *Adapter) replyInThread(ctx context.Context, messageID, msgType, content string) (string, error) {
+	req := larkim.NewReplyMessageReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType(msgType).
+			Content(content).
+			ReplyInThread(true).
+			Build()).
+		Build()
+	resp, err := a.client.Im.V1.Message.Reply(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if !resp.Success() {
+		return "", fmt.Errorf("code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	if resp.Data == nil || resp.Data.MessageId == nil {
+		return "", errors.New("feishu reply returned no message id")
+	}
+	return *resp.Data.MessageId, nil
+}
+
+func (a *Adapter) sendMedia(ctx context.Context, chatID, replyTo string, media platform.Media) (string, error) {
+	input := &channeltypes.SendInput{
+		ChatID:         chatID,
+		ReplyMessageID: replyTo,
+	}
+	switch media.Type {
+	case "image":
+		input.MsgType = "image"
+		input.ImagePath = media.Path
+	default:
+		input.MsgType = "file"
+		input.FilePath = media.Path
+	}
+	res, err := a.ch.Send(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return res.MessageID, nil
 }
 
 func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.Reply) error {
@@ -239,6 +321,10 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 		UserID:    msg.UserID,
 		Text:      strings.TrimSpace(text),
 		ReplyTo:   msg.MessageID,
+	}
+	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok &&
+		raw.Event != nil && raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
+		out.ThreadID = *raw.Event.Message.ThreadId
 	}
 	for _, resource := range msg.Resources {
 		if resource.FileKey != "" {

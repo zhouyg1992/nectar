@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.2
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.3
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -183,6 +183,10 @@ feishu websocket connected; ready to receive messages
 Codex 执行过程中，中间 agent 消息会实时更新 `🐝 Working...` 卡片（带节流）；最终 `🍯 Complete` 卡片只显示 Codex 的最后一条结果，不再混入中间叙述。
 
 > 帮助/命令卡片和实时进度需要 v0.1.2 及以上版本。
+
+话题里的消息会在同一话题内回复；普通聊天消息仍然直接发送，不引用原消息。
+
+> 话题回复需要 v0.1.3 及以上版本。
 
 - 单聊直接发消息
 - 群聊需要 @Bot

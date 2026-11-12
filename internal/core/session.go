@@ -5,13 +5,14 @@ import "sync"
 // SessionKey is deliberately a triple so multiple engines and bots can share
 // one chat without colliding. v1 always uses AgentID "codex".
 type SessionKey struct {
-	Channel string
-	ChatID  string
-	AgentID string
+	Channel  string
+	ChatID   string
+	ThreadID string
+	AgentID  string
 }
 
 func (k SessionKey) String() string {
-	return k.Channel + "\x00" + k.ChatID + "\x00" + k.AgentID
+	return k.Channel + "\x00" + k.ChatID + "\x00" + k.ThreadID + "\x00" + k.AgentID
 }
 
 type SessionStore struct {

@@ -6,7 +6,7 @@
 - 单聊和群聊 @Bot
 - Codex `exec --json` / `resume`
 - JSONL 事件解析
-- 三元组会话键与同会话 FIFO 队列
+- 会话键与同会话 FIFO 队列
 - 交互卡片：Thinking / Working / Complete / Failed
 - 完成卡片上下文占比、模型、耗时和 token
 - `/new`、`/status`、`/stop`、`/help`

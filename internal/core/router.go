@@ -81,7 +81,12 @@ func NewRouter(
 }
 
 func (r *Router) Handle(msg platform.Message) {
-	key := SessionKey{Channel: msg.Channel, ChatID: msg.ChatID, AgentID: r.cfg.AgentID}
+	key := SessionKey{
+		Channel:  msg.Channel,
+		ChatID:   msg.ChatID,
+		ThreadID: msg.ThreadID,
+		AgentID:  r.cfg.AgentID,
+	}
 	text := strings.TrimSpace(msg.Text)
 
 	switch text {
@@ -139,10 +144,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			Title:  cardTitleThinking,
 			Body:   "正在思考，请稍候…",
 		}
-		id, sendErr := r.platform.Send(r.ctx, platform.Reply{
-			ChatID: msg.ChatID,
-			Card:   initial,
-		})
+		reply := replyTarget(msg)
+		reply.Card = initial
+		id, sendErr := r.platform.Send(r.ctx, reply)
 		if sendErr != nil {
 			r.logger.Error("send thinking card failed", "chat", msg.ChatID, "error", sendErr)
 		} else {
@@ -281,7 +285,9 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 			return
 		} else {
 			r.logger.Error("update final card failed", "message_id", cardID, "error", err)
-			if _, sendErr := r.platform.Send(r.ctx, platform.Reply{ChatID: msg.ChatID, Card: card}); sendErr == nil {
+			fallback := replyTarget(msg)
+			fallback.Card = card
+			if _, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
 				return
 			} else {
 				r.logger.Error("send final card failed", "chat", msg.ChatID, "error", sendErr)
@@ -313,10 +319,9 @@ func (r *Router) status(key SessionKey) string {
 }
 
 func (r *Router) reply(msg platform.Message, text string) {
-	_, err := r.platform.Send(r.ctx, platform.Reply{
-		ChatID: msg.ChatID,
-		Text:   text,
-	})
+	reply := replyTarget(msg)
+	reply.Text = text
+	_, err := r.platform.Send(r.ctx, reply)
 	if err != nil {
 		r.logger.Error("send reply failed", "chat", msg.ChatID, "error", err)
 	}
@@ -336,16 +341,25 @@ func (r *Router) sendCommandResult(msg platform.Message, status platform.CardSta
 
 func (r *Router) sendCardOrText(msg platform.Message, card *platform.Card, fallback string) {
 	if caps := r.platform.Capabilities(); caps.Card {
-		if _, err := r.platform.Send(r.ctx, platform.Reply{
-			ChatID: msg.ChatID,
-			Card:   card,
-		}); err == nil {
+		reply := replyTarget(msg)
+		reply.Card = card
+		if _, err := r.platform.Send(r.ctx, reply); err == nil {
 			return
 		} else {
 			r.logger.Error("send command card failed", "chat", msg.ChatID, "title", card.Title, "error", err)
 		}
 	}
 	r.reply(msg, fallback)
+}
+
+func replyTarget(msg platform.Message) platform.Reply {
+	reply := platform.Reply{ChatID: msg.ChatID}
+	if msg.ThreadID != "" {
+		reply.ReplyTo = msg.MessageID
+		reply.ThreadID = msg.ThreadID
+		reply.ReplyInThread = true
+	}
+	return reply
 }
 
 func helpCard() *platform.Card {

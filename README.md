@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 Pin a version or choose an install directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.2
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.1.3
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -163,6 +163,10 @@ All built-in command results (`/new`, `/status`, `/stop`, and command errors) us
 During a Codex run, intermediate agent messages update the `🐝 Working...` card in real time (throttled). The final `🍯 Complete` card contains only the last Codex answer, not the intermediate narration.
 
 > Help/command cards and real-time progress require v0.1.2 or later.
+
+Topic messages are answered inside the same topic. Normal chat messages are still sent without quoting.
+
+> Topic replies require v0.1.3 or later.
 
 ### Background service
 
