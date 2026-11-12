@@ -37,6 +37,16 @@ Nectar 会从消息原始事件里读取 `thread_id`。如果消息属于某个�
 
 启动日志里会显示 `thread=`，方便确认消息是否被识别为话题消息。
 
+## 图片、文件与富文本
+
+飞书入站支持 `text`、`post`、`image` 和 `file`：
+
+- 纯图片会使用默认提示词交给 Agent 分析。
+- 图文混合的 `post` 会保留文字和图片顺序，图片位置转换为 `[Image N]`。
+- 图片和文件会下载到当前聊天工作目录下以 `message_id` 为前缀的 `.nectar/attachments/` 子目录，Agent 运行结束后自动清理。
+- Codex 使用 `--image`、OpenCode 使用 `--file` 接收图片；文件通过 prompt 中的本地绝对路径交给 Agent 读取。
+- 暂不支持音频、视频和合并转发消息。
+
 ## 没有回复时
 
 按顺序排查：

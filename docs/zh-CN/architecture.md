@@ -23,7 +23,9 @@ graph LR
 ### Platform
 
 - 位置：`internal/platform`
-- 负责接收平台消息、发送文本/卡片、下载媒体。
+- 负责接收平台消息、发送文本/卡片、下载入站附件。
+- 入站附件使用 `internal/attachment.Resource` 表示平台资源，平台适配器只负责按类型下载到指定目录并返回本地路径。
+- 平台适配器不构造 Agent prompt，也不决定某个引擎是否能原生接收图片。
 - 通过 `Capabilities()` 声明是否支持卡片、流式更新、媒体和群聊。
 - 消息携带可选的 `ThreadID`；回复携带 `ReplyInThread`，由平台适配器决定如何回到同一话题。
 - v1 实现：飞书。占位：Telegram。
@@ -35,13 +37,16 @@ graph LR
 - `/help`、`/commands`、短命令问句以及所有内置命令结果在 Router 本地处理，直接返回平台卡片，不进入引擎。
 - `SessionStore`：会话键 `(channel, chatID, threadID, agentID) → engine session ID`；`threadID` 为空表示主会话。
 - `Queue`：同一会话 FIFO 串行，不同会话并发。
+- `Router` 在队列执行阶段下载附件、生成统一的本地路径提示词，并管理附件生命周期。
 - 卡片流程：先发 `🐝 Thinking...`，工具调用时更新 `🐝 Working...`，结束时 PATCH 为 `🍯 Complete` 或 `⚠️ Failed`。
 
 ### Engine
 
 - 位置：`internal/engine`
 - 统一 `Event` 流：会话开始、文本、工具调用/结果、完成、错误。
+- 入站附件通过 `EngineOptions.Attachments` 交给引擎；引擎只决定如何映射到自己的 CLI 参数。
 - 已实现：Codex CLI、OpenCode。
+- Codex 将图片映射为 `--image`，OpenCode 映射为 `--file`；普通文件统一通过 prompt 中的本地路径引用。
 - 占位：Claude Code、Kimi、Pi。
 - OpenCode 通过 `session export` 读取最后一轮 assistant token，并从模型配置的 `limit.context` 解析上下文上限，附加到 `EventDone` 的 usage。
 
@@ -67,6 +72,10 @@ graph LR
 ### 飞书 dispatcher
 
 `channel.NewChannel` 只有在底层 `wsClient` 已经带有 `EventDispatcher` 时才会注册消息处理器。飞书 adapter 创建 `wsClient` 时必须传入 `larkws.WithEventHandler(...)`，否则长连接能成功但消息会被静默丢弃。
+
+### 入站附件
+
+飞书 adapter 将 SDK 规范化后的 `image`、`file` 资源转换为 `attachment.Resource`，并把 `post` 中的图片占位符整理为 `[Image N]`。Router 在队列执行阶段调用 `PlatformAdapter.Download` 下载到聊天工作目录，再通过 `EngineOptions.Attachments` 传给引擎。这样新增平台只需要实现附件下载，新增引擎只需要按自身 CLI 消费本地附件，不需要修改 Router 的消息类型分支。
 
 ### 会话隔离
 

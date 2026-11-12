@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -17,7 +21,15 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 
+	"github.com/zhouyg1992/nectar/internal/attachment"
 	"github.com/zhouyg1992/nectar/internal/platform"
+)
+
+var (
+	imageMarkdownPattern = regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`)
+	mediaMarkerPattern   = regexp.MustCompile(`<(?:file|folder|audio|video|sticker)\b[^>]*/>`)
+	extensionPattern     = regexp.MustCompile(`^\.[a-z0-9]{1,10}$`)
+	imageOnlyPattern     = regexp.MustCompile(`^(?:\s*\[Image \d+\]\s*)+$`)
 )
 
 type Config struct {
@@ -100,8 +112,8 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 	a.ch.OnMessage(func(_ context.Context, msg *channeltypes.NormalizedMessage) error {
 		normalized := toPlatformMessage(msg)
 		a.logger.Info(ctx, fmt.Sprintf(
-			"[Nectar] message received chat=%s type=%s sender=%s text_len=%d mentioned_bot=%v resources=%d thread=%s",
-			msg.ChatID, msg.ChatType, msg.UserID, len(msg.Content), msg.MentionedBot, len(msg.Resources), normalized.ThreadID,
+			"[Nectar] message received chat=%s type=%s raw_type=%s sender=%s text_len=%d mentioned_bot=%v resources=%d attachments=%d thread=%s",
+			msg.ChatID, msg.ChatType, msg.RawContentType, msg.UserID, len(msg.Content), msg.MentionedBot, len(msg.Resources), len(normalized.Attachments), normalized.ThreadID,
 		))
 		handler(normalized)
 		return nil
@@ -282,56 +294,438 @@ func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.R
 	return nil
 }
 
-func (a *Adapter) Download(ctx context.Context, mediaKey string) (string, error) {
-	data, err := a.ch.DownloadFile(ctx, mediaKey, "file")
-	if err != nil {
-		return "", fmt.Errorf("download feishu media: %w", err)
+func (a *Adapter) Download(ctx context.Context, resource attachment.Resource, dir string) (attachment.Local, error) {
+	if strings.TrimSpace(resource.Key) == "" {
+		return attachment.Local{}, errors.New("feishu attachment key is empty")
 	}
-	dir := filepath.Join(os.TempDir(), "nectar-media")
+	mediaType := "file"
+	if resource.Kind == attachment.KindImage {
+		mediaType = "image"
+	}
+	data, err := a.downloadResource(ctx, resource, mediaType)
+	if err != nil {
+		return attachment.Local{}, fmt.Errorf("download feishu %s: %w", resource.Kind, err)
+	}
+	if len(data) == 0 {
+		return attachment.Local{}, fmt.Errorf("download feishu %s: empty response", resource.Kind)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create media dir: %w", err)
+		return attachment.Local{}, fmt.Errorf("create media dir: %w", err)
 	}
-	f, err := os.CreateTemp(dir, "media-*")
+	mimeType := http.DetectContentType(data)
+	ext := attachmentExtension(resource, mimeType)
+	f, err := os.CreateTemp(dir, "attachment-*"+ext)
 	if err != nil {
-		return "", fmt.Errorf("create media file: %w", err)
+		return attachment.Local{}, fmt.Errorf("create media file: %w", err)
 	}
 	defer f.Close()
 	if _, err := f.Write(data); err != nil {
-		return "", fmt.Errorf("write media file: %w", err)
+		return attachment.Local{}, fmt.Errorf("write media file: %w", err)
 	}
-	return f.Name(), nil
+	return attachment.Local{
+		Kind:     resource.Kind,
+		Path:     f.Name(),
+		Name:     resource.Name,
+		MimeType: mimeType,
+	}, nil
+}
+
+func (a *Adapter) downloadResource(ctx context.Context, resource attachment.Resource, mediaType string) ([]byte, error) {
+	if resource.MessageID != "" {
+		req := larkim.NewGetMessageResourceReqBuilder().
+			MessageId(resource.MessageID).
+			FileKey(resource.Key).
+			Type(mediaType).
+			Build()
+		resp, err := a.client.Im.V1.MessageResource.Get(ctx, req)
+		if err == nil && resp != nil && resp.Success() && resp.File != nil {
+			data, readErr := io.ReadAll(resp.File)
+			if readErr == nil {
+				return data, nil
+			}
+			err = readErr
+		} else if err == nil && resp != nil {
+			err = fmt.Errorf("code=%d msg=%s", resp.Code, resp.Msg)
+		} else if err == nil {
+			err = errors.New("empty message resource response")
+		}
+		if data, fallbackErr := a.ch.DownloadFile(ctx, resource.Key, mediaType); fallbackErr == nil {
+			return data, nil
+		} else {
+			return nil, fmt.Errorf("message resource: %v; fallback: %w", err, fallbackErr)
+		}
+	}
+	return a.ch.DownloadFile(ctx, resource.Key, mediaType)
 }
 
 func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 	text := msg.Content
-	for _, mention := range msg.Mentions {
-		if mention.Key != "" {
-			text = strings.ReplaceAll(text, mention.Key, "")
+	attachments := make([]attachment.Resource, 0, len(msg.Resources))
+	for _, resource := range msg.Resources {
+		kind, ok := attachmentKind(resource.Type, msg.RawContentType)
+		if !ok || resource.FileKey == "" {
+			continue
 		}
+		attachments = append(attachments, attachment.Resource{
+			Kind:      kind,
+			Key:       resource.FileKey,
+			Name:      resource.FileName,
+			MessageID: msg.MessageID,
+		})
 	}
-	if msg.MentionAll {
-		text = strings.ReplaceAll(text, "@_all", "")
+	if rawText, rawAttachments, ok := parseRawInboundMessage(msg.RawEvent); ok {
+		text = rawText
+		attachments = rawAttachments
 	}
+	text = stripInboundMentions(text, msg.Mentions, msg.MentionAll)
 
 	out := platform.Message{
-		Channel:   "feishu",
-		MessageID: msg.MessageID,
-		ChatID:    msg.ChatID,
-		ChatType:  msg.ChatType,
-		UserID:    msg.UserID,
-		Text:      strings.TrimSpace(text),
-		ReplyTo:   msg.MessageID,
+		Channel:     "feishu",
+		MessageID:   msg.MessageID,
+		ChatID:      msg.ChatID,
+		ChatType:    msg.ChatType,
+		UserID:      msg.UserID,
+		Text:        normalizeInboundText(text, attachments),
+		Attachments: attachments,
+		ReplyTo:     msg.MessageID,
 	}
 	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok &&
 		raw.Event != nil && raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
 		out.ThreadID = *raw.Event.Message.ThreadId
 	}
-	for _, resource := range msg.Resources {
-		if resource.FileKey != "" {
-			out.MediaKeys = append(out.MediaKeys, resource.FileKey)
+	return out
+}
+
+func parseRawInboundMessage(raw any) (string, []attachment.Resource, bool) {
+	event, ok := raw.(*larkim.P2MessageReceiveV1)
+	if !ok || event.Event == nil || event.Event.Message == nil {
+		return "", nil, false
+	}
+	message := event.Event.Message
+	messageType := strings.ToLower(derefString(message.MessageType))
+	content := derefString(message.Content)
+	messageID := derefString(message.MessageId)
+
+	switch messageType {
+	case "text":
+		var body struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil {
+			return "", nil, false
+		}
+		return body.Text, nil, true
+	case "post":
+		return parseRawPost(content, messageID)
+	case "image":
+		var body struct {
+			ImageKey string `json:"image_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil || body.ImageKey == "" {
+			return "", nil, false
+		}
+		return "", []attachment.Resource{{
+			Kind:      attachment.KindImage,
+			Key:       body.ImageKey,
+			MessageID: messageID,
+		}}, true
+	case "file":
+		var body struct {
+			FileKey  string `json:"file_key"`
+			FileName string `json:"file_name"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil || body.FileKey == "" {
+			return "", nil, false
+		}
+		return "", []attachment.Resource{{
+			Kind:      attachment.KindFile,
+			Key:       body.FileKey,
+			Name:      body.FileName,
+			MessageID: messageID,
+		}}, true
+	case "sticker":
+		var body struct {
+			FileKey string `json:"file_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil || body.FileKey == "" {
+			return "", nil, false
+		}
+		return "", []attachment.Resource{{
+			Kind:      attachment.KindImage,
+			Key:       body.FileKey,
+			MessageID: messageID,
+		}}, true
+	}
+	return "", nil, false
+}
+
+func parseRawPost(raw, messageID string) (string, []attachment.Resource, bool) {
+	var content map[string]any
+	if err := json.Unmarshal([]byte(raw), &content); err != nil {
+		return "", nil, false
+	}
+	body := selectPostBody(content)
+	if body == nil {
+		return "", nil, false
+	}
+
+	paragraphs, _ := body["content_v2"].([]any)
+	if len(paragraphs) == 0 {
+		paragraphs, _ = body["content"].([]any)
+	}
+
+	attachments := make([]attachment.Resource, 0)
+	imageNumber := 0
+	addImage := func(key string) string {
+		imageNumber++
+		attachments = append(attachments, attachment.Resource{
+			Kind:      attachment.KindImage,
+			Key:       key,
+			MessageID: messageID,
+		})
+		return fmt.Sprintf("[Image %d]", imageNumber)
+	}
+
+	lines := make([]string, 0, len(paragraphs)+1)
+	if title := strings.TrimSpace(stringValue(body["title"])); title != "" {
+		lines = append(lines, title)
+	}
+	for _, paragraphValue := range paragraphs {
+		paragraph, ok := paragraphValue.([]any)
+		if !ok {
+			continue
+		}
+		var line strings.Builder
+		for _, elementValue := range paragraph {
+			element, ok := elementValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			text := stringValue(element["text"])
+			switch strings.ToLower(stringValue(element["tag"])) {
+			case "md":
+				line.WriteString(rewriteRawMarkdownImages(text, addImage))
+			case "text":
+				line.WriteString(text)
+			case "a":
+				href := stringValue(element["href"])
+				switch {
+				case href != "" && text != "":
+					fmt.Fprintf(&line, "[%s](%s)", text, href)
+				case href != "":
+					line.WriteString(href)
+				default:
+					line.WriteString(text)
+				}
+			case "at":
+				userID := stringValue(element["user_id"])
+				userName := stringValue(element["user_name"])
+				switch {
+				case userID == "all" || userID == "all_members":
+					line.WriteString("@all")
+				case userName != "":
+					line.WriteString("@" + userName)
+				case userID != "":
+					line.WriteString("@" + userID)
+				}
+			case "img":
+				if key := stringValue(element["image_key"]); key != "" {
+					line.WriteString(addImage(key))
+				}
+			case "media":
+				if key := stringValue(element["file_key"]); key != "" {
+					attachments = append(attachments, attachment.Resource{
+						Kind:      attachment.KindFile,
+						Key:       key,
+						MessageID: messageID,
+					})
+					line.WriteString("[File]")
+				}
+			case "code_block":
+				lang := stringValue(element["language"])
+				fmt.Fprintf(&line, "\n```%s\n%s\n```\n", lang, text)
+			case "hr":
+				line.WriteString("\n---\n")
+			default:
+				line.WriteString(text)
+			}
+		}
+		if strings.TrimSpace(line.String()) != "" {
+			lines = append(lines, line.String())
 		}
 	}
-	return out
+
+	text := strings.TrimSpace(strings.Join(lines, "\n"))
+	if imageOnlyPattern.MatchString(text) {
+		text = ""
+	}
+	return text, attachments, true
+}
+
+func selectPostBody(content map[string]any) map[string]any {
+	if hasPostBody(content) {
+		return content
+	}
+	for _, locale := range []string{"zh_cn", "en_us", "ja_jp"} {
+		if body, ok := content[locale].(map[string]any); ok && hasPostBody(body) {
+			return body
+		}
+	}
+	keys := make([]string, 0, len(content))
+	for key := range content {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if body, ok := content[key].(map[string]any); ok && hasPostBody(body) {
+			return body
+		}
+	}
+	return nil
+}
+
+func hasPostBody(content map[string]any) bool {
+	if _, ok := content["content"].([]any); ok {
+		return true
+	}
+	_, ok := content["content_v2"].([]any)
+	return ok
+}
+
+func rewriteRawMarkdownImages(text string, addImage func(string) string) string {
+	return imageMarkdownPattern.ReplaceAllStringFunc(text, func(match string) string {
+		parts := imageMarkdownPattern.FindStringSubmatch(match)
+		if len(parts) < 2 || !isFeishuImageKey(parts[1]) {
+			return match
+		}
+		return addImage(parts[1])
+	})
+}
+
+func isFeishuImageKey(key string) bool {
+	return strings.HasPrefix(key, "img_") || strings.HasPrefix(key, "img_v")
+}
+
+func stripInboundMentions(text string, mentions []channeltypes.Mention, mentionAll bool) string {
+	for _, mention := range mentions {
+		if mention.Key != "" {
+			text = strings.ReplaceAll(text, mention.Key, "")
+		}
+		if mention.IsBot && mention.Name != "" {
+			text = strings.ReplaceAll(text, "@"+mention.Name, "")
+		}
+	}
+	if mentionAll {
+		text = strings.ReplaceAll(text, "@_all", "")
+		text = strings.ReplaceAll(text, "@all", "")
+	}
+	return strings.TrimSpace(text)
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func stringValue(value any) string {
+	text, _ := value.(string)
+	return text
+}
+
+func attachmentKind(resourceType, rawContentType string) (attachment.Kind, bool) {
+	switch strings.ToLower(resourceType) {
+	case "image", "sticker":
+		return attachment.KindImage, true
+	case "file":
+		return attachment.KindFile, true
+	}
+	switch strings.ToLower(rawContentType) {
+	case "image":
+		return attachment.KindImage, true
+	case "file":
+		return attachment.KindFile, true
+	}
+	return "", false
+}
+
+func normalizeInboundText(text string, attachments []attachment.Resource) string {
+	text = strings.TrimSpace(text)
+	if text == "" || len(attachments) == 0 {
+		return text
+	}
+
+	if strings.TrimSpace(rewriteMediaMarkup(text, attachments, false)) == "" {
+		return ""
+	}
+	text = strings.TrimSpace(rewriteMediaMarkup(text, attachments, true))
+	if imageOnlyPattern.MatchString(text) {
+		return ""
+	}
+	return text
+}
+
+func rewriteMediaMarkup(text string, attachments []attachment.Resource, placeholders bool) string {
+	imageKeys := make(map[string]struct{})
+	for _, item := range attachments {
+		if item.Kind == attachment.KindImage {
+			imageKeys[item.Key] = struct{}{}
+		}
+	}
+
+	imageNumber := 0
+	text = imageMarkdownPattern.ReplaceAllStringFunc(text, func(match string) string {
+		parts := imageMarkdownPattern.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		if _, ok := imageKeys[parts[1]]; !ok {
+			return match
+		}
+		if !placeholders {
+			return ""
+		}
+		imageNumber++
+		return fmt.Sprintf("[Image %d]", imageNumber)
+	})
+	return mediaMarkerPattern.ReplaceAllString(text, "")
+}
+
+func attachmentExtension(resource attachment.Resource, mimeType string) string {
+	mimeType = strings.TrimSpace(strings.SplitN(mimeType, ";", 2)[0])
+	if resource.Kind == attachment.KindImage {
+		switch mimeType {
+		case "image/jpeg":
+			return ".jpg"
+		case "image/gif":
+			return ".gif"
+		case "image/webp":
+			return ".webp"
+		case "image/png":
+			return ".png"
+		}
+	}
+
+	name := filepath.Base(strings.TrimSpace(resource.Name))
+	if name != "." && name != "" {
+		if ext := strings.ToLower(filepath.Ext(name)); extensionPattern.MatchString(ext) {
+			return ext
+		}
+	}
+
+	switch mimeType {
+	case "application/pdf":
+		return ".pdf"
+	case "application/json":
+		return ".json"
+	case "text/plain":
+		return ".txt"
+	}
+	if resource.Kind == attachment.KindImage {
+		return ".png"
+	}
+	return ".bin"
 }
 
 func parseLogLevel(value string) larkcore.LogLevel {

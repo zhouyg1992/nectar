@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zhouyg1992/nectar/internal/attachment"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 )
@@ -268,6 +269,11 @@ func (a *Adapter) buildArgs(sessionID, prompt string, opts engine.EngineOptions)
 	}
 	if a.cfg.Agent != "" {
 		args = append(args, "--agent", a.cfg.Agent)
+	}
+	for _, item := range opts.Attachments {
+		if item.Kind == attachment.KindImage && strings.TrimSpace(item.Path) != "" {
+			args = append(args, "--file", item.Path)
+		}
 	}
 	args = append(args, prompt)
 	return args

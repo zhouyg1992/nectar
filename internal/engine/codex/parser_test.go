@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zhouyg1992/nectar/internal/attachment"
 	"github.com/zhouyg1992/nectar/internal/engine"
 )
 
@@ -89,6 +90,27 @@ func TestBuildArgs(t *testing.T) {
 	}
 	if strings.Contains(resume, "--sandbox") {
 		t.Fatalf("resume should not pass --sandbox: %q", resume)
+	}
+}
+
+func TestBuildArgsIncludesImages(t *testing.T) {
+	adapter := NewAdapter(Config{Executable: "codex"})
+	opts := engine.EngineOptions{Attachments: []attachment.Local{
+		{Kind: attachment.KindImage, Path: "/tmp/image.png"},
+		{Kind: attachment.KindFile, Path: "/tmp/report.pdf"},
+	}}
+
+	start := strings.Join(adapter.buildArgs("", opts), " ")
+	if !strings.Contains(start, "--image /tmp/image.png") {
+		t.Fatalf("start args = %q", start)
+	}
+	if strings.Contains(start, "--image /tmp/report.pdf") {
+		t.Fatalf("file should not use --image: %q", start)
+	}
+
+	resume := strings.Join(adapter.buildArgs("thread-1", opts), " ")
+	if !strings.Contains(resume, "--image /tmp/image.png") {
+		t.Fatalf("resume args = %q", resume)
 	}
 }
 

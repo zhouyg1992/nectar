@@ -107,8 +107,8 @@ func (r *Router) Handle(msg platform.Message) {
 		return
 	}
 
-	if text == "" {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Unsupported Message", "只支持文本消息。")
+	if text == "" && len(msg.Attachments) == 0 {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Unsupported Message", "只支持文本、图片或文件消息。")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
-			Body:   "正在思考，请稍候…",
+			Body:   initialCardBody(len(msg.Attachments) > 0),
 		}
 		reply := replyTarget(msg)
 		reply.Card = initial
@@ -153,6 +153,25 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			cardID = id
 		}
 	}
+
+	attachments, cleanupAttachments, err := r.prepareAttachments(msg, workdir)
+	if err != nil {
+		answer := "❌ 下载附件失败: " + err.Error()
+		r.finish(msg, cardID, &platform.Card{
+			Status: platform.CardError,
+			Title:  cardTitleFailed,
+			Body:   answer,
+			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
+		}, answer)
+		return
+	}
+	defer cleanupAttachments()
+	lessonPrompt := prompt
+	if strings.TrimSpace(lessonPrompt) == "" && len(attachments) > 0 {
+		lessonPrompt = defaultAttachmentPrompt(attachments)
+	}
+	prompt = buildAttachmentPrompt(prompt, attachments)
+	opts.Attachments = attachments
 
 	sessionID, hasSession := r.sessions.Get(key)
 	var events <-chan engine.Event
@@ -282,8 +301,15 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	}
 
 	if len(errTexts) > 0 {
-		r.recordLesson(msg, prompt, strings.Join(errTexts, "\n"))
+		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"))
 	}
+}
+
+func initialCardBody(hasAttachments bool) string {
+	if hasAttachments {
+		return "正在接收附件，请稍候…"
+	}
+	return "正在思考，请稍候…"
 }
 
 func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) {

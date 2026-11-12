@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zhouyg1992/nectar/internal/attachment"
 	"github.com/zhouyg1992/nectar/internal/engine"
 )
 
@@ -117,6 +118,26 @@ func TestBuildArgs(t *testing.T) {
 	resume := strings.Join(adapter.buildArgs("ses_123", "again", engine.EngineOptions{}), " ")
 	if !strings.Contains(resume, "--session ses_123") {
 		t.Fatalf("resume args = %q", resume)
+	}
+}
+
+func TestBuildArgsIncludesImages(t *testing.T) {
+	adapter := NewAdapter(Config{Executable: "opencode"})
+	opts := engine.EngineOptions{Attachments: []attachment.Local{
+		{Kind: attachment.KindImage, Path: "/tmp/image.png"},
+		{Kind: attachment.KindFile, Path: "/tmp/report.pdf"},
+	}}
+
+	args := adapter.buildArgs("", "describe", opts)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--file /tmp/image.png") {
+		t.Fatalf("args = %q", joined)
+	}
+	if strings.Contains(joined, "--file /tmp/report.pdf") {
+		t.Fatalf("file should not use --file: %q", joined)
+	}
+	if args[len(args)-1] != "describe" {
+		t.Fatalf("prompt should remain the final argument: %#v", args)
 	}
 }
 
