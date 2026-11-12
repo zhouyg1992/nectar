@@ -172,8 +172,9 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 			if parseErr == nil && trackedSession != "" {
 				if usage := a.sessionUsage(trackedSession, workdir); usage != nil {
 					if data, err := json.Marshal(map[string]int{
-						"input_tokens":  usage.Input,
-						"output_tokens": usage.Output,
+						"input_tokens":   usage.Input,
+						"output_tokens":  usage.Output,
+						"context_tokens": usage.contextTokens(),
 					}); err == nil {
 						done.Meta = map[string]any{"usage": string(data)}
 					}
@@ -187,19 +188,34 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 }
 
 type tokenUsage struct {
-	Input  int `json:"input"`
-	Output int `json:"output"`
+	Input     int        `json:"input"`
+	Output    int        `json:"output"`
+	Reasoning int        `json:"reasoning"`
+	Cache     cacheUsage `json:"cache"`
+}
+
+type cacheUsage struct {
+	Read  int `json:"read"`
+	Write int `json:"write"`
+}
+
+func (u tokenUsage) contextTokens() int {
+	return u.Input + u.Output + u.Reasoning + u.Cache.Read + u.Cache.Write
+}
+
+func (u tokenUsage) empty() bool {
+	return u.contextTokens() == 0
 }
 
 func (a *Adapter) sessionUsage(sessionID, workdir string) *tokenUsage {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	args := []string{"session", "export"}
 	if a.cfg.Standalone {
 		args = append(args, "--standalone")
 	}
-	args = append(args, "--sanitize", sessionID)
+	args = append(args, sessionID)
 	cmd := exec.CommandContext(ctx, a.cfg.Executable, args...)
 	cmd.Dir = workdir
 	cmd.Env = engineEnv(workdir)
@@ -211,11 +227,25 @@ func (a *Adapter) sessionUsage(sessionID, workdir string) *tokenUsage {
 		Info struct {
 			Tokens tokenUsage `json:"tokens"`
 		} `json:"info"`
+		Messages []struct {
+			Type   string     `json:"type"`
+			Tokens tokenUsage `json:"tokens"`
+		} `json:"messages"`
 	}
 	if err := json.Unmarshal(out, &exported); err != nil {
 		return nil
 	}
-	if exported.Info.Tokens.Input == 0 && exported.Info.Tokens.Output == 0 {
+
+	// The last assistant message describes the final model call, which is the
+	// context usage users expect to see in the card footer.
+	for i := len(exported.Messages) - 1; i >= 0; i-- {
+		message := exported.Messages[i]
+		if message.Type == "assistant" && !message.Tokens.empty() {
+			tokens := message.Tokens
+			return &tokens
+		}
+	}
+	if exported.Info.Tokens.empty() {
 		return nil
 	}
 	return &exported.Info.Tokens

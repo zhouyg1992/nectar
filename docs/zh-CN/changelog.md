@@ -6,7 +6,8 @@
 
 - OpenCode 引擎适配器：`run --format json`、`--session` 续接、工具事件映射
 - `bot.engine` 引擎选择与 `[opencode]` 配置段
-- OpenCode 页脚显示真实模型和 session token 用量（上下文占比暂不显示）
+- OpenCode 页脚显示真实模型、最后一轮 token 用量和上下文占比
+- OpenCode 从模型 `limit.context` 自动解析上下文上限，支持 `opencode.context_window` 覆盖
 - OpenCode 工具失败视为可恢复错误，有最终回答时卡片仍显示 Complete
 - 飞书卡片迁移到 Card 2.0：标题、引用、行内代码、代码块、列表交给原生 markdown 渲染
 - 飞书卡片使用原生 table 元素渲染 Markdown 表格（单卡最多 5 个，超出降级为代码块）

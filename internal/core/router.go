@@ -421,8 +421,9 @@ func isHelpRequest(text string) bool {
 }
 
 type tokenUsage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens   int
+	OutputTokens  int
+	ContextTokens int
 }
 
 func parseUsage(meta map[string]any) *tokenUsage {
@@ -434,23 +435,31 @@ func parseUsage(meta map[string]any) *tokenUsage {
 		return nil
 	}
 	var decoded struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens   int `json:"input_tokens"`
+		OutputTokens  int `json:"output_tokens"`
+		ContextTokens int `json:"context_tokens"`
 	}
 	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
 		return nil
 	}
-	if decoded.InputTokens == 0 && decoded.OutputTokens == 0 {
+	if decoded.InputTokens == 0 && decoded.OutputTokens == 0 && decoded.ContextTokens == 0 {
 		return nil
 	}
-	return &tokenUsage{InputTokens: decoded.InputTokens, OutputTokens: decoded.OutputTokens}
+	return &tokenUsage{
+		InputTokens:   decoded.InputTokens,
+		OutputTokens:  decoded.OutputTokens,
+		ContextTokens: decoded.ContextTokens,
+	}
 }
 
 func cardFooter(model string, elapsed time.Duration, usage *tokenUsage, contextWindow int) string {
 	model = displayModelName(model)
 	parts := make([]string, 0, 5)
 	if usage != nil && contextWindow > 0 {
-		used := usage.InputTokens + usage.OutputTokens
+		used := usage.ContextTokens
+		if used == 0 {
+			used = usage.InputTokens + usage.OutputTokens
+		}
 		percent := float64(used) / float64(contextWindow) * 100
 		parts = append(parts, fmt.Sprintf(
 			"ctx: %s/%s (%.1f%%)",

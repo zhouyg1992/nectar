@@ -146,6 +146,7 @@ agent = ""                    # 可选 OpenCode agent
 working_dir = "~/.nectar/workspace"
 timeout = "30m"
 max_output_bytes = 2097152
+context_window = 0            # 0 = 从 OpenCode 配置自动解析
 standalone = true             # 每次运行使用私有 server
 auto_approve = true           # 非交互 bot 场景需要
 per_chat_workspace = false
@@ -165,7 +166,7 @@ data_dir = "~/.nectar"
 
 页脚的模型名优先使用 `codex.model`，为空时读取 Codex 自身配置；显示时取模型标识的最后一段，例如 `deepseek/deepseek-flash` 显示为 `deepseek-flash`。
 
-使用 OpenCode 时设置 `bot.engine = "opencode"`，Nectar 会读取 `[opencode]`；`model` 为空时从 `~/.config/opencode/opencode.json` 读取，并通过 `opencode session export` 获取 token 用量。上下文占比暂时不显示。
+使用 OpenCode 时设置 `bot.engine = "opencode"`，Nectar 会读取 `[opencode]`；`model` 为空时从 `~/.config/opencode/opencode.json` 读取，并通过 `opencode session export` 获取最后一轮 assistant 的 token 用量。上下文上限从模型的 `limit.context` 自动读取；模型未在 OpenCode 配置中声明时，可用 `opencode.context_window` 手动指定。
 
 也可以用环境变量覆盖：
 

@@ -26,6 +26,7 @@ path = "opencode"
 working_dir = "~/.nectar/workspace"
 timeout = "30m"
 max_output_bytes = 2097152
+context_window = 0            # 0 = read limit.context from OpenCode config
 standalone = true
 auto_approve = true
 per_chat_workspace = false

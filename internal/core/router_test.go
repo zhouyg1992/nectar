@@ -599,7 +599,7 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 		{Type: engine.EventSessionStarted, SessionID: "s1"},
 		{Type: engine.EventMessage, Text: "answer"},
 		{Type: engine.EventDone, Meta: map[string]any{
-			"usage": `{"input_tokens":120,"output_tokens":30}`,
+			"usage": `{"input_tokens":120,"output_tokens":30,"context_tokens":180}`,
 		}},
 	}}
 	router, _ := newTestRouter(t, eng, plat)
@@ -609,7 +609,7 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 	waitForCardStatus(t, plat, platform.CardComplete)
 
 	final := plat.lastUpdate()
-	for _, want := range []string{"ctx: 150/1k (15.0%)", "↑120", "↓30"} {
+	for _, want := range []string{"ctx: 180/1k (18.0%)", "↑120", "↓30"} {
 		if !strings.Contains(final.Footer, want) {
 			t.Fatalf("footer = %q, want %q", final.Footer, want)
 		}

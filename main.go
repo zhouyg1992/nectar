@@ -231,6 +231,7 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 			},
 			name:             "opencode",
 			model:            model,
+			contextWindow:    opencode.ResolveContextWindow(cfg.OpenCode.Model, cfg.OpenCode.ContextWindow),
 			workspaceDir:     cfg.OpenCode.WorkingDir,
 			perChatWorkspace: cfg.OpenCode.PerChatWorkspace,
 		}, nil

@@ -129,6 +129,7 @@ agent = ""                    # optional OpenCode agent
 working_dir = "~/.nectar/workspace"
 timeout = "30m"
 max_output_bytes = 2097152
+context_window = 0            # 0 = auto-detect from OpenCode config
 standalone = true             # private server per run
 auto_approve = true           # required for non-interactive bot use
 per_chat_workspace = false
@@ -148,7 +149,7 @@ data_dir = "~/.nectar"
 
 The footer model name uses `codex.model` when set, otherwise the model from Codex's config. The last path segment is displayed, e.g. `deepseek/deepseek-flash` becomes `deepseek-flash`.
 
-For OpenCode, set `bot.engine = "opencode"`; Nectar uses `[opencode]`, resolves the model from `~/.config/opencode/opencode.json` when unset, and reads session token usage from `opencode session export`. Context percentage is not shown yet.
+For OpenCode, set `bot.engine = "opencode"`; Nectar uses `[opencode]`, resolves the model from `~/.config/opencode/opencode.json` when unset, and reads the last assistant turn's token usage from `opencode session export`. The context window is read from the model's `limit.context`; set `opencode.context_window` to override it when the model is not declared in OpenCode's config.
 
 Environment overrides:
 

@@ -26,7 +26,7 @@ if [ "${EXPECTED_WORKDIR:-}" != "" ] && [ "$PWD" != "$EXPECTED_WORKDIR" ]; then
 fi
 case "$*" in
   *"session export"*)
-    printf '{"info":{"tokens":{"input":120,"output":30}}}\n'
+    printf '{"info":{"tokens":{"input":300,"output":50}},"messages":[{"type":"assistant","tokens":{"input":120,"output":30,"reasoning":5,"cache":{"read":25,"write":0}}},{"type":"idle"}]}\n'
     ;;
   *)
     printf '{"type":"text","sessionID":"ses_fake","part":{"type":"text","text":"hello from opencode"}}\n'
@@ -65,7 +65,7 @@ esac
 	if got[2].Type != engine.EventDone {
 		t.Fatalf("done = %#v", got[2])
 	}
-	if got[2].Meta["usage"] != `{"input_tokens":120,"output_tokens":30}` {
+	if got[2].Meta["usage"] != `{"context_tokens":180,"input_tokens":120,"output_tokens":30}` {
 		t.Fatalf("usage = %v", got[2].Meta["usage"])
 	}
 }

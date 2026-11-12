@@ -45,6 +45,7 @@ type OpenCodeConfig struct {
 	WorkingDir       string `toml:"working_dir"`
 	Timeout          string `toml:"timeout"`
 	MaxOutputBytes   int    `toml:"max_output_bytes"`
+	ContextWindow    int    `toml:"context_window"`
 	Standalone       bool   `toml:"standalone"`
 	AutoApprove      bool   `toml:"auto_approve"`
 	PerChatWorkspace bool   `toml:"per_chat_workspace"`

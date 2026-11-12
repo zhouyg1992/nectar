@@ -72,6 +72,20 @@ func TestLegacyAgentIDSelectsEngine(t *testing.T) {
 	}
 }
 
+func TestOpenCodeContextWindow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[opencode]\ncontext_window = 200000\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OpenCode.ContextWindow != 200000 {
+		t.Fatalf("opencode context window = %d", cfg.OpenCode.ContextWindow)
+	}
+}
+
 func TestInvalidEngine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[bot]\nengine = \"unknown\"\n"), 0o600); err != nil {

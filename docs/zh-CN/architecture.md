@@ -43,7 +43,7 @@ graph LR
 - 统一 `Event` 流：会话开始、文本、工具调用/结果、完成、错误。
 - 已实现：Codex CLI、OpenCode。
 - 占位：Claude Code、Kimi、Pi。
-- OpenCode 通过 `session export` 读取 session token 汇总，附加到 `EventDone` 的 usage。
+- OpenCode 通过 `session export` 读取最后一轮 assistant token，并从模型配置的 `limit.context` 解析上下文上限，附加到 `EventDone` 的 usage。
 
 ### Exec
 

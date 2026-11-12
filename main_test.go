@@ -17,6 +17,7 @@ func TestSetupOpenCodeEngine(t *testing.T) {
 			WorkingDir:     "/tmp/nectar-opencode",
 			Timeout:        "10m",
 			MaxOutputBytes: 4096,
+			ContextWindow:  200000,
 			Standalone:     true,
 			AutoApprove:    true,
 		},
@@ -30,6 +31,9 @@ func TestSetupOpenCodeEngine(t *testing.T) {
 	}
 	if setup.name != "opencode" || setup.model != "provider/model" {
 		t.Fatalf("setup = %#v", setup)
+	}
+	if setup.contextWindow != 200000 {
+		t.Fatalf("context window = %d", setup.contextWindow)
 	}
 	if setup.options.WorkingDir != "/tmp/nectar-opencode" || setup.options.Timeout != 10*time.Minute {
 		t.Fatalf("options = %#v", setup.options)
