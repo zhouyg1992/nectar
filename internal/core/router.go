@@ -18,7 +18,7 @@ import (
 
 const (
 	maxReplyBytes     = 60_000
-	cardTitleThinking = "🐝 Thinking..."
+	cardTitleThinking = "🌼 Thinking..."
 	cardTitleWorking  = "🐝 Working..."
 	cardTitleComplete = "🍯 Complete"
 	cardTitleFailed   = "⚠️ Failed"
@@ -92,10 +92,10 @@ func (r *Router) Handle(msg platform.Message) {
 	switch text {
 	case "/new", "/reset":
 		r.sessions.Delete(key)
-		r.sendCommandResult(msg, platform.CardInfo, "🔄 New Session", "已开始新会话。")
+		r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "已开始新会话。")
 		return
 	case "/status":
-		r.sendCommandResult(msg, platform.CardInfo, "📊 Session Status", r.status(key))
+		r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
 		return
 	case "/stop":
 		r.stop(key, msg)
@@ -337,14 +337,14 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 func (r *Router) stop(key SessionKey, msg platform.Message) {
 	sessionID, ok := r.sessions.Get(key)
 	if !ok {
-		r.sendCommandResult(msg, platform.CardInfo, "⏹ Stop", "当前会话还没有正在运行的 Agent。")
+		r.sendCommandResult(msg, platform.CardInfo, "✋ Stop", "当前会话还没有正在运行的 Agent。")
 		return
 	}
 	if err := r.engine.Cancel(r.ctx, sessionID); err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Stop Failed", "停止失败: "+err.Error())
 		return
 	}
-	r.sendCommandResult(msg, platform.CardInfo, "⏹ Stop Requested", "已请求停止当前任务。")
+	r.sendCommandResult(msg, platform.CardInfo, "✋ Stop Requested", "已请求停止当前任务。")
 }
 
 func (r *Router) status(key SessionKey) string {

@@ -30,7 +30,7 @@ Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code �
 
 | 平台 | 状态 | 配置 | 说明 |
 |---|---|---|---|
-| 飞书 / Lark | ✅ 已支持 | [飞书配置](docs/zh-CN/feishu.md) | 长连接 + @Bot<br>卡片：🐝 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>底部：上下文占比、模型、耗时、token |
+| 飞书 / Lark | ✅ 已支持 | [飞书配置](docs/zh-CN/feishu.md) | 长连接 + @Bot<br>卡片：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>底部：上下文占比、模型、耗时、token |
 | 钉钉 | 🚧 计划中 | — | Stream 模式与互动卡片适配 |
 | Telegram | 🚧 计划中 | — | Long Polling |
 | 企业微信 / 微信 | 🚧 计划中 | — | 视平台能力适配 |
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.1
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 

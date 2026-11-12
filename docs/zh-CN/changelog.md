@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.1 — 2026-11-12
+
+### 变更
+
+- 卡片状态 emoji 调整为自然隐喻：`🌼 Thinking`、`🌱 New Session`、`🌿 Session Status`、`✋ Stop`
+- `🐝 Working`、`🍯 Complete`、`⚠️ Failed` 和错误提示保持不变
+
 ## v0.4.0 — 2026-11-12
 
 ### 新增

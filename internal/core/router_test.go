@@ -571,9 +571,9 @@ func TestRouterCommandResultsUseCards(t *testing.T) {
 		title    string
 		bodyPart string
 	}{
-		{"/new", platform.CardInfo, "🔄 New Session", "已开始新会话"},
-		{"/status", platform.CardInfo, "📊 Session Status", "新会话"},
-		{"/stop", platform.CardInfo, "⏹ Stop", "还没有正在运行的 Agent"},
+		{"/new", platform.CardInfo, "🌱 New Session", "已开始新会话"},
+		{"/status", platform.CardInfo, "🌿 Session Status", "新会话"},
+		{"/stop", platform.CardInfo, "✋ Stop", "还没有正在运行的 Agent"},
 		{"", platform.CardError, "⚠️ Unsupported Message", "只支持文本、图片或文件消息"},
 	}
 

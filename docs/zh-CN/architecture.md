@@ -38,7 +38,7 @@ graph LR
 - `SessionStore`：会话键 `(channel, chatID, threadID, agentID) → engine session ID`；`threadID` 为空表示主会话。
 - `Queue`：同一会话 FIFO 串行，不同会话并发。
 - `Router` 在队列执行阶段下载附件、生成统一的本地路径提示词，并管理附件生命周期。
-- 卡片流程：先发 `🐝 Thinking...`，工具调用时更新 `🐝 Working...`，结束时 PATCH 为 `🍯 Complete` 或 `⚠️ Failed`。
+- 卡片流程：先发 `🌼 Thinking...`，工具调用时更新 `🐝 Working...`，结束时 PATCH 为 `🍯 Complete` 或 `⚠️ Failed`。
 
 ### Engine
 

@@ -30,7 +30,7 @@ Legend: ✅ supported · 🚧 planned
 
 | Platform | Status | Configuration | Notes |
 |---|---|---|---|
-| Feishu / Lark | ✅ Supported | [Feishu setup (ZH)](docs/zh-CN/feishu.md) | WebSocket + @Bot<br>Cards: 🐝 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>Footer: context usage, model, time, tokens |
+| Feishu / Lark | ✅ Supported | [Feishu setup (ZH)](docs/zh-CN/feishu.md) | WebSocket + @Bot<br>Cards: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>Footer: context usage, model, time, tokens |
 | DingTalk | 🚧 Planned | — | Stream mode and interactive cards |
 | Telegram | 🚧 Planned | — | Long polling |
 | WeCom / WeChat | 🚧 Planned | — | Platform-dependent |
@@ -62,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 Pin a version or choose an install directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.1
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
