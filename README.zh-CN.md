@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent 或 Claude Code 执行，再以交互卡片把结果回传到飞书。v1 支持飞书 + 上述任一引擎，安装后一条命令即可启动。
+Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code 或 Pi 执行，再以交互卡片把结果回传到飞书。v1 支持飞书 + 上述任一引擎，安装后一条命令即可启动。
 
 ## 支持矩阵
 
-**v1 支持：飞书 / Lark + Codex CLI / OpenCode / Cursor Agent / Claude Code。**
+**v1 支持：飞书 / Lark + Codex CLI / OpenCode / Cursor Agent / Claude Code / Pi。**
 
 图例：✅ 已支持 · 🚧 计划中
 
@@ -45,7 +45,7 @@ Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent 或 Claude Code
 | OpenCode | ✅ 已支持（下个版本） | `run --format json` / `--session` |
 | Cursor Agent CLI | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
-| Pi | 🚧 计划中 | CLI 适配 |
+| Pi | ✅ 已支持 | `--mode json` / `--session` |
 | Kimi Code | 🚧 计划中 | 本地 Server API 适配 |
 | 更多引擎 | 🚧 计划中 | 通过 `EngineAdapter` 扩展 |
 
@@ -130,6 +130,15 @@ claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
+### Pi
+
+安装并登录 Pi，确认下面的命令可以正常运行：
+
+```bash
+pi auth check --provider anthropic
+pi --mode json "Reply with exactly OK"
+```
+
 ## 配置
 
 安装脚本会创建 `~/.nectar/config.toml`。从源码运行时可以手动复制：
@@ -197,9 +206,21 @@ max_turns = 0                 # 0 = 不限制
 auto_approve = true           # 等价 --dangerously-skip-permissions
 per_chat_workspace = false
 
+[pi]
+path = "pi"
+provider = ""                 # 可选 provider 覆盖
+model = ""                    # 例如 claude-sonnet-4-5；空则使用 Pi 默认模型
+thinking = ""                 # off | minimal | low | medium | high | xhigh | max
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0            # 0 = 未知，卡片底部省略上下文占比
+trust_workspace = true        # 等价 --approve，加载项目内的 Pi 资源
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-engine = "codex"              # codex | opencode | cursor | claude
+engine = "codex"              # codex | opencode | cursor | claude | pi
 agent_id = "codex"            # legacy，默认跟随 engine
 admin_users = []              # open_id 白名单；非空时限制单聊
 allowed_chats = []            # chat_id 白名单；非空时限制群聊
@@ -218,6 +239,8 @@ data_dir = "~/.nectar"
 
 使用 Claude Code 时设置 `bot.engine = "claude"`，Nectar 会读取 `[claude]`，以 `claude -p --output-format stream-json --verbose --include-partial-messages` 运行，通过 stdin 传入 prompt，并用 `--resume` 续接会话。`auto_approve` 映射为 `--dangerously-skip-permissions`；关闭时使用 `permission_mode`。token 用量和上下文上限从最终 `result` 事件读取，`claude.context_window` 仅用于手动覆盖。附件通过 prompt 中的本地路径交给 Agent。
 
+使用 Pi 时设置 `bot.engine = "pi"`，Nectar 会读取 `[pi]`，以 `pi --mode json` 运行，通过 stdin 传入 prompt，并用 `--session` 续接会话。`provider`、`model`、`thinking` 直接透传为 Pi 参数；`trust_workspace` 映射为 `--approve`，允许 Pi 加载项目内的设置、skills、上下文文件和扩展。token 用量从 assistant 消息事件读取；需要底部上下文占比时设置 `pi.context_window`。附件通过 prompt 中的本地路径交给 Agent。
+
 也可以用环境变量覆盖：
 
 ```bash
@@ -227,6 +250,7 @@ export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
 export CURSOR_AGENT_PATH=cursor-agent
 export CLAUDE_PATH=claude
+export PI_PATH=pi
 export NECTAR_ENGINE=codex
 export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace

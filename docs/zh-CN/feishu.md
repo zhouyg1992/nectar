@@ -44,7 +44,7 @@ Nectar 会从消息原始事件里读取 `thread_id`。如果消息属于某个�
 - 纯图片会使用默认提示词交给 Agent 分析。
 - 图文混合的 `post` 会保留文字和图片顺序，图片位置转换为 `[Image N]`。
 - 图片和文件会下载到当前聊天工作目录下以 `message_id` 为前缀的 `.nectar/attachments/` 子目录，Agent 运行结束后自动清理。
-- Codex 使用 `--image`、OpenCode 使用 `--file` 接收图片；Cursor 和普通文件通过 prompt 中的本地绝对路径交给 Agent 读取。
+- Codex 使用 `--image`、OpenCode 使用 `--file` 接收图片；Cursor、Claude Code、Pi 和普通文件通过 prompt 中的本地绝对路径交给 Agent 读取。
 - 文本、Markdown、代码、JSON 等小型文本文件会直接注入本轮 prompt（最多 48 KiB），避免 Agent 忽略本地路径。
 - 暂不支持音频、视频和合并转发消息。
 

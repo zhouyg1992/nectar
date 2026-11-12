@@ -17,6 +17,7 @@ type Config struct {
 	OpenCode OpenCodeConfig `toml:"opencode"`
 	Cursor   CursorConfig   `toml:"cursor"`
 	Claude   ClaudeConfig   `toml:"claude"`
+	Pi       PiConfig       `toml:"pi"`
 	Bot      BotConfig      `toml:"bot"`
 	Storage  StorageConfig  `toml:"storage"`
 }
@@ -81,6 +82,19 @@ type ClaudeConfig struct {
 	PerChatWorkspace bool   `toml:"per_chat_workspace"`
 }
 
+type PiConfig struct {
+	Path             string `toml:"path"`
+	Provider         string `toml:"provider"`
+	Model            string `toml:"model"`
+	Thinking         string `toml:"thinking"`
+	WorkingDir       string `toml:"working_dir"`
+	Timeout          string `toml:"timeout"`
+	MaxOutputBytes   int    `toml:"max_output_bytes"`
+	ContextWindow    int    `toml:"context_window"`
+	TrustWorkspace   bool   `toml:"trust_workspace"`
+	PerChatWorkspace bool   `toml:"per_chat_workspace"`
+}
+
 type BotConfig struct {
 	Name         string   `toml:"name"`
 	Engine       string   `toml:"engine"`
@@ -126,6 +140,13 @@ func defaults() Config {
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
 			AutoApprove:    true,
+		},
+		Pi: PiConfig{
+			Path:           "pi",
+			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
+			Timeout:        "30m",
+			MaxOutputBytes: 2 << 20,
+			TrustWorkspace: true,
 		},
 		Bot:     BotConfig{Name: "Nectar", AgentID: "codex"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
@@ -177,6 +198,10 @@ func (c Config) ClaudeTimeout() (time.Duration, error) {
 	return parseTimeout("claude.timeout", c.Claude.Timeout)
 }
 
+func (c Config) PiTimeout() (time.Duration, error) {
+	return parseTimeout("pi.timeout", c.Pi.Timeout)
+}
+
 func parseTimeout(name, value string) (time.Duration, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -211,6 +236,9 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("CLAUDE_PATH"); v != "" {
 		cfg.Claude.Path = v
 	}
+	if v := os.Getenv("PI_PATH"); v != "" {
+		cfg.Pi.Path = v
+	}
 	if v := os.Getenv("NECTAR_ENGINE"); v != "" {
 		cfg.Bot.Engine = v
 	}
@@ -222,6 +250,7 @@ func applyEnv(cfg *Config) {
 		cfg.OpenCode.WorkingDir = v
 		cfg.Cursor.WorkingDir = v
 		cfg.Claude.WorkingDir = v
+		cfg.Pi.WorkingDir = v
 	}
 }
 
@@ -242,6 +271,9 @@ func normalize(cfg *Config) error {
 	if cfg.Claude.WorkingDir, err = expandHome(cfg.Claude.WorkingDir); err != nil {
 		return err
 	}
+	if cfg.Pi.WorkingDir, err = expandHome(cfg.Pi.WorkingDir); err != nil {
+		return err
+	}
 	if cfg.Storage.DataDir == "" {
 		return errors.New("storage.data_dir is required")
 	}
@@ -257,6 +289,9 @@ func normalize(cfg *Config) error {
 	if cfg.Claude.WorkingDir == "" {
 		return errors.New("claude.working_dir is required")
 	}
+	if cfg.Pi.WorkingDir == "" {
+		return errors.New("pi.working_dir is required")
+	}
 	if strings.TrimSpace(cfg.Codex.Path) == "" {
 		cfg.Codex.Path = "codex"
 	}
@@ -268,6 +303,9 @@ func normalize(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Claude.Path) == "" {
 		cfg.Claude.Path = "claude"
+	}
+	if strings.TrimSpace(cfg.Pi.Path) == "" {
+		cfg.Pi.Path = "pi"
 	}
 	switch mode := strings.TrimSpace(cfg.Cursor.Mode); mode {
 	case "", "plan", "ask":
@@ -290,6 +328,12 @@ func normalize(cfg *Config) error {
 	if cfg.Claude.MaxTurns < 0 {
 		return errors.New("claude.max_turns must not be negative")
 	}
+	switch thinking := strings.TrimSpace(cfg.Pi.Thinking); thinking {
+	case "", "off", "minimal", "low", "medium", "high", "xhigh", "max":
+		cfg.Pi.Thinking = thinking
+	default:
+		return fmt.Errorf("unsupported pi.thinking %q (supported: off, minimal, low, medium, high, xhigh, max)", thinking)
+	}
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
 	}
@@ -301,9 +345,9 @@ func normalize(cfg *Config) error {
 		engine = "codex"
 	}
 	switch engine {
-	case "codex", "opencode", "cursor", "claude":
+	case "codex", "opencode", "cursor", "claude", "pi":
 	default:
-		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor, claude)", engine)
+		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor, claude, pi)", engine)
 	}
 	cfg.Bot.Engine = engine
 	cfg.Bot.AgentID = engine
@@ -319,6 +363,9 @@ func normalize(cfg *Config) error {
 	if cfg.Claude.MaxOutputBytes <= 0 {
 		return errors.New("claude.max_output_bytes must be positive")
 	}
+	if cfg.Pi.MaxOutputBytes <= 0 {
+		return errors.New("pi.max_output_bytes must be positive")
+	}
 	if _, err := cfg.Timeout(); err != nil {
 		return err
 	}
@@ -329,6 +376,9 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	if _, err := cfg.ClaudeTimeout(); err != nil {
+		return err
+	}
+	if _, err := cfg.PiTimeout(); err != nil {
 		return err
 	}
 	return nil

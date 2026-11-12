@@ -86,6 +86,51 @@ func TestOpenCodeContextWindow(t *testing.T) {
 	}
 }
 
+func TestPiDefaultsAndSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[bot]\nengine = \"pi\"\n\n[pi]\nprovider = \"anthropic\"\nmodel = \"claude-sonnet-4-5\"\nthinking = \"high\"\ncontext_window = 200000\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PI_PATH", "/opt/homebrew/bin/pi")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Engine != "pi" || cfg.Bot.AgentID != "pi" {
+		t.Fatalf("bot = %#v", cfg.Bot)
+	}
+	if cfg.Pi.Path != "/opt/homebrew/bin/pi" || cfg.Pi.MaxOutputBytes <= 0 {
+		t.Fatalf("pi defaults = %#v", cfg.Pi)
+	}
+	if !cfg.Pi.TrustWorkspace {
+		t.Fatalf("pi trust workspace default = %#v", cfg.Pi)
+	}
+	if cfg.Pi.Provider != "anthropic" || cfg.Pi.Model != "claude-sonnet-4-5" || cfg.Pi.Thinking != "high" {
+		t.Fatalf("pi config = %#v", cfg.Pi)
+	}
+	if cfg.Pi.ContextWindow != 200000 {
+		t.Fatalf("pi context window = %d", cfg.Pi.ContextWindow)
+	}
+	timeout, err := cfg.PiTimeout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if timeout != 30*time.Minute {
+		t.Fatalf("pi timeout = %v", timeout)
+	}
+}
+
+func TestLoadRejectsInvalidPiThinking(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[pi]\nthinking = \"extreme\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid pi.thinking error")
+	}
+}
+
 func TestInvalidEngine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[bot]\nengine = \"unknown\"\n"), 0o600); err != nil {

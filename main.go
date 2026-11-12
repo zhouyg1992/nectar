@@ -19,6 +19,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/engine/codex"
 	"github.com/zhouyg1992/nectar/internal/engine/cursor"
 	"github.com/zhouyg1992/nectar/internal/engine/opencode"
+	"github.com/zhouyg1992/nectar/internal/engine/pi"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
 	"github.com/zhouyg1992/nectar/internal/platform/feishu"
@@ -304,6 +305,38 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 			contextWindow:    cfg.Claude.ContextWindow,
 			workspaceDir:     cfg.Claude.WorkingDir,
 			perChatWorkspace: cfg.Claude.PerChatWorkspace,
+		}, nil
+	case "pi":
+		timeout, err := cfg.PiTimeout()
+		if err != nil {
+			return engineSetup{}, err
+		}
+		model := pi.ResolveModel(cfg.Pi.Model)
+		if model == "" {
+			model = "pi"
+		}
+		return engineSetup{
+			adapter: pi.NewAdapter(pi.Config{
+				Executable:     cfg.Pi.Path,
+				Provider:       cfg.Pi.Provider,
+				Model:          cfg.Pi.Model,
+				Thinking:       cfg.Pi.Thinking,
+				WorkingDir:     cfg.Pi.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Pi.MaxOutputBytes,
+				TrustWorkspace: cfg.Pi.TrustWorkspace,
+			}),
+			options: engine.EngineOptions{
+				Model:          cfg.Pi.Model,
+				WorkingDir:     cfg.Pi.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Pi.MaxOutputBytes,
+			},
+			name:             "pi",
+			model:            model,
+			contextWindow:    cfg.Pi.ContextWindow,
+			workspaceDir:     cfg.Pi.WorkingDir,
+			perChatWorkspace: cfg.Pi.PerChatWorkspace,
 		}, nil
 	default:
 		return engineSetup{}, fmt.Errorf("unsupported engine %q", cfg.Bot.Engine)
