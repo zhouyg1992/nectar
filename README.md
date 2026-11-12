@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar forwards Feishu messages to Codex CLI, OpenCode, or Cursor Agent and streams the result back as an interactive card. v1 supports Feishu with Codex, OpenCode, or Cursor.
+Nectar forwards Feishu messages to Codex CLI, OpenCode, Cursor Agent, or Claude Code and streams the result back as an interactive card. v1 supports Feishu with any of these engines.
 
 ## Support matrix
 
-**v1 supports Feishu / Lark with Codex CLI, OpenCode, or Cursor Agent.**
+**v1 supports Feishu / Lark with Codex CLI, OpenCode, Cursor Agent, or Claude Code.**
 
 Legend: ✅ supported · 🚧 planned
 
@@ -44,7 +44,7 @@ Legend: ✅ supported · 🚧 planned
 | Codex CLI | ✅ Supported | `exec --json` / `resume` |
 | OpenCode | ✅ Supported (next release) | `run --format json` / `--session` |
 | Cursor Agent CLI | ✅ Supported | `-p --output-format stream-json` / `--resume` |
-| Claude Code | 🚧 Planned | CLI / Agent SDK adapter |
+| Claude Code | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Pi | 🚧 Planned | CLI adapter |
 | Kimi Code | 🚧 Planned | Local server API adapter |
 | More engines | 🚧 Planned | Implement `EngineAdapter` |
@@ -109,6 +109,13 @@ cursor-agent login
 cursor-agent -p --trust --mode ask "Reply with exactly OK"
 ```
 
+- Or Claude Code CLI installed and logged in:
+
+```bash
+claude auth login
+claude -p --permission-mode plan "Reply with exactly OK"
+```
+
 ## Configuration
 
 Edit `~/.nectar/config.toml`:
@@ -156,9 +163,22 @@ auto_approve = true           # -f; required for non-interactive bot use
 trust_workspace = true        # --trust; required for headless runs
 per_chat_workspace = false
 
+[claude]
+path = "claude"
+model = ""                    # e.g. claude-sonnet-4-5; empty = Claude Code default
+fallback_model = ""           # optional fallback model
+permission_mode = ""          # acceptEdits | plan | bypassPermissions | manual | dontAsk | auto
+working_dir = "~/.nectar/workspace"
+timeout = "30m"
+max_output_bytes = 2097152
+context_window = 0            # 0 = read context_window from the result event
+max_turns = 0                 # 0 = no limit
+auto_approve = true           # --dangerously-skip-permissions
+per_chat_workspace = false
+
 [bot]
 name = "Nectar"
-engine = "codex"              # codex | opencode | cursor
+engine = "codex"              # codex | opencode | cursor | claude
 agent_id = "codex"            # legacy fallback; defaults to engine
 admin_users = []
 allowed_chats = []
@@ -175,6 +195,8 @@ For OpenCode, set `bot.engine = "opencode"`; Nectar uses `[opencode]`, resolves 
 
 For Cursor, set `bot.engine = "cursor"`; Nectar runs `cursor-agent -p --output-format stream-json --stream-partial-output` and resumes sessions with `--resume`. `auto_approve` maps to `-f`, and `trust_workspace` maps to `--trust`; both are required for unattended bot use. Attachments are referenced by local path in the prompt. Set `cursor.context_window` explicitly if you want the context percentage in the footer.
 
+For Claude Code, set `bot.engine = "claude"`; Nectar runs `claude -p --output-format stream-json --verbose --include-partial-messages`, passes the prompt on stdin, and resumes sessions with `--resume`. `auto_approve` maps to `--dangerously-skip-permissions`; when it is off, `permission_mode` is passed through. Token usage and the context window are read from the final `result` event, so `claude.context_window` is only needed as an override. Attachments are referenced by local path in the prompt.
+
 Environment overrides:
 
 ```bash
@@ -183,6 +205,7 @@ export FEISHU_APP_SECRET=xxx
 export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
 export CURSOR_AGENT_PATH=cursor-agent
+export CLAUDE_PATH=claude
 export NECTAR_ENGINE=codex
 export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace

@@ -757,6 +757,28 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 	}
 }
 
+func TestRouterUsesEngineContextWindow(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventMessage, Text: "answer"},
+		{Type: engine.EventDone, Meta: map[string]any{
+			"usage":          `{"input_tokens":120,"output_tokens":30,"context_tokens":180}`,
+			"context_window": 1_000_000,
+		}},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.ContextWindow = 258000
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "hello"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	final := plat.lastUpdate()
+	if !strings.Contains(final.Footer, "ctx: 180/1M (0.0%)") {
+		t.Fatalf("footer = %q", final.Footer)
+	}
+}
+
 func TestRouterRecoverableToolErrorStillCompletes(t *testing.T) {
 	plat := &fakePlatform{cards: true}
 	eng := &scriptedEngine{events: []engine.Event{

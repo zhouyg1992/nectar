@@ -45,11 +45,12 @@ graph LR
 - 位置：`internal/engine`
 - 统一 `Event` 流：会话开始、文本、工具调用/结果、完成、错误。
 - 入站附件通过 `EngineOptions.Attachments` 交给引擎；引擎只决定如何映射到自己的 CLI 参数。
-- 已实现：Codex CLI、OpenCode、Cursor Agent CLI。
+- 已实现：Codex CLI、OpenCode、Cursor Agent CLI、Claude Code。
 - Codex 将图片映射为 `--image`，OpenCode 映射为 `--file`；Cursor 和普通文件统一通过 prompt 中的本地路径引用。
-- 占位：Claude Code、Kimi、Pi。
+- 占位：Kimi、Pi。
 - OpenCode 通过 `session export` 读取最后一轮 assistant token，并从模型配置的 `limit.context` 解析上下文上限，附加到 `EventDone` 的 usage。
 - Cursor 使用 `-p --output-format stream-json --stream-partial-output`，从 `result` 事件读取 token usage，并用 `--resume` 续接会话。
+- Claude Code 使用 `-p --output-format stream-json --verbose --include-partial-messages`，prompt 走 stdin；从 `result` 事件读取 token usage 和 `modelUsage.*.contextWindow`，用 `--resume` 续接会话。
 
 ### Exec
 
@@ -100,6 +101,7 @@ graph LR
 - `codex.context_window > 0` 时直接使用。
 - 否则读取 `$CODEX_HOME/config.toml` 的 `model` / `model_catalog_json`，从模型目录读取 `context_window`。
 - 页脚模型名优先使用 `codex.model`，为空时读取 Codex 自身配置，显示时取最后一段。
+- 引擎可以在 `EventDone` 的 `context_window` meta 中返回运行时上下文上限；Router 优先使用该值，未提供时回退到配置。
 
 ## 扩展点
 

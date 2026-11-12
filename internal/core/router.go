@@ -198,6 +198,7 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	var errTexts []string
 	var toolErrors []string
 	var usage *tokenUsage
+	contextWindow := r.cfg.ContextWindow
 	var lastCardUpdate time.Time
 
 	updateProgress := func(title, body string) {
@@ -251,6 +252,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			}
 		case engine.EventDone:
 			usage = parseUsage(ev.Meta)
+			if value := metaInt(ev.Meta, "context_window"); value > 0 {
+				contextWindow = value
+			}
 		}
 	}
 
@@ -289,14 +293,14 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
-			Footer: cardFooter(modelName, elapsed, usage, r.cfg.ContextWindow),
+			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
 		}, answer)
 	} else {
 		r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardComplete,
 			Title:  cardTitleComplete,
 			Body:   answer,
-			Footer: cardFooter(modelName, elapsed, usage, r.cfg.ContextWindow),
+			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
 		}, answer)
 	}
 
@@ -475,6 +479,22 @@ func parseUsage(meta map[string]any) *tokenUsage {
 		InputTokens:   decoded.InputTokens,
 		OutputTokens:  decoded.OutputTokens,
 		ContextTokens: decoded.ContextTokens,
+	}
+}
+
+func metaInt(meta map[string]any, key string) int {
+	if meta == nil {
+		return 0
+	}
+	switch value := meta[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
 	}
 }
 

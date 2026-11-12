@@ -15,6 +15,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/core"
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
+	"github.com/zhouyg1992/nectar/internal/engine/claude"
 	"github.com/zhouyg1992/nectar/internal/engine/codex"
 	"github.com/zhouyg1992/nectar/internal/engine/cursor"
 	"github.com/zhouyg1992/nectar/internal/engine/opencode"
@@ -270,6 +271,39 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 			contextWindow:    cfg.Cursor.ContextWindow,
 			workspaceDir:     cfg.Cursor.WorkingDir,
 			perChatWorkspace: cfg.Cursor.PerChatWorkspace,
+		}, nil
+	case "claude":
+		timeout, err := cfg.ClaudeTimeout()
+		if err != nil {
+			return engineSetup{}, err
+		}
+		model := claude.ResolveModel(cfg.Claude.Model)
+		if model == "" {
+			model = "claude"
+		}
+		return engineSetup{
+			adapter: claude.NewAdapter(claude.Config{
+				Executable:     cfg.Claude.Path,
+				Model:          cfg.Claude.Model,
+				FallbackModel:  cfg.Claude.FallbackModel,
+				PermissionMode: cfg.Claude.PermissionMode,
+				WorkingDir:     cfg.Claude.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Claude.MaxOutputBytes,
+				MaxTurns:       cfg.Claude.MaxTurns,
+				AutoApprove:    cfg.Claude.AutoApprove,
+			}),
+			options: engine.EngineOptions{
+				Model:          cfg.Claude.Model,
+				WorkingDir:     cfg.Claude.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Claude.MaxOutputBytes,
+			},
+			name:             "claude",
+			model:            model,
+			contextWindow:    cfg.Claude.ContextWindow,
+			workspaceDir:     cfg.Claude.WorkingDir,
+			perChatWorkspace: cfg.Claude.PerChatWorkspace,
 		}, nil
 	default:
 		return engineSetup{}, fmt.Errorf("unsupported engine %q", cfg.Bot.Engine)
