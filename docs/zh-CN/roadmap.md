@@ -1,5 +1,12 @@
 # 路线图与待实现
 
+## v0.4.0 已完成
+
+- Cursor Agent CLI 引擎适配
+- Claude Code 引擎适配
+- Pi 引擎适配
+- 引擎可在完成事件中返回运行时 `context_window`，卡片上下文占比自动适配
+
 ## v0.3.0 已完成
 
 - 飞书入站图片、文件与图文混合消息
@@ -10,7 +17,7 @@
 - 飞书 WebSocket 长连接
 - 单聊和群聊 @Bot
 - Codex `exec --json` / `resume`
-- OpenCode `run --format json` / `--session`（下个版本）
+- OpenCode `run --format json` / `--session`
 - Cursor Agent `-p --output-format stream-json` / `--resume`
 - Claude Code `-p --output-format stream-json` / `--resume`
 - Pi `--mode json` / `--session`
@@ -29,7 +36,7 @@
 - 教训注入与审核卡片
 - 定时任务
 - 云同步
-- 多平台实现与 Codex/OpenCode/Cursor/Claude Code 之外的引擎
+- 多平台实现与 Codex/OpenCode/Cursor/Claude Code/Pi 之外的引擎
 
 ## 后续
 

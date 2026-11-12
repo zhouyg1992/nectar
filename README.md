@@ -42,7 +42,7 @@ Legend: ✅ supported · 🚧 planned
 | Engine | Status | Notes |
 |---|---|---|
 | Codex CLI | ✅ Supported | `exec --json` / `resume` |
-| OpenCode | ✅ Supported (next release) | `run --format json` / `--session` |
+| OpenCode | ✅ Supported | `run --format json` / `--session` |
 | Cursor Agent CLI | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Pi | ✅ Supported | `--mode json` / `--session` |
@@ -62,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 Pin a version or choose an install directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.3.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.0
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 

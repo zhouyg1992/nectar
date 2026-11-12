@@ -42,7 +42,7 @@ Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code �
 | 引擎 | 状态 | 说明 |
 |---|---|---|
 | Codex CLI | ✅ 已支持 | `exec --json` / `resume` |
-| OpenCode | ✅ 已支持（下个版本） | `run --format json` / `--session` |
+| OpenCode | ✅ 已支持 | `run --format json` / `--session` |
 | Cursor Agent CLI | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Pi | ✅ 已支持 | `--mode json` / `--session` |
@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.3.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.0
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
