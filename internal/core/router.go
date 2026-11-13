@@ -30,6 +30,9 @@ type RouterConfig struct {
 	ContextWindow      int
 	CardUpdateInterval time.Duration
 	EngineOptions      engine.EngineOptions
+	AdminUsers         []string
+	DataDir            string
+	APISocket          string
 }
 
 type Router struct {
@@ -41,6 +44,8 @@ type Router struct {
 	workspaces *execguard.Workspace
 	lessons    comb.Store
 	decider    decision.DecisionService
+	anchors    *AnchorStore
+	scheduler  *Scheduler
 	logger     *slog.Logger
 	cfg        RouterConfig
 }
@@ -80,6 +85,11 @@ func NewRouter(
 	}
 }
 
+func (r *Router) SetScheduling(anchors *AnchorStore, scheduler *Scheduler) {
+	r.anchors = anchors
+	r.scheduler = scheduler
+}
+
 func (r *Router) Handle(msg platform.Message) {
 	key := SessionKey{
 		Channel:  msg.Channel,
@@ -87,26 +97,45 @@ func (r *Router) Handle(msg platform.Message) {
 		ThreadID: msg.ThreadID,
 		AgentID:  r.cfg.AgentID,
 	}
+	if r.anchors != nil && msg.Origin != "schedule" {
+		if err := r.anchors.Set(key, SessionAnchor{
+			MessageID: msg.MessageID,
+			Channel:   msg.Channel,
+			ChatID:    msg.ChatID,
+			ThreadID:  msg.ThreadID,
+			ChatType:  msg.ChatType,
+			UserID:    msg.UserID,
+		}); err != nil {
+			r.logger.Warn("could not persist delivery anchor", "error", err)
+		}
+	}
 	text := strings.TrimSpace(msg.Text)
 
-	switch text {
-	case "/new", "/reset":
-		if err := r.sessions.Delete(key); err != nil {
-			r.logger.Warn("could not persist session reset", "error", err)
+	if msg.Origin != "schedule" {
+		switch text {
+		case "/new", "/reset":
+			if err := r.sessions.Delete(key); err != nil {
+				r.logger.Warn("could not persist session reset", "error", err)
+			}
+			r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
+			return
+		case "/status":
+			r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
+			return
+		case "/stop":
+			r.stop(key, msg)
+			return
 		}
-		r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
-		return
-	case "/status":
-		r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
-		return
-	case "/stop":
-		r.stop(key, msg)
-		return
-	}
 
-	if isHelpRequest(text) {
-		r.sendHelp(msg)
-		return
+		if isScheduleCommand(text) {
+			r.handleScheduleCommand(key, msg, text)
+			return
+		}
+
+		if isHelpRequest(text) {
+			r.sendHelp(msg)
+			return
+		}
 	}
 
 	if text == "" && len(msg.Attachments) == 0 {
@@ -130,6 +159,18 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 
 	opts := r.cfg.EngineOptions
 	opts.WorkingDir = workdir
+	opts.Env = map[string]string{
+		"NECTAR_CHANNEL":    key.Channel,
+		"NECTAR_CHAT_ID":    key.ChatID,
+		"NECTAR_CHAT_TYPE":  msg.ChatType,
+		"NECTAR_USER_ID":    msg.UserID,
+		"NECTAR_AGENT_ID":   key.AgentID,
+		"NECTAR_DATA_DIR":   r.cfg.DataDir,
+		"NECTAR_API_SOCKET": r.cfg.APISocket,
+	}
+	if key.ThreadID != "" {
+		opts.Env["NECTAR_THREAD_ID"] = key.ThreadID
+	}
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
 
@@ -454,6 +495,8 @@ func (r *Router) sendCardOrText(msg platform.Message, card *platform.Card, fallb
 func replyTarget(msg platform.Message) platform.Reply {
 	reply := platform.Reply{
 		ChatID:       msg.ChatID,
+		ChatType:     msg.ChatType,
+		UserID:       msg.UserID,
 		ReplyContext: msg.ReplyContext,
 	}
 	if msg.ThreadID != "" {
@@ -654,6 +697,7 @@ const helpCardBody = "**Session**\n" +
 	"- `/new` / `/reset` — Start a new session\n" +
 	"- `/status` — Show engine, model, and session\n" +
 	"- `/stop` — Stop the current task\n" +
+	"- `/cron` — List or manage scheduled tasks\n" +
 	"- `/help` / `/commands` — Show this command card\n\n" +
 	"**Usage**\n" +
 	"- Regular messages are sent to Codex\n" +
@@ -663,6 +707,7 @@ const helpText = `Nectar commands:
 /new, /reset     Start a new session
 /status          Show engine, model, and session
 /stop            Stop the current task
+/cron            List or manage scheduled tasks
 /help, /commands Show this command card
 
 Other messages are sent to Codex.`

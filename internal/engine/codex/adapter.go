@@ -110,7 +110,7 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 	cmd.Dir = workdir
 	cmd.Stdin = strings.NewReader(prompt)
 	// The agent should not inherit the bot's Feishu credential.
-	cmd.Env = withoutEnv(os.Environ(), "FEISHU_APP_SECRET")
+	cmd.Env = engine.EnvWith(withoutEnv(os.Environ(), "FEISHU_APP_SECRET"), opts.Env)
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil

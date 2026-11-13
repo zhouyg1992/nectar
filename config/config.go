@@ -21,6 +21,7 @@ type Config struct {
 	Pi       PiConfig       `toml:"pi"`
 	Bot      BotConfig      `toml:"bot"`
 	Storage  StorageConfig  `toml:"storage"`
+	Schedule ScheduleConfig `toml:"schedule"`
 }
 
 type FeishuConfig struct {
@@ -118,6 +119,12 @@ type StorageConfig struct {
 	DataDir string `toml:"data_dir"`
 }
 
+type ScheduleConfig struct {
+	Enabled      *bool  `toml:"enabled"`
+	Timezone     string `toml:"timezone"`
+	StartupGrace string `toml:"startup_grace"`
+}
+
 func defaults() Config {
 	home := homeDir()
 	return Config{
@@ -162,6 +169,9 @@ func defaults() Config {
 		},
 		Bot:     BotConfig{Name: "Nectar"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
+		Schedule: ScheduleConfig{
+			StartupGrace: "5m",
+		},
 	}
 }
 
@@ -212,6 +222,25 @@ func (c Config) ClaudeTimeout() (time.Duration, error) {
 
 func (c Config) PiTimeout() (time.Duration, error) {
 	return parseTimeout("pi.timeout", c.Pi.Timeout)
+}
+
+func (c Config) ScheduleEnabled() bool {
+	return c.Schedule.Enabled == nil || *c.Schedule.Enabled
+}
+
+func (c Config) ScheduleGrace() (time.Duration, error) {
+	value := strings.TrimSpace(c.Schedule.StartupGrace)
+	if value == "" {
+		return 5 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid schedule.startup_grace %q: %w", value, err)
+	}
+	if d < 0 {
+		return 0, errors.New("schedule.startup_grace must not be negative")
+	}
+	return d, nil
 }
 
 func parseTimeout(name, value string) (time.Duration, error) {
@@ -357,6 +386,18 @@ func normalize(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
+	}
+	cfg.Schedule.Timezone = strings.TrimSpace(cfg.Schedule.Timezone)
+	if cfg.Schedule.Timezone == "" {
+		cfg.Schedule.Timezone = "Local"
+	}
+	if !strings.EqualFold(cfg.Schedule.Timezone, "Local") {
+		if _, err := time.LoadLocation(cfg.Schedule.Timezone); err != nil {
+			return fmt.Errorf("invalid schedule.timezone %q: %w", cfg.Schedule.Timezone, err)
+		}
+	}
+	if _, err := cfg.ScheduleGrace(); err != nil {
+		return err
 	}
 	if err := normalizePlatform(cfg); err != nil {
 		return err

@@ -1032,3 +1032,28 @@ func TestIsHelpRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestRouterInjectsNectarSessionEnv(t *testing.T) {
+	eng := &fakeEngine{}
+	plat := &fakePlatform{}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.DataDir = "/tmp/nectar-data"
+	router.cfg.APISocket = "/tmp/nectar-data/run/api.sock"
+
+	router.Handle(platform.Message{
+		Channel:  "feishu",
+		ChatID:   "chat-1",
+		ChatType: "group",
+		UserID:   "user-1",
+		ThreadID: "thread-1",
+		Text:     "hello",
+	})
+	waitForReplies(t, plat, 1)
+	_, opts := eng.lastRequest()
+	if opts.Env["NECTAR_CHAT_ID"] != "chat-1" ||
+		opts.Env["NECTAR_THREAD_ID"] != "thread-1" ||
+		opts.Env["NECTAR_USER_ID"] != "user-1" ||
+		opts.Env["NECTAR_API_SOCKET"] != "/tmp/nectar-data/run/api.sock" {
+		t.Fatalf("env = %#v", opts.Env)
+	}
+}

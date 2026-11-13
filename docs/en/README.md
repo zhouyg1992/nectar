@@ -3,6 +3,7 @@
 - [Feishu setup and troubleshooting](feishu.md)
 - [DingTalk setup and troubleshooting](dingtalk.md)
 - [Background service](service.md)
+- [Scheduled tasks](schedule.md)
 - [Security boundaries](security.md)
 - [Roadmap](roadmap.md)
 - [Changelog](changelog.md)

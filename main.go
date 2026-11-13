@@ -44,6 +44,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "update" {
 		return runUpdate(args[1:])
 	}
+	if len(args) > 0 && args[0] == "schedule" {
+		return runSchedule(args[1:])
+	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		printMainUsage()
 		return nil
@@ -73,6 +76,7 @@ func printMainUsage() {
   nectar [-config PATH]
   nectar -version
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart]
+  nectar schedule <list|add|preview|pause|resume|run|delete|update>
   nectar service <install|uninstall|start|stop|restart|status|logs>
 `)
 }
@@ -116,6 +120,11 @@ func runBot(configPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	anchors, err := core.NewAnchorStore(cfg.Storage.DataDir)
+	if err != nil {
+		return fmt.Errorf("load delivery anchors: %w", err)
+	}
+
 	router := core.NewRouter(
 		ctx,
 		platformAdapter,
@@ -131,8 +140,61 @@ func runBot(configPath string) error {
 			ModelName:     setup.model,
 			ContextWindow: setup.contextWindow,
 			EngineOptions: setup.options,
+			AdminUsers:    cfg.Bot.AdminUsers,
+			DataDir:       cfg.Storage.DataDir,
+			APISocket:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
 		},
 	)
+
+	var scheduler *core.Scheduler
+	var scheduleAPI *core.ScheduleAPI
+	if cfg.ScheduleEnabled() {
+		grace, err := cfg.ScheduleGrace()
+		if err != nil {
+			return err
+		}
+		scheduler, err = core.NewScheduler(core.SchedulerOptions{
+			StorePath:       filepath.Join(cfg.Storage.DataDir, "schedules.json"),
+			Anchors:         anchors,
+			DefaultTimezone: cfg.Schedule.Timezone,
+			StartupGrace:    grace,
+			Logger:          logger,
+		})
+		if err != nil {
+			return fmt.Errorf("load scheduled tasks: %w", err)
+		}
+		router.SetScheduling(anchors, scheduler)
+		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
+			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			Scheduler:      scheduler,
+			Logger:         logger,
+			DefaultChannel: platformName,
+			DefaultAgent:   cfg.Bot.Engine,
+			AdminUsers:     cfg.Bot.AdminUsers,
+		})
+		if err := scheduleAPI.Start(ctx); err != nil {
+			return err
+		}
+		defer scheduleAPI.Close()
+		if err := scheduler.Start(ctx, func(task core.ScheduledTask, anchor core.SessionAnchor) error {
+			router.Handle(platform.Message{
+				MessageID: anchor.MessageID,
+				Channel:   anchor.Channel,
+				ChatID:    anchor.ChatID,
+				ChatType:  anchor.ChatType,
+				UserID:    anchor.UserID,
+				Text:      task.Prompt,
+				ThreadID:  anchor.ThreadID,
+				Origin:    "schedule",
+			})
+			return nil
+		}); err != nil {
+			return err
+		}
+		defer scheduler.Stop()
+	} else {
+		router.SetScheduling(anchors, nil)
+	}
 
 	logger.Info("nectar starting",
 		"version", version,
@@ -142,6 +204,7 @@ func runBot(configPath string) error {
 		"data_dir", cfg.Storage.DataDir,
 		"model", setup.model,
 		"context_window", setup.contextWindow,
+		"schedule_enabled", scheduler != nil,
 	)
 	if platformName == "feishu" {
 		logger.Info("connecting to feishu; wait for 'feishu websocket connected' before sending messages")

@@ -53,6 +53,12 @@ func (a *Adapter) replyContext(reply platform.Reply) (replyContext, error) {
 	if rc.robotCode == "" {
 		rc.robotCode = a.robotCode
 	}
+	if !rc.isGroup && strings.EqualFold(reply.ChatType, "group") {
+		rc.isGroup = true
+	}
+	if rc.senderStaffID == "" {
+		rc.senderStaffID = reply.UserID
+	}
 	if rc.conversationID == "" && rc.senderStaffID == "" {
 		return replyContext{}, errors.New("dingtalk reply has no conversation context")
 	}

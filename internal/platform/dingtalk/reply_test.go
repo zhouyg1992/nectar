@@ -31,6 +31,24 @@ func TestUseProactiveAPI(t *testing.T) {
 	}
 }
 
+func TestReplyContextFromPlatformReply(t *testing.T) {
+	adapter := &Adapter{robotCode: "robot-1"}
+	rc, err := adapter.replyContext(platform.Reply{
+		ChatID:   "conv-1",
+		ChatType: "group",
+		UserID:   "staff-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rc.isGroup || rc.conversationID != "conv-1" || rc.senderStaffID != "staff-1" || rc.robotCode != "robot-1" {
+		t.Fatalf("reply context = %#v", rc)
+	}
+	if !rc.useProactiveAPI() {
+		t.Fatal("reply without a webhook should use the proactive API")
+	}
+}
+
 func TestValidateSendResponse(t *testing.T) {
 	cases := []struct {
 		name      string

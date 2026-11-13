@@ -41,6 +41,36 @@ func TestLoadRejectsInvalidTimeout(t *testing.T) {
 	}
 }
 
+func TestScheduleDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ScheduleEnabled() {
+		t.Fatal("schedule should be enabled by default")
+	}
+	if cfg.Schedule.Timezone != "Local" {
+		t.Fatalf("timezone = %q", cfg.Schedule.Timezone)
+	}
+	grace, err := cfg.ScheduleGrace()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grace != 5*time.Minute {
+		t.Fatalf("grace = %s", grace)
+	}
+}
+
+func TestScheduleRejectsInvalidTimezone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[schedule]\ntimezone = \"Mars/Olympus\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid timezone error")
+	}
+}
+
 func TestDingTalkAutoDetect(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	source := "[dingtalk]\nclient_id = \"dingreal\"\nclient_secret = \"secret\"\n"

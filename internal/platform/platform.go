@@ -26,12 +26,15 @@ type Card struct {
 
 // Message is the normalized form of an inbound chat message.
 type Message struct {
-	Channel     string
-	MessageID   string
-	ChatID      string
-	ChatType    string
-	UserID      string
-	Text        string
+	Channel   string
+	MessageID string
+	ChatID    string
+	ChatType  string
+	UserID    string
+	Text      string
+	// Origin is empty for inbound chat messages and "schedule" for tasks fired
+	// by the scheduler. Scheduled prompts skip slash-command parsing.
+	Origin      string
 	Attachments []attachment.Resource
 	ReplyTo     string
 	ThreadID    string
@@ -43,6 +46,8 @@ type Message struct {
 // Reply is a message to send back to the chat platform.
 type Reply struct {
 	ChatID        string
+	ChatType      string
+	UserID        string
 	ReplyTo       string
 	Text          string
 	Card          *Card

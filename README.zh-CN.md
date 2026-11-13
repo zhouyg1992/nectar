@@ -351,6 +351,7 @@ nectar service install
 | `/new`、`/reset` | 清空当前会话，下一条消息启动新的 agent thread |
 | `/status` | 查看当前引擎、模型和 agent thread ID |
 | `/stop` | 中断当前任务 |
+| `/cron` | 查看、创建、暂停、恢复或删除定时任务 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
 ## 文档
@@ -358,6 +359,7 @@ nectar service install
 - [飞书配置与排查](docs/zh-CN/feishu.md)
 - [钉钉配置与排查](docs/zh-CN/dingtalk.md)
 - [后台服务](docs/zh-CN/service.md)
+- [定时任务](docs/zh-CN/schedule.md)
 - [安全边界](docs/zh-CN/security.md)
 - [路线图与待实现](docs/zh-CN/roadmap.md)
 - [Changelog](docs/zh-CN/changelog.md)

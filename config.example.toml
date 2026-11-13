@@ -195,3 +195,16 @@ allowed_chats = []
 [storage]
 # Root directory for Nectar data. Default: ~/.nectar.
 data_dir = "~/.nectar"
+
+# ---------------------------------------------------------------------------
+# Scheduled tasks
+# ---------------------------------------------------------------------------
+[schedule]
+# Enable the in-process scheduler and local management socket.
+enabled = true
+# Default timezone for cron expressions. "Local" uses the host timezone.
+timezone = "Local"
+# On startup, run a missed task immediately when it is at most this old.
+# Older one-shot tasks are marked missed; recurring tasks move to their next
+# future occurrence.
+startup_grace = "5m"

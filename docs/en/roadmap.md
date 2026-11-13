@@ -40,7 +40,6 @@
 - Token-by-token streaming output
 - Session persistence
 - Lesson injection and review cards
-- Scheduled tasks
 - Cloud sync
 - Platforms beyond Feishu / DingTalk, and engines beyond Codex/OpenCode/Cursor/Claude Code/Pi
 
@@ -48,7 +47,7 @@
 
 ### v1.1
 
-- Scheduled tasks
+- Scheduled tasks (implemented, see [schedule.md](schedule.md))
 - Lesson log search
 - Finer-grained streaming output
 
