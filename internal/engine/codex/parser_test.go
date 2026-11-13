@@ -61,6 +61,30 @@ func TestParseTurnFailed(t *testing.T) {
 	}
 }
 
+func TestParseCodexTokenCountUsesLastUsage(t *testing.T) {
+	input := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread-1"}`,
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":17481,"cached_input_tokens":17280,"output_tokens":16,"total_tokens":17497},"model_context_window":996147}}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":10016673,"cached_input_tokens":9930496,"output_tokens":75311,"reasoning_output_tokens":32443}}`,
+	}, "\n")
+
+	var got []engine.Event
+	if err := Parse(strings.NewReader(input), func(ev engine.Event) {
+		got = append(got, ev)
+	}, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[1].Type != engine.EventDone {
+		t.Fatalf("events = %#v", got)
+	}
+	if got[1].Meta["usage"] != `{"cached_input_tokens":17280,"context_tokens":17497,"input_tokens":201,"output_tokens":16}` {
+		t.Fatalf("usage = %v", got[1].Meta["usage"])
+	}
+	if got[1].Meta["context_window"] != 996147 {
+		t.Fatalf("context window = %v", got[1].Meta["context_window"])
+	}
+}
+
 func TestParseOutputLimit(t *testing.T) {
 	input := strings.Repeat(`{"type":"turn.started"}`+"\n", 10)
 	err := Parse(strings.NewReader(input), func(engine.Event) {}, 20)

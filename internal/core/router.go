@@ -260,6 +260,7 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			}
 		}
 	}
+	r.sessions.SetUsage(key, usage, contextWindow)
 
 	// Codex exec does not reliably mark the final answer in JSONL. Prefer an
 	// explicit final_answer phase, then the last non-commentary message, then
@@ -355,7 +356,20 @@ func (r *Router) status(key SessionKey) string {
 	if !ok {
 		sessionID = "新会话（尚未启动）"
 	}
-	return fmt.Sprintf("引擎: %s\n模型: %s\n会话: %s", r.engine.Name(), r.resolvedModel(), sessionID)
+	lines := []string{
+		fmt.Sprintf("引擎: %s", r.engine.Name()),
+		fmt.Sprintf("模型: %s", r.resolvedModel()),
+		fmt.Sprintf("会话: %s", sessionID),
+	}
+	if usage, contextWindow, ok := r.sessions.Usage(key); ok {
+		if line := formatContextUsage(&usage, contextWindow); line != "" {
+			lines = append(lines, "上下文: "+line)
+		}
+		if line := formatTurnUsage(&usage); line != "" {
+			lines = append(lines, "上一轮 token: "+line)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (r *Router) resolvedModel() string {
@@ -468,9 +482,12 @@ func isHelpRequest(text string) bool {
 }
 
 type tokenUsage struct {
-	InputTokens   int
-	OutputTokens  int
-	ContextTokens int
+	// InputTokens/CachedInputTokens/OutputTokens describe this turn's actual
+	// consumption. ContextTokens is the final model call's context occupancy.
+	InputTokens       int
+	CachedInputTokens int
+	OutputTokens      int
+	ContextTokens     int
 }
 
 func parseUsage(meta map[string]any) *tokenUsage {
@@ -482,20 +499,23 @@ func parseUsage(meta map[string]any) *tokenUsage {
 		return nil
 	}
 	var decoded struct {
-		InputTokens   int `json:"input_tokens"`
-		OutputTokens  int `json:"output_tokens"`
-		ContextTokens int `json:"context_tokens"`
+		InputTokens       int `json:"input_tokens"`
+		CachedInputTokens int `json:"cached_input_tokens"`
+		OutputTokens      int `json:"output_tokens"`
+		ContextTokens     int `json:"context_tokens"`
 	}
 	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
 		return nil
 	}
-	if decoded.InputTokens == 0 && decoded.OutputTokens == 0 && decoded.ContextTokens == 0 {
+	if decoded.InputTokens == 0 && decoded.CachedInputTokens == 0 &&
+		decoded.OutputTokens == 0 && decoded.ContextTokens == 0 {
 		return nil
 	}
 	return &tokenUsage{
-		InputTokens:   decoded.InputTokens,
-		OutputTokens:  decoded.OutputTokens,
-		ContextTokens: decoded.ContextTokens,
+		InputTokens:       decoded.InputTokens,
+		CachedInputTokens: decoded.CachedInputTokens,
+		OutputTokens:      decoded.OutputTokens,
+		ContextTokens:     decoded.ContextTokens,
 	}
 }
 
@@ -517,28 +537,41 @@ func metaInt(meta map[string]any, key string) int {
 
 func cardFooter(model string, elapsed time.Duration, usage *tokenUsage, contextWindow int) string {
 	model = displayModelName(model)
-	parts := make([]string, 0, 5)
-	if usage != nil && contextWindow > 0 {
-		used := usage.ContextTokens
-		if used == 0 {
-			used = usage.InputTokens + usage.OutputTokens
+	parts := make([]string, 0, 3)
+	if usage != nil {
+		if line := formatContextUsage(usage, contextWindow); line != "" {
+			parts = append(parts, "ctx: "+line)
 		}
-		percent := float64(used) / float64(contextWindow) * 100
-		parts = append(parts, fmt.Sprintf(
-			"ctx: %s/%s (%.1f%%)",
-			formatTokens(used), formatTokens(contextWindow), percent,
-		))
 	}
 	parts = append(parts, model, fmt.Sprintf("%.1fs", elapsed.Seconds()))
-	if usage != nil {
-		if usage.InputTokens > 0 {
-			parts = append(parts, "↑"+formatTokens(usage.InputTokens))
-		}
-		if usage.OutputTokens > 0 {
-			parts = append(parts, "↓"+formatTokens(usage.OutputTokens))
-		}
-	}
 	return strings.Join(parts, " · ")
+}
+
+func formatContextUsage(usage *tokenUsage, contextWindow int) string {
+	if usage == nil || contextWindow <= 0 || usage.ContextTokens <= 0 {
+		return ""
+	}
+	percent := float64(usage.ContextTokens) / float64(contextWindow) * 100
+	return fmt.Sprintf("%s/%s (%.1f%%)",
+		formatTokens(usage.ContextTokens), formatTokens(contextWindow), percent)
+}
+
+func formatTurnUsage(usage *tokenUsage) string {
+	if usage == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if usage.InputTokens > 0 || usage.CachedInputTokens > 0 {
+		input := "↑" + formatTokens(usage.InputTokens)
+		if usage.CachedInputTokens > 0 {
+			input += " (+" + formatTokens(usage.CachedInputTokens) + " cached)"
+		}
+		parts = append(parts, input)
+	}
+	if usage.OutputTokens > 0 {
+		parts = append(parts, "↓"+formatTokens(usage.OutputTokens))
+	}
+	return strings.Join(parts, " ")
 }
 
 func displayModelName(model string) string {

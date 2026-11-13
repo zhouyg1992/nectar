@@ -109,12 +109,41 @@ func TestBuildUpdatePayloadFinal(t *testing.T) {
 		t.Fatalf("last message = %#v", last)
 	}
 	components, ok := update["components"].([]any)
-	if !ok || len(components) != 5 {
+	if !ok || len(components) != 6 {
 		t.Fatalf("components = %#v", update["components"])
 	}
 	header := components[1].(map[string]any)
 	if header["theme"] != "green" {
 		t.Fatalf("theme = %v", header["theme"])
+	}
+	root := components[0].(map[string]any)
+	children := root["children"].([]any)
+	if len(children) != 4 || children[2] != "divider" || children[3] != "footer" {
+		t.Fatalf("root children = %#v", children)
+	}
+	divider := components[4].(map[string]any)
+	if divider["component"] != "Divider" || divider["axis"] != "horizontal" {
+		t.Fatalf("divider = %#v", divider)
+	}
+}
+
+func TestBuildCreatePayloadWithoutFooterOmitsDivider(t *testing.T) {
+	adapter := testAdapter(t)
+	rc := replyContext{
+		conversationID: "cid-1",
+		senderStaffID:  "staff-1",
+		isGroup:        true,
+		robotCode:      "robot-test",
+	}
+	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "body", "", "green", "FINISH")
+	messages := decodeA2UI(t, payload)
+	update := messages[2]["updateComponents"].(map[string]any)
+	components := update["components"].([]any)
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["id"] == "divider" {
+			t.Fatalf("unexpected divider without footer: %#v", components)
+		}
 	}
 }
 

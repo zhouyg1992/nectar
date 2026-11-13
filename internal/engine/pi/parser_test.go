@@ -62,7 +62,7 @@ func TestParsePiEvents(t *testing.T) {
 	if got[5].Text != "a.go" || got[5].Meta["status"] != "completed" {
 		t.Fatalf("tool result = %#v", got[5])
 	}
-	if got[8].Meta["usage"] != `{"context_tokens":29,"input_tokens":26,"output_tokens":3}` {
+	if got[8].Meta["usage"] != `{"cached_input_tokens":6,"context_tokens":29,"input_tokens":30,"output_tokens":5}` {
 		t.Fatalf("usage = %v", got[8].Meta["usage"])
 	}
 }

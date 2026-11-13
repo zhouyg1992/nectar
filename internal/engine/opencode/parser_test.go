@@ -56,6 +56,28 @@ func TestParseOpenCodeError(t *testing.T) {
 	}
 }
 
+func TestParseOpenCodeTurnUsage(t *testing.T) {
+	input := strings.Join([]string{
+		`{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","tokens":{"input":10,"output":2,"reasoning":1,"cache":{"read":5,"write":0}}}}`,
+		`{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","tokens":{"input":4,"output":1,"reasoning":3,"cache":{"read":0,"write":1}}}}`,
+	}, "\n")
+
+	usage, err := ParseWithUsage(strings.NewReader(input), func(engine.Event) {}, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage == nil || usage.Turn.empty() {
+		t.Fatalf("usage = %#v", usage)
+	}
+	if usage.Turn.Input != 14 || usage.Turn.Output != 3 || usage.Turn.Reasoning != 4 ||
+		usage.Turn.Cache.Read != 5 || usage.Turn.Cache.Write != 1 {
+		t.Fatalf("turn usage = %#v", usage.Turn)
+	}
+	if usage.Last.Input != 4 || usage.Last.Output != 1 || usage.Last.Reasoning != 3 {
+		t.Fatalf("last usage = %#v", usage.Last)
+	}
+}
+
 func TestParseOpenCodeToolErrorIsRecoverable(t *testing.T) {
 	input := `{"type":"tool_use","sessionID":"ses_1","part":{"type":"tool","tool":"read","state":{"status":"error","input":{"path":"/missing"},"output":"no such file"}}}`
 	var got []engine.Event

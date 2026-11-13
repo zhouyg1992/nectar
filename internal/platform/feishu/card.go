@@ -24,6 +24,9 @@ func renderCard(card *platform.Card) (string, error) {
 
 	elements := buildCardElements(truncateCardBody(card.Body))
 	if card.Footer != "" {
+		if len(elements) > 0 {
+			elements = append(elements, map[string]any{"tag": "hr"})
+		}
 		elements = append(elements, map[string]any{
 			"tag":        "markdown",
 			"content":    `<font color="grey">` + escapeAngles(card.Footer) + `</font>`,

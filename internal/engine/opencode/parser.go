@@ -32,6 +32,17 @@ type rawPart struct {
 	Text      string        `json:"text"`
 	Tool      string        `json:"tool"`
 	State     *rawToolState `json:"state"`
+	Tokens    *rawTokens    `json:"tokens"`
+}
+
+type rawTokens struct {
+	Input     int `json:"input"`
+	Output    int `json:"output"`
+	Reasoning int `json:"reasoning"`
+	Cache     struct {
+		Read  int `json:"read"`
+		Write int `json:"write"`
+	} `json:"cache"`
 }
 
 type rawToolState struct {
@@ -42,13 +53,26 @@ type rawToolState struct {
 	Error  string         `json:"error"`
 }
 
+type parseUsage struct {
+	Turn tokenUsage
+	Last tokenUsage
+}
+
 // Parse translates OpenCode JSONL events into engine events.
 func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
+	_, err := ParseWithUsage(r, emit, maxOutputBytes)
+	return err
+}
+
+// ParseWithUsage translates OpenCode JSONL and returns the last step and
+// accumulated turn token usage.
+func ParseWithUsage(r io.Reader, emit func(engine.Event), maxOutputBytes int) (*parseUsage, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), maxEventLineBytes)
 
 	total := 0
 	sessionID := ""
+	result := &parseUsage{}
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -56,12 +80,12 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 		}
 		total += len(line)
 		if maxOutputBytes > 0 && total > maxOutputBytes {
-			return fmt.Errorf("opencode output exceeded %d bytes", maxOutputBytes)
+			return result, fmt.Errorf("opencode output exceeded %d bytes", maxOutputBytes)
 		}
 
 		var event rawEvent
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			return fmt.Errorf("parse opencode event: %w", err)
+			return result, fmt.Errorf("parse opencode event: %w", err)
 		}
 
 		eventSession := event.SessionID
@@ -80,6 +104,21 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			}
 		case "tool_use":
 			emitTool(event.Part, emit)
+		case "step_finish":
+			if event.Part == nil || event.Part.Tokens == nil {
+				continue
+			}
+			tokens := tokenUsage{
+				Input:     event.Part.Tokens.Input,
+				Output:    event.Part.Tokens.Output,
+				Reasoning: event.Part.Tokens.Reasoning,
+				Cache: cacheUsage{
+					Read:  event.Part.Tokens.Cache.Read,
+					Write: event.Part.Tokens.Cache.Write,
+				},
+			}
+			result.Last = tokens
+			result.Turn = result.Turn.add(tokens)
 		case "error":
 			text := event.Message
 			if event.Error != nil && event.Error.Message != "" {
@@ -92,9 +131,9 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read opencode output: %w", err)
+		return result, fmt.Errorf("read opencode output: %w", err)
 	}
-	return nil
+	return result, nil
 }
 
 func emitTool(part *rawPart, emit func(engine.Event)) {

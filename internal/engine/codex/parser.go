@@ -19,10 +19,21 @@ type rawEvent struct {
 	Error    *rawError       `json:"error"`
 	Item     *rawItem        `json:"item"`
 	Usage    json.RawMessage `json:"usage"`
+	Payload  *rawPayload     `json:"payload"`
 }
 
 type rawError struct {
 	Message string `json:"message"`
+}
+
+type rawPayload struct {
+	Type string        `json:"type"`
+	Info *rawTokenInfo `json:"info"`
+}
+
+type rawTokenInfo struct {
+	LastTokenUsage     *rawTokenUsage `json:"last_token_usage"`
+	ModelContextWindow int            `json:"model_context_window"`
 }
 
 type rawItem struct {
@@ -43,6 +54,8 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 	scanner.Buffer(make([]byte, 64*1024), maxEventLineBytes)
 
 	total := 0
+	var lastUsage *rawTokenUsage
+	contextWindow := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -61,10 +74,23 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 		switch ev.Type {
 		case "thread.started":
 			emit(engine.Event{Type: engine.EventSessionStarted, SessionID: ev.ThreadID})
+		case "event_msg":
+			if ev.Payload == nil || ev.Payload.Type != "token_count" || ev.Payload.Info == nil {
+				continue
+			}
+			if ev.Payload.Info.LastTokenUsage != nil && !ev.Payload.Info.LastTokenUsage.empty() {
+				lastUsage = ev.Payload.Info.LastTokenUsage
+			}
+			if ev.Payload.Info.ModelContextWindow > 0 {
+				contextWindow = ev.Payload.Info.ModelContextWindow
+			}
 		case "turn.completed":
 			meta := map[string]any{}
-			if len(ev.Usage) > 0 {
-				meta["usage"] = string(ev.Usage)
+			if usageMeta := codexUsageMeta(lastUsage, nil); usageMeta != nil {
+				meta["usage"] = usageMeta["usage"]
+			}
+			if contextWindow > 0 {
+				meta["context_window"] = contextWindow
 			}
 			emit(engine.Event{Type: engine.EventDone, Meta: meta})
 		case "turn.failed":

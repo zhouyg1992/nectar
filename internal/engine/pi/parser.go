@@ -88,6 +88,8 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 	sessionID := ""
 	var stream strings.Builder
 	var lastUsage *rawUsage
+	var turnUsage rawUsage
+	turnUsageSet := false
 	lastMessage := ""
 	lastError := ""
 	emitMessage := func(text string) {
@@ -154,6 +156,8 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			}
 			if event.Message.Usage != nil && !event.Message.Usage.empty() {
 				lastUsage = event.Message.Usage
+				turnUsage = turnUsage.add(*event.Message.Usage)
+				turnUsageSet = true
 			}
 			if text := messageText(event.Message); text != "" {
 				emitMessage(text)
@@ -175,7 +179,11 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			if last := lastAssistantMessage(event.Messages); last != nil && isMessageError(last) {
 				emitError(messageErrorText(last))
 			}
-			emit(engine.Event{Type: engine.EventDone, Meta: usageMeta(lastUsage)})
+			var turn *rawUsage
+			if turnUsageSet {
+				turn = &turnUsage
+			}
+			emit(engine.Event{Type: engine.EventDone, Meta: usageMeta(lastUsage, turn)})
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -274,19 +282,41 @@ func emitToolResult(event rawEvent, emit func(engine.Event)) {
 	})
 }
 
-func usageMeta(usage *rawUsage) map[string]any {
-	if usage == nil || usage.empty() {
+func (u rawUsage) add(other rawUsage) rawUsage {
+	return rawUsage{
+		Input:       u.Input + other.Input,
+		Output:      u.Output + other.Output,
+		CacheRead:   u.CacheRead + other.CacheRead,
+		CacheWrite:  u.CacheWrite + other.CacheWrite,
+		TotalTokens: u.TotalTokens + other.TotalTokens,
+	}
+}
+
+func usageMeta(contextUsage, turnUsage *rawUsage) map[string]any {
+	if contextUsage == nil && turnUsage == nil {
 		return nil
 	}
-	data, err := json.Marshal(map[string]int{
-		"input_tokens":   usage.inputTotal(),
-		"output_tokens":  usage.Output,
-		"context_tokens": usage.contextTotal(),
-	})
+	data := map[string]int{}
+	if contextUsage != nil && !contextUsage.empty() {
+		data["context_tokens"] = contextUsage.contextTotal()
+	}
+	usage := turnUsage
+	if usage == nil {
+		usage = contextUsage
+	}
+	if usage != nil && !usage.empty() {
+		data["input_tokens"] = usage.Input
+		data["cached_input_tokens"] = usage.CacheRead + usage.CacheWrite
+		data["output_tokens"] = usage.Output
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(data)
 	if err != nil {
 		return nil
 	}
-	return map[string]any{"usage": string(data)}
+	return map[string]any{"usage": string(encoded)}
 }
 
 func decodeObject(raw json.RawMessage) map[string]any {

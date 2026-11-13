@@ -137,7 +137,7 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 		defer close(events)
 		defer cancel()
 
-		sentDone := false
+		var doneEvent *engine.Event
 		trackedSession := sessionID
 		if trackedSession != "" {
 			a.track(trackedSession, cancel)
@@ -157,7 +157,9 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 				a.track(trackedSession, cancel)
 			}
 			if ev.Type == engine.EventDone {
-				sentDone = true
+				copy := ev
+				doneEvent = &copy
+				return
 			}
 			events <- ev
 		}
@@ -173,9 +175,12 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 		}
 		if waitErr != nil {
 			emit(engine.Event{Type: engine.EventError, Text: processError(runCtx, waitErr, stderr.String())})
-		} else if !sentDone {
-			emit(engine.Event{Type: engine.EventDone})
 		}
+		if doneEvent == nil {
+			doneEvent = &engine.Event{Type: engine.EventDone}
+		}
+		applyCodexSessionUsage(doneEvent, trackedSession)
+		events <- *doneEvent
 	}()
 
 	return events, nil

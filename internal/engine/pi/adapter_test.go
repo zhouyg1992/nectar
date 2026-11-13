@@ -74,7 +74,7 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
 	if got[4].Type != engine.EventDone {
 		t.Fatalf("done = %#v", got[4])
 	}
-	if got[4].Meta["usage"] != `{"context_tokens":12,"input_tokens":10,"output_tokens":2}` {
+	if got[4].Meta["usage"] != `{"cached_input_tokens":6,"context_tokens":12,"input_tokens":4,"output_tokens":2}` {
 		t.Fatalf("usage = %v", got[4].Meta["usage"])
 	}
 }

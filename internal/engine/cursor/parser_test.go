@@ -20,6 +20,7 @@ func TestParseCursorStream(t *testing.T) {
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":" a.txt"}]},"session_id":"sess_1","timestamp_ms":6}`,
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Found a.txt"}]},"session_id":"sess_1","timestamp_ms":7}`,
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Found a.txt"}]},"session_id":"sess_1"}`,
+		`{"type":"usage","subtype":"model_call","usage":{"inputTokens":100,"outputTokens":5,"cacheReadTokens":50,"cacheWriteTokens":0,"reasoningTokens":2},"session_id":"sess_1"}`,
 		`{"type":"result","subtype":"success","is_error":false,"result":"Found a.txt","session_id":"sess_1","usage":{"inputTokens":10,"outputTokens":2,"cacheReadTokens":3,"cacheWriteTokens":0,"reasoningTokens":1}}`,
 	}, "\n")
 
@@ -63,7 +64,7 @@ func TestParseCursorStream(t *testing.T) {
 	if got[9].Type != engine.EventDone {
 		t.Fatalf("done = %#v", got[9])
 	}
-	if got[9].Meta["usage"] != `{"context_tokens":16,"input_tokens":10,"output_tokens":2}` {
+	if got[9].Meta["usage"] != `{"cached_input_tokens":3,"context_tokens":155,"input_tokens":10,"output_tokens":2}` {
 		t.Fatalf("usage = %v", got[9].Meta["usage"])
 	}
 }

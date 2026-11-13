@@ -34,6 +34,7 @@ printf '%s\n' '{"type":"system","subtype":"init","session_id":"sess_fake","model
 printf '%s\n' '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hel"}},"session_id":"sess_fake"}'
 printf '%s\n' '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}},"session_id":"sess_fake"}'
 printf '%s\n' '{"type":"assistant","message":{"id":"msg_1","content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":4,"output_tokens":1}},"session_id":"sess_fake"}'
+printf '%s\n' '{"type":"stream_event","event":{"type":"message_delta","usage":{"input_tokens":4,"output_tokens":1,"cache_read_input_tokens":6}},"session_id":"sess_fake"}'
 printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"hello","session_id":"sess_fake","usage":{"input_tokens":4,"output_tokens":1,"cache_read_input_tokens":6},"modelUsage":{"claude-sonnet-4-5":{"inputTokens":4,"outputTokens":1,"cacheReadInputTokens":6,"contextWindow":200000}}}'
 `
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
@@ -73,7 +74,7 @@ printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"h
 	if got[4].Type != engine.EventDone {
 		t.Fatalf("done = %#v", got[4])
 	}
-	if got[4].Meta["usage"] != `{"context_tokens":11,"input_tokens":10,"output_tokens":1}` {
+	if got[4].Meta["usage"] != `{"cached_input_tokens":6,"context_tokens":11,"input_tokens":4,"output_tokens":1}` {
 		t.Fatalf("usage = %v", got[4].Meta["usage"])
 	}
 	if got[4].Meta["context_window"] != 200000 {

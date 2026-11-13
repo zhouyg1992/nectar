@@ -236,7 +236,7 @@ func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, tit
 			"version": "v1.0",
 			"updateComponents": map[string]any{
 				"surfaceId":  surfaceID,
-				"components": cardComponents(theme, blocks),
+				"components": cardComponents(theme, blocks, strings.TrimSpace(footer) != ""),
 			},
 		}),
 	}
@@ -290,7 +290,7 @@ func buildUpdatePayload(state *cardState, outUpdateID, title, body, footer, them
 			"version": "v1.0",
 			"updateComponents": map[string]any{
 				"surfaceId":  state.surfaceID,
-				"components": cardComponents(theme, parseCardBlocks(body)),
+				"components": cardComponents(theme, parseCardBlocks(body), strings.TrimSpace(footer) != ""),
 			},
 		}),
 	}
@@ -313,7 +313,7 @@ func updateDataModelJSON(surfaceID, path, value string) string {
 	})
 }
 
-func cardComponents(theme string, blocks []cardBlock) []map[string]any {
+func cardComponents(theme string, blocks []cardBlock, hasFooter bool) []map[string]any {
 	children := make([]string, 0, len(blocks))
 	blockComponents := make([]map[string]any, 0, len(blocks))
 	for i, block := range blocks {
@@ -330,11 +330,17 @@ func cardComponents(theme string, blocks []cardBlock) []map[string]any {
 		})
 	}
 
+	rootChildren := []string{"header", "body"}
+	if hasFooter && len(blocks) > 0 {
+		rootChildren = append(rootChildren, "divider")
+	}
+	rootChildren = append(rootChildren, "footer")
+
 	root := []map[string]any{
 		{
 			"id":        "root",
 			"component": "Column",
-			"children":  []string{"header", "body", "footer"},
+			"children":  rootChildren,
 			"gap":       8,
 		},
 		{
@@ -355,6 +361,13 @@ func cardComponents(theme string, blocks []cardBlock) []map[string]any {
 			"variant":   "caption",
 			"text":      map[string]string{"path": "/footer"},
 		},
+	}
+	if hasFooter && len(blocks) > 0 {
+		root = append(root, map[string]any{
+			"id":        "divider",
+			"component": "Divider",
+			"axis":      "horizontal",
+		})
 	}
 	return append(root, blockComponents...)
 }

@@ -67,7 +67,8 @@ type rawUsage struct {
 }
 
 func (u *rawUsage) contextTokens() int {
-	return u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheWriteTokens + u.ReasoningTokens
+	// outputTokens already includes reasoningTokens; adding both would double count.
+	return u.InputTokens + u.OutputTokens + u.CacheReadTokens + u.CacheWriteTokens
 }
 
 func (u *rawUsage) empty() bool {
@@ -83,6 +84,7 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 	sessionID := ""
 	deltaBuf := ""
 	lastMessage := ""
+	var lastCallUsage *rawUsage
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -104,6 +106,10 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 		}
 
 		switch event.Type {
+		case "usage":
+			if event.Usage != nil && !event.Usage.empty() {
+				lastCallUsage = event.Usage
+			}
 		case "assistant":
 			text := event.Message.text()
 			if text == "" {
@@ -130,7 +136,7 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 		case "tool_call":
 			emitTool(event, emit)
 		case "result":
-			if err := emitResult(event, emit); err != nil {
+			if err := emitResult(event, lastCallUsage, emit); err != nil {
 				return err
 			}
 		case "error":
@@ -143,7 +149,7 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 	return nil
 }
 
-func emitResult(event rawEvent, emit func(engine.Event)) error {
+func emitResult(event rawEvent, lastCallUsage *rawUsage, emit func(engine.Event)) error {
 	var result rawResult
 	if len(event.Result) > 0 {
 		if err := json.Unmarshal(event.Result, &result); err != nil {
@@ -165,21 +171,36 @@ func emitResult(event rawEvent, emit func(engine.Event)) error {
 	}
 
 	meta := map[string]any{}
-	usage := result.Usage
-	if usage == nil {
-		usage = event.Usage
+	turnUsage := result.Usage
+	if turnUsage == nil {
+		turnUsage = event.Usage
 	}
-	if usage != nil && !usage.empty() {
-		if data, err := json.Marshal(map[string]int{
-			"input_tokens":   usage.InputTokens,
-			"output_tokens":  usage.OutputTokens,
-			"context_tokens": usage.contextTokens(),
-		}); err == nil {
-			meta["usage"] = string(data)
-		}
+	if usageMeta := cursorUsageMeta(lastCallUsage, turnUsage); usageMeta != nil {
+		meta["usage"] = usageMeta["usage"]
 	}
 	emit(engine.Event{Type: engine.EventDone, Meta: meta})
 	return nil
+}
+
+func cursorUsageMeta(contextUsage, turnUsage *rawUsage) map[string]any {
+	data := map[string]int{}
+	// model_call usage is the final API call; result usage aggregates the turn.
+	if contextUsage != nil && !contextUsage.empty() {
+		data["context_tokens"] = contextUsage.contextTokens()
+	}
+	if turnUsage != nil && !turnUsage.empty() {
+		data["input_tokens"] = turnUsage.InputTokens
+		data["cached_input_tokens"] = turnUsage.CacheReadTokens + turnUsage.CacheWriteTokens
+		data["output_tokens"] = turnUsage.OutputTokens
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{"usage": string(encoded)}
 }
 
 func emitTool(event rawEvent, emit func(engine.Event)) {
