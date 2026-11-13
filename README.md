@@ -109,6 +109,8 @@ nectar update
 
 Use `nectar update --check` to check the latest release without installing it. `--version vX.Y.Z` pins or downgrades, `--force` reinstalls the current version, and `--no-restart` updates the binary without touching the service.
 
+Session mappings and the last context usage are persisted in `~/.nectar/sessions.json`, so restarting the service during an update resumes the same engine thread. If an old engine session can no longer be resumed, Nectar warns in the final card and starts a new session.
+
 To uninstall:
 
 ```bash

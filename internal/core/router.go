@@ -91,7 +91,9 @@ func (r *Router) Handle(msg platform.Message) {
 
 	switch text {
 	case "/new", "/reset":
-		r.sessions.Delete(key)
+		if err := r.sessions.Delete(key); err != nil {
+			r.logger.Warn("could not persist session reset", "error", err)
+		}
 		r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
 		return
 	case "/status":
@@ -178,13 +180,25 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 
 	sessionID, hasSession := r.sessions.Get(key)
 	var events <-chan engine.Event
+	sessionNotice := ""
 	if hasSession {
 		events, err = r.engine.Resume(r.ctx, sessionID, prompt, opts)
+		if err != nil {
+			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
+			r.logger.Warn("resume failed; starting a new session", "session", sessionID, "error", err)
+			if deleteErr := r.sessions.Delete(key); deleteErr != nil {
+				r.logger.Warn("could not remove stale session", "error", deleteErr)
+			}
+			events, err = r.engine.Start(r.ctx, prompt, opts)
+		}
 	} else {
 		events, err = r.engine.Start(r.ctx, prompt, opts)
 	}
 	if err != nil {
 		answer := "❌ Couldn't wake the agent: " + err.Error()
+		if sessionNotice != "" {
+			answer = sessionNotice + "\n\n" + answer
+		}
 		r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
@@ -235,7 +249,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		switch ev.Type {
 		case engine.EventSessionStarted:
 			if ev.SessionID != "" {
-				r.sessions.Set(key, ev.SessionID)
+				if err := r.sessions.Set(key, ev.SessionID); err != nil {
+					r.logger.Warn("could not persist session", "error", err)
+				}
 			}
 		case engine.EventMessage:
 			lastAgentMessage = ev.Text
@@ -273,7 +289,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			}
 		}
 	}
-	r.sessions.SetUsage(key, usage, contextWindow)
+	if err := r.sessions.SetUsage(key, usage, contextWindow); err != nil {
+		r.logger.Warn("could not persist session usage", "error", err)
+	}
 
 	// Codex exec does not reliably mark the final answer in JSONL. Prefer an
 	// explicit final_answer phase, then the last non-commentary message, then
@@ -298,6 +316,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		}
 	} else if len(errTexts) > 0 {
 		answer += "\n\n⚠️ " + strings.Join(errTexts, "\n")
+	}
+	if sessionNotice != "" {
+		answer = sessionNotice + "\n\n" + answer
 	}
 	if len(answer) > maxReplyBytes {
 		answer = execguard.Truncate(answer, maxReplyBytes) + "\n\n… (output truncated)"
