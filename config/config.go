@@ -13,6 +13,7 @@ import (
 
 type Config struct {
 	Feishu   FeishuConfig   `toml:"feishu"`
+	DingTalk DingTalkConfig `toml:"dingtalk"`
 	Codex    CodexConfig    `toml:"codex"`
 	OpenCode OpenCodeConfig `toml:"opencode"`
 	Cursor   CursorConfig   `toml:"cursor"`
@@ -26,6 +27,16 @@ type FeishuConfig struct {
 	AppID     string `toml:"app_id"`
 	AppSecret string `toml:"app_secret"`
 	LogLevel  string `toml:"log_level"`
+}
+
+type DingTalkConfig struct {
+	ClientID     string `toml:"client_id"`
+	ClientSecret string `toml:"client_secret"`
+	AppKey       string `toml:"app_key"`
+	AppSecret    string `toml:"app_secret"`
+	RobotCode    string `toml:"robot_code"`
+	LogLevel     string `toml:"log_level"`
+	CardEnabled  *bool  `toml:"card_enabled"`
 }
 
 type CodexConfig struct {
@@ -98,7 +109,7 @@ type PiConfig struct {
 type BotConfig struct {
 	Name         string   `toml:"name"`
 	Engine       string   `toml:"engine"`
-	AgentID      string   `toml:"agent_id"`
+	Platform     string   `toml:"platform"`
 	AdminUsers   []string `toml:"admin_users"`
 	AllowedChats []string `toml:"allowed_chats"`
 }
@@ -110,7 +121,8 @@ type StorageConfig struct {
 func defaults() Config {
 	home := homeDir()
 	return Config{
-		Feishu: FeishuConfig{LogLevel: "info"},
+		Feishu:   FeishuConfig{LogLevel: "info"},
+		DingTalk: DingTalkConfig{LogLevel: "info"},
 		Codex: CodexConfig{
 			Path:           "codex",
 			Sandbox:        "workspace-write",
@@ -148,7 +160,7 @@ func defaults() Config {
 			MaxOutputBytes: 2 << 20,
 			TrustWorkspace: true,
 		},
-		Bot:     BotConfig{Name: "Nectar", AgentID: "codex"},
+		Bot:     BotConfig{Name: "Nectar"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
 	}
 }
@@ -223,6 +235,15 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("FEISHU_APP_SECRET"); v != "" {
 		cfg.Feishu.AppSecret = v
+	}
+	if v := os.Getenv("DINGTALK_CLIENT_ID"); v != "" {
+		cfg.DingTalk.ClientID = v
+	}
+	if v := os.Getenv("DINGTALK_CLIENT_SECRET"); v != "" {
+		cfg.DingTalk.ClientSecret = v
+	}
+	if v := os.Getenv("DINGTALK_ROBOT_CODE"); v != "" {
+		cfg.DingTalk.RobotCode = v
 	}
 	if v := os.Getenv("CODEX_PATH"); v != "" {
 		cfg.Codex.Path = v
@@ -337,10 +358,10 @@ func normalize(cfg *Config) error {
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
 	}
-	engine := strings.TrimSpace(cfg.Bot.Engine)
-	if engine == "" {
-		engine = strings.TrimSpace(cfg.Bot.AgentID)
+	if err := normalizePlatform(cfg); err != nil {
+		return err
 	}
+	engine := strings.TrimSpace(cfg.Bot.Engine)
 	if engine == "" {
 		engine = "codex"
 	}
@@ -350,7 +371,6 @@ func normalize(cfg *Config) error {
 		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor, claude, pi)", engine)
 	}
 	cfg.Bot.Engine = engine
-	cfg.Bot.AgentID = engine
 	if cfg.Codex.MaxOutputBytes <= 0 {
 		return errors.New("codex.max_output_bytes must be positive")
 	}
@@ -382,6 +402,59 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	return nil
+}
+
+func normalizePlatform(cfg *Config) error {
+	cfg.DingTalk.ClientID = strings.TrimSpace(cfg.DingTalk.ClientID)
+	cfg.DingTalk.ClientSecret = strings.TrimSpace(cfg.DingTalk.ClientSecret)
+	cfg.DingTalk.AppKey = strings.TrimSpace(cfg.DingTalk.AppKey)
+	cfg.DingTalk.AppSecret = strings.TrimSpace(cfg.DingTalk.AppSecret)
+	cfg.DingTalk.RobotCode = strings.TrimSpace(cfg.DingTalk.RobotCode)
+	cfg.DingTalk.LogLevel = strings.ToLower(strings.TrimSpace(cfg.DingTalk.LogLevel))
+	if cfg.DingTalk.ClientID == "" {
+		cfg.DingTalk.ClientID = cfg.DingTalk.AppKey
+	}
+	if cfg.DingTalk.ClientSecret == "" {
+		cfg.DingTalk.ClientSecret = cfg.DingTalk.AppSecret
+	}
+	if cfg.DingTalk.RobotCode == "" {
+		cfg.DingTalk.RobotCode = cfg.DingTalk.ClientID
+	}
+	if cfg.DingTalk.LogLevel == "" {
+		cfg.DingTalk.LogLevel = "info"
+	}
+
+	platform := strings.ToLower(strings.TrimSpace(cfg.Bot.Platform))
+	dingtalkConfigured := credentialConfigured(cfg.DingTalk.ClientID) || credentialConfigured(cfg.DingTalk.ClientSecret)
+	feishuConfigured := credentialConfigured(cfg.Feishu.AppID) || credentialConfigured(cfg.Feishu.AppSecret)
+
+	switch platform {
+	case "":
+		switch {
+		case dingtalkConfigured && feishuConfigured:
+			return errors.New("both [feishu] and [dingtalk] credentials are configured; set bot.platform to feishu or dingtalk")
+		case dingtalkConfigured:
+			platform = "dingtalk"
+		default:
+			platform = "feishu"
+		}
+	case "feishu", "dingtalk":
+	default:
+		return fmt.Errorf("unsupported bot.platform %q (supported: feishu, dingtalk)", platform)
+	}
+
+	if platform == "dingtalk" {
+		if !credentialConfigured(cfg.DingTalk.ClientID) || !credentialConfigured(cfg.DingTalk.ClientSecret) {
+			return errors.New("dingtalk.client_id and dingtalk.client_secret must be configured (replace placeholder values) when bot.platform = \"dingtalk\"")
+		}
+	}
+	cfg.Bot.Platform = platform
+	return nil
+}
+
+func credentialConfigured(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return value != "" && value != "xxx" && !strings.Contains(value, "xxxxxxxx")
 }
 
 func expandHome(path string) (string, error) {

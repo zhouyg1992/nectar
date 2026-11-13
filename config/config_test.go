@@ -19,7 +19,7 @@ func TestLoadDefaultsAndEnv(t *testing.T) {
 	if cfg.Feishu.AppID != "cli_env" || cfg.Feishu.AppSecret != "secret_env" {
 		t.Fatalf("env override failed: %#v", cfg.Feishu)
 	}
-	if cfg.Bot.AgentID != "codex" || cfg.Bot.Name != "Nectar" {
+	if cfg.Bot.Engine != "codex" || cfg.Bot.Name != "Nectar" {
 		t.Fatalf("bot defaults = %#v", cfg.Bot)
 	}
 	timeout, err := cfg.Timeout()
@@ -41,6 +41,90 @@ func TestLoadRejectsInvalidTimeout(t *testing.T) {
 	}
 }
 
+func TestDingTalkAutoDetect(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[dingtalk]\nclient_id = \"dingreal\"\nclient_secret = \"secret\"\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Platform != "dingtalk" {
+		t.Fatalf("platform = %q", cfg.Bot.Platform)
+	}
+	if cfg.DingTalk.RobotCode != "dingreal" || cfg.DingTalk.LogLevel != "info" {
+		t.Fatalf("dingtalk = %#v", cfg.DingTalk)
+	}
+}
+
+func TestDingTalkAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[bot]\nplatform = \"dingtalk\"\n\n[dingtalk]\napp_key = \"dingreal\"\napp_secret = \"secret\"\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DingTalk.ClientID != "dingreal" || cfg.DingTalk.ClientSecret != "secret" {
+		t.Fatalf("dingtalk = %#v", cfg.DingTalk)
+	}
+}
+
+func TestDingTalkCardDisabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[dingtalk]\nclient_id = \"dingreal\"\nclient_secret = \"secret\"\ncard_enabled = false\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DingTalk.CardEnabled == nil || *cfg.DingTalk.CardEnabled {
+		t.Fatalf("card_enabled = %#v", cfg.DingTalk.CardEnabled)
+	}
+}
+
+func TestBothPlatformsRequireSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[feishu]\napp_id = \"cli_real\"\napp_secret = \"secret1\"\n\n[dingtalk]\nclient_id = \"dingreal\"\nclient_secret = \"secret2\"\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected platform selection error")
+	}
+}
+
+func TestDingTalkRequiresCredentials(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[bot]\nplatform = \"dingtalk\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected dingtalk credential error")
+	}
+}
+
+func TestPlaceholderCredentialsDoNotSelectPlatform(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[feishu]\napp_id = \"cli_xxxxxxxxxxxxxxxx\"\napp_secret = \"xxxxxxxx\"\n\n[dingtalk]\nclient_id = \"dingxxxxxxxx\"\nclient_secret = \"xxxxxxxx\"\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Platform != "feishu" {
+		t.Fatalf("platform = %q", cfg.Bot.Platform)
+	}
+}
+
 func TestEngineSelection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[bot]\nengine = \"opencode\"\n"), 0o600); err != nil {
@@ -50,25 +134,11 @@ func TestEngineSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Bot.Engine != "opencode" || cfg.Bot.AgentID != "opencode" {
+	if cfg.Bot.Engine != "opencode" {
 		t.Fatalf("bot = %#v", cfg.Bot)
 	}
 	if cfg.OpenCode.Path != "opencode" || cfg.OpenCode.MaxOutputBytes <= 0 {
 		t.Fatalf("opencode defaults = %#v", cfg.OpenCode)
-	}
-}
-
-func TestLegacyAgentIDSelectsEngine(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[bot]\nagent_id = \"opencode\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Bot.Engine != "opencode" {
-		t.Fatalf("engine = %q", cfg.Bot.Engine)
 	}
 }
 
@@ -97,7 +167,7 @@ func TestPiDefaultsAndSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Bot.Engine != "pi" || cfg.Bot.AgentID != "pi" {
+	if cfg.Bot.Engine != "pi" {
 		t.Fatalf("bot = %#v", cfg.Bot)
 	}
 	if cfg.Pi.Path != "/opt/homebrew/bin/pi" || cfg.Pi.MaxOutputBytes <= 0 {
@@ -152,7 +222,7 @@ func TestCursorEngineSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Bot.Engine != "cursor" || cfg.Bot.AgentID != "cursor" {
+	if cfg.Bot.Engine != "cursor" {
 		t.Fatalf("bot = %#v", cfg.Bot)
 	}
 	if cfg.Cursor.Path != "cursor-agent" || cfg.Cursor.MaxOutputBytes <= 0 {
@@ -202,7 +272,7 @@ func TestClaudeEngineSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Bot.Engine != "claude" || cfg.Bot.AgentID != "claude" {
+	if cfg.Bot.Engine != "claude" {
 		t.Fatalf("bot = %#v", cfg.Bot)
 	}
 	if cfg.Claude.Path != "claude" || cfg.Claude.MaxOutputBytes <= 0 {

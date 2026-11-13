@@ -5,6 +5,7 @@ English translations are in progress.
 For now, the Chinese documentation is the source of truth:
 
 - [Feishu setup](../zh-CN/feishu.md)
+- [DingTalk setup](../zh-CN/dingtalk.md)
 - [Background service](../zh-CN/service.md)
 - [Architecture](../zh-CN/architecture.md)
 - [Development](../zh-CN/development.md)

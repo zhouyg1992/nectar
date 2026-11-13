@@ -132,7 +132,16 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	modelName := r.resolvedModel()
 
 	cardID := ""
-	if caps := r.platform.Capabilities(); caps.Card && caps.Streaming {
+	caps := r.platform.Capabilities()
+	stopTyping := func() {}
+	if typing, ok := r.platform.(platform.TypingIndicator); ok {
+		if stop := typing.StartTyping(r.ctx, msg.ReplyContext); stop != nil {
+			stopTyping = stop
+		}
+	}
+	defer stopTyping()
+
+	if caps.Card && caps.Streaming {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
@@ -395,7 +404,10 @@ func (r *Router) sendCardOrText(msg platform.Message, card *platform.Card, fallb
 }
 
 func replyTarget(msg platform.Message) platform.Reply {
-	reply := platform.Reply{ChatID: msg.ChatID}
+	reply := platform.Reply{
+		ChatID:       msg.ChatID,
+		ReplyContext: msg.ReplyContext,
+	}
 	if msg.ThreadID != "" {
 		reply.ReplyTo = msg.MessageID
 		reply.ThreadID = msg.ThreadID

@@ -34,6 +34,9 @@ type Message struct {
 	Attachments []attachment.Resource
 	ReplyTo     string
 	ThreadID    string
+	// ReplyContext carries platform-private reply state (for example a
+	// DingTalk sessionWebhook). Callers must treat it as opaque.
+	ReplyContext any
 }
 
 // Reply is a message to send back to the chat platform.
@@ -45,6 +48,8 @@ type Reply struct {
 	Media         []Media
 	ThreadID      string
 	ReplyInThread bool
+	// ReplyContext is copied from the inbound Message by the router.
+	ReplyContext any
 }
 
 // Media is a local file to upload back to the chat platform.
@@ -60,6 +65,13 @@ type Capabilities struct {
 	Media       bool
 	Group       bool
 	MentionOnly bool
+}
+
+// TypingIndicator is an optional platform extension for showing lightweight
+// progress feedback while an agent turn is running. The returned stop function
+// must be safe to call once.
+type TypingIndicator interface {
+	StartTyping(ctx context.Context, replyContext any) (stop func())
 }
 
 // PlatformAdapter is implemented once per chat platform.

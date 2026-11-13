@@ -28,7 +28,7 @@ graph LR
 - 平台适配器不构造 Agent prompt，也不决定某个引擎是否能原生接收图片。
 - 通过 `Capabilities()` 声明是否支持卡片、流式更新、媒体和群聊。
 - 消息携带可选的 `ThreadID`；回复携带 `ReplyInThread`，由平台适配器决定如何回到同一话题。
-- v1 实现：飞书。占位：Telegram。
+- 已实现：飞书、钉钉。占位：Telegram。
 
 ### Core
 

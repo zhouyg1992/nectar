@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar forwards Feishu messages to Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi and streams the result back as an interactive card. v1 supports Feishu with any of these engines.
+Nectar forwards Feishu or DingTalk messages to Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi and streams the result back as an interactive card. v1 supports Feishu / Lark and DingTalk with any of these engines.
 
 ## Support matrix
 
-**v1 supports Feishu / Lark with Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi.**
+**v1 supports Feishu / Lark and DingTalk with Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi.**
 
 Legend: ✅ supported · 🚧 planned
 
@@ -31,7 +31,7 @@ Legend: ✅ supported · 🚧 planned
 | Platform | Status | Configuration | Notes |
 |---|---|---|---|
 | Feishu / Lark | ✅ Supported | [Feishu setup (ZH)](docs/zh-CN/feishu.md) | WebSocket + @Bot<br>Cards: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>Footer: context usage, model, time, tokens |
-| DingTalk | 🚧 Planned | — | Stream mode and interactive cards |
+| DingTalk | ✅ Supported | [DingTalk setup (ZH)](docs/zh-CN/dingtalk.md) | Stream mode + @Bot<br>A2UI streaming cards<br>No public callback or card template |
 | Telegram | 🚧 Planned | — | Long polling |
 | WeCom / WeChat | 🚧 Planned | — | Platform-dependent |
 | Slack | 🚧 Planned | — | Socket Mode |
@@ -198,7 +198,6 @@ per_chat_workspace = false
 [bot]
 name = "Nectar"
 engine = "codex"              # codex | opencode | cursor | claude | pi
-agent_id = "codex"            # legacy fallback; defaults to engine
 admin_users = []
 allowed_chats = []
 
@@ -274,7 +273,7 @@ nectar service install
 - `--no-start` installs and enables the service without starting it immediately
 - Manage with `nectar service status|logs|restart|stop|uninstall`
 
-Service mode reads Feishu credentials from the config file, not from shell environment variables. See [service management](docs/zh-CN/service.md) for details.
+Service mode reads the selected platform's credentials from the config file, not from shell environment variables. See [service management](docs/zh-CN/service.md) for details.
 
 ### Commands
 

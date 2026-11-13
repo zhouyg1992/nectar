@@ -18,11 +18,11 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code 或 Pi 执行，再以交互卡片把结果回传到飞书。v1 支持飞书 + 上述任一引擎，安装后一条命令即可启动。
+Nectar 把飞书或钉钉消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code 或 Pi 执行，再以交互卡片把结果回传。v1 支持飞书 / Lark、钉钉 + 上述任一引擎，安装后一条命令即可启动。
 
 ## 支持矩阵
 
-**v1 支持：飞书 / Lark + Codex CLI / OpenCode / Cursor Agent / Claude Code / Pi。**
+**v1 支持：飞书 / Lark、钉钉 + Codex CLI / OpenCode / Cursor Agent / Claude Code / Pi。**
 
 图例：✅ 已支持 · 🚧 计划中
 
@@ -31,7 +31,7 @@ Nectar 把飞书消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code �
 | 平台 | 状态 | 配置 | 说明 |
 |---|---|---|---|
 | 飞书 / Lark | ✅ 已支持 | [飞书配置](docs/zh-CN/feishu.md) | 长连接 + @Bot<br>卡片：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>底部：上下文占比、模型、耗时、token |
-| 钉钉 | 🚧 计划中 | — | Stream 模式与互动卡片适配 |
+| 钉钉 | ✅ 已支持 | [钉钉配置](docs/zh-CN/dingtalk.md) | Stream 模式 + @Bot<br>A2UI 流式卡片<br>无需公网回调或卡片模板 |
 | Telegram | 🚧 计划中 | — | Long Polling |
 | 企业微信 / 微信 | 🚧 计划中 | — | 视平台能力适配 |
 | Slack | 🚧 计划中 | — | Socket Mode |
@@ -221,7 +221,6 @@ per_chat_workspace = false
 [bot]
 name = "Nectar"
 engine = "codex"              # codex | opencode | cursor | claude | pi
-agent_id = "codex"            # legacy，默认跟随 engine
 admin_users = []              # open_id 白名单；非空时限制单聊
 allowed_chats = []            # chat_id 白名单；非空时限制群聊
 
@@ -305,7 +304,7 @@ nectar service install
 - `--no-start`：安装并启用服务，但不立即启动
 - 管理命令：`nectar service status|logs|restart|stop|uninstall`
 
-服务模式从配置文件读取飞书凭证，不继承 shell 里的环境变量。详细说明见 [后台服务](docs/zh-CN/service.md)。
+服务模式从配置文件读取所选平台的凭证，不继承 shell 里的环境变量。详细说明见 [后台服务](docs/zh-CN/service.md)。
 
 ### 命令
 
@@ -319,6 +318,7 @@ nectar service install
 ## 文档
 
 - [飞书配置与排查](docs/zh-CN/feishu.md)
+- [钉钉配置与排查](docs/zh-CN/dingtalk.md)
 - [后台服务](docs/zh-CN/service.md)
 - [架构与扩展点](docs/zh-CN/architecture.md)
 - [开发与测试](docs/zh-CN/development.md)

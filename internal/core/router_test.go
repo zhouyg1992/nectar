@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,6 +206,17 @@ func (f *fakeEngine) lastRequest() (string, engine.EngineOptions) {
 
 type scriptedEngine struct {
 	events []engine.Event
+}
+
+type fakeTypingPlatform struct {
+	*fakePlatform
+	started atomic.Int32
+	stopped atomic.Int32
+}
+
+func (f *fakeTypingPlatform) StartTyping(context.Context, any) func() {
+	f.started.Add(1)
+	return func() { f.stopped.Add(1) }
 }
 
 func (s *scriptedEngine) Name() string { return "scripted" }
@@ -483,6 +495,24 @@ func TestRouterSendsThinkingCardAndUpdatesFinal(t *testing.T) {
 	}
 	if plat.usesQuotedReplies() {
 		t.Fatal("router quoted the user's message")
+	}
+}
+
+func TestRouterStartsAndStopsTyping(t *testing.T) {
+	base := &fakePlatform{}
+	plat := &fakeTypingPlatform{fakePlatform: base}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{Channel: "dingtalk", ChatID: "c1", MessageID: "m1", Text: "hello"})
+	waitForReplies(t, base, 1)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && plat.stopped.Load() == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if plat.started.Load() != 1 || plat.stopped.Load() != 1 {
+		t.Fatalf("typing started=%d stopped=%d", plat.started.Load(), plat.stopped.Load())
 	}
 }
 

@@ -107,26 +107,77 @@ func resolveServiceBinary(path string) (string, error) {
 }
 
 // Service mode reads credentials from the config file because the service
-// environment does not inherit the shell's FEISHU_APP_ID/FEISHU_APP_SECRET.
+// environment does not inherit the shell's FEISHU_* / DINGTALK_* variables.
 func validateServiceConfig(path string) error {
 	var raw struct {
+		Bot struct {
+			Platform string `toml:"platform"`
+		} `toml:"bot"`
 		Feishu struct {
 			AppID     string `toml:"app_id"`
 			AppSecret string `toml:"app_secret"`
 		} `toml:"feishu"`
+		DingTalk struct {
+			ClientID     string `toml:"client_id"`
+			ClientSecret string `toml:"client_secret"`
+			AppKey       string `toml:"app_key"`
+			AppSecret    string `toml:"app_secret"`
+		} `toml:"dingtalk"`
 	}
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
 		return fmt.Errorf("load service config %s: %w", path, err)
 	}
-	appID := strings.TrimSpace(raw.Feishu.AppID)
-	appSecret := strings.TrimSpace(raw.Feishu.AppSecret)
-	if isPlaceholderAppID(appID) || isPlaceholderSecret(appSecret) {
-		return fmt.Errorf(
-			"feishu app_id/app_secret are not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
-			path,
-		)
+
+	platform := strings.ToLower(strings.TrimSpace(raw.Bot.Platform))
+	feishuAppID := strings.TrimSpace(raw.Feishu.AppID)
+	feishuSecret := strings.TrimSpace(raw.Feishu.AppSecret)
+	dingTalkID := strings.TrimSpace(firstNonEmpty(raw.DingTalk.ClientID, raw.DingTalk.AppKey))
+	dingTalkSecret := strings.TrimSpace(firstNonEmpty(raw.DingTalk.ClientSecret, raw.DingTalk.AppSecret))
+	feishuConfigured := !isPlaceholderAppID(feishuAppID) || !isPlaceholderSecret(feishuSecret)
+	dingTalkConfigured := !isPlaceholderDingTalkClientID(dingTalkID) || !isPlaceholderDingTalkSecret(dingTalkSecret)
+
+	if platform == "" {
+		if feishuConfigured && dingTalkConfigured {
+			return fmt.Errorf(
+				"both [feishu] and [dingtalk] credentials are configured in %s; set bot.platform to feishu or dingtalk",
+				path,
+			)
+		}
+		if dingTalkConfigured {
+			platform = "dingtalk"
+		} else {
+			platform = "feishu"
+		}
+	}
+
+	switch platform {
+	case "feishu":
+		if isPlaceholderAppID(feishuAppID) || isPlaceholderSecret(feishuSecret) {
+			return fmt.Errorf(
+				"feishu app_id/app_secret are not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
+				path,
+			)
+		}
+	case "dingtalk":
+		if isPlaceholderDingTalkClientID(dingTalkID) || isPlaceholderDingTalkSecret(dingTalkSecret) {
+			return fmt.Errorf(
+				"dingtalk client_id/client_secret are not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
+				path,
+			)
+		}
+	default:
+		return fmt.Errorf("unsupported bot.platform %q in %s (supported: feishu, dingtalk)", platform, path)
 	}
 	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func isPlaceholderAppID(value string) bool {
@@ -135,6 +186,16 @@ func isPlaceholderAppID(value string) bool {
 
 func isPlaceholderSecret(value string) bool {
 	return value == "" || value == "xxx" || (len(value) >= 8 && strings.Trim(value, "x") == "")
+}
+
+func isPlaceholderDingTalkClientID(value string) bool {
+	value = strings.TrimSpace(value)
+	return value == "" || strings.Contains(value, "xxxxxxxx") || (len(value) >= 8 && strings.Trim(value, "x") == "")
+}
+
+func isPlaceholderDingTalkSecret(value string) bool {
+	value = strings.TrimSpace(value)
+	return isPlaceholderSecret(value) || strings.Contains(value, "xxxxxxxx")
 }
 
 func printServiceUsage() {
