@@ -59,6 +59,19 @@ nectar service uninstall
 
 `nectar service install --no-start` 会写入并启用服务，但不立即启动。
 
+## 更新
+
+`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制，并重启已安装的后台服务；不会修改 `~/.nectar/config.toml` 和数据。
+
+```bash
+nectar update
+nectar update --check
+nectar update --version v0.5.1
+nectar update --no-restart
+```
+
+用 `--force` 可重装当前版本。更新支持 macOS 和 Linux；Release 不提供 Windows 资产。
+
 ## macOS
 
 服务文件：

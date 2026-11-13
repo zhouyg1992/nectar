@@ -40,6 +40,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "service" {
 		return runService(args[1:])
 	}
+	if len(args) > 0 && args[0] == "update" {
+		return runUpdate(args[1:])
+	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		printMainUsage()
 		return nil
@@ -68,6 +71,7 @@ func printMainUsage() {
 	fmt.Print(`Usage:
   nectar [-config PATH]
   nectar -version
+  nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart]
   nectar service <install|uninstall|start|stop|restart|status|logs>
 `)
 }

@@ -101,6 +101,14 @@ For DingTalk, use `--platform dingtalk` with `DINGTALK_CLIENT_ID` / `DINGTALK_CL
 
 Use `--no-service` to install the binary only, `--reconfigure` to back up and replace an existing config, and `--config PATH` to use a custom config path. On Linux, add `--linger` to start at boot without a login session.
 
+To update an existing install, keep the current config and data, and restart the background service:
+
+```bash
+nectar update
+```
+
+Use `nectar update --check` to check the latest release without installing it. `--version vX.Y.Z` pins or downgrades, `--force` reinstalls the current version, and `--no-restart` updates the binary without touching the service.
+
 To uninstall:
 
 ```bash

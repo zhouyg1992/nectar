@@ -754,6 +754,7 @@ if [ "$SERVICE" -eq 1 ]; then
 else
 	log "  run: $BIN_NAME"
 fi
+log "  $BIN_NAME update"
 
 log ""
 log "Uninstall:"

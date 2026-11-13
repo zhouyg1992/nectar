@@ -17,6 +17,7 @@ type InstallOptions struct {
 }
 
 type Service interface {
+	Installed() bool
 	Install(context.Context, InstallOptions) error
 	Uninstall(context.Context) error
 	Start(context.Context) error

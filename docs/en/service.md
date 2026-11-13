@@ -59,6 +59,19 @@ nectar service uninstall
 
 `nectar service install --no-start` writes and enables the service without starting it immediately.
 
+## Update
+
+`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, and restarts the installed service. It leaves `~/.nectar/config.toml` and data untouched.
+
+```bash
+nectar update
+nectar update --check
+nectar update --version v0.5.1
+nectar update --no-restart
+```
+
+Use `--force` to reinstall the same version. Updates are supported on macOS and Linux; Windows is not supported by the release assets.
+
 ## macOS
 
 Service file:

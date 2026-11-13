@@ -100,6 +100,14 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 
 用 `--no-service` 只安装二进制，用 `--reconfigure` 备份并替换现有配置，用 `--config PATH` 指定配置路径。Linux 额外加 `--linger` 可开机启动，无需登录。
 
+更新已安装的版本，同时保留现有配置和数据，并重启后台服务：
+
+```bash
+nectar update
+```
+
+`nectar update --check` 只检查最新版本，不安装；`--version vX.Y.Z` 可指定版本或降级，`--force` 可重装当前版本，`--no-restart` 只替换二进制、不重启服务。
+
 卸载：
 
 ```bash

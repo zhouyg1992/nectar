@@ -20,6 +20,11 @@ func New(binaryPath, configPath string) (Service, error) {
 	return manager, nil
 }
 
+func (m *Manager) Installed() bool {
+	_, err := os.Stat(m.ServiceFile)
+	return err == nil
+}
+
 func (m *Manager) Install(ctx context.Context, opts InstallOptions) error {
 	if err := requireCommand("launchctl"); err != nil {
 		return err
