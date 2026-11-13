@@ -144,7 +144,7 @@ func TestParseCallbackQuote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "[引用消息]\n> quoted text\n\nmy reply"
+	want := "[Quoted message]\n> quoted text\n\nmy reply"
 	if msg.Text != want {
 		t.Fatalf("text = %q, want %q", msg.Text, want)
 	}

@@ -23,16 +23,17 @@ const (
 type cardState struct {
 	mu sync.Mutex
 
-	outTrackID  string
-	surfaceID   string
-	lastTitle   string
-	lastBody    string
-	lastFooter  string
-	lastTheme   string
-	lastFlow    string
-	seq         int
-	finalized   bool
-	finalizedAt time.Time
+	outTrackID   string
+	surfaceID    string
+	lastTitle    string
+	lastActivity string
+	lastBody     string
+	lastFooter   string
+	lastTheme    string
+	lastFlow     string
+	seq          int
+	finalized    bool
+	finalizedAt  time.Time
 }
 
 func (a *Adapter) sendCard(ctx context.Context, reply platform.Reply) (string, error) {
@@ -51,16 +52,17 @@ func (a *Adapter) sendCard(ctx context.Context, reply platform.Reply) (string, e
 	outTrackID := generateOutTrackID()
 	surfaceID := outTrackID
 	title := cardTitleValue(card.Title, card.Body)
+	activity := strings.TrimSpace(card.Activity)
 	body := normalizeA2UIMarkdown(card.Body)
 	if strings.TrimSpace(body) == "" {
-		body = "正在处理…"
+		body = "Gathering results…"
 	}
 	footer := strings.TrimSpace(card.Footer)
 	theme := cardTheme(card.Status)
 	final := cardFinal(card.Status)
 	flow := cardFlowStatus(card.Status, true)
 
-	payload := a.buildCreatePayload(rc, outTrackID, surfaceID, title, body, footer, theme, flow)
+	payload := a.buildCreatePayload(rc, outTrackID, surfaceID, title, activity, body, footer, theme, flow)
 	token, err := a.getAccessToken(ctx)
 	if err != nil {
 		return "", err
@@ -84,14 +86,15 @@ func (a *Adapter) sendCard(ctx context.Context, reply platform.Reply) (string, e
 	}
 
 	state := &cardState{
-		outTrackID: outTrackID,
-		surfaceID:  surfaceID,
-		lastTitle:  title,
-		lastBody:   body,
-		lastFooter: footer,
-		lastTheme:  theme,
-		lastFlow:   flow,
-		finalized:  final,
+		outTrackID:   outTrackID,
+		surfaceID:    surfaceID,
+		lastTitle:    title,
+		lastActivity: activity,
+		lastBody:     body,
+		lastFooter:   footer,
+		lastTheme:    theme,
+		lastFlow:     flow,
+		finalized:    final,
 	}
 	if final {
 		state.finalizedAt = time.Now()
@@ -132,7 +135,7 @@ func (a *Adapter) sendCardTextFallback(ctx context.Context, reply platform.Reply
 		text = body
 	}
 	if text == "" {
-		text = "正在处理…"
+		text = "Gathering results…"
 	}
 	if err := a.sendMarkdown(ctx, rc, text); err != nil {
 		return "", fmt.Errorf("send card text fallback: %w", err)
@@ -159,23 +162,24 @@ func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.R
 
 	card := reply.Card
 	title := cardTitleValue(card.Title, card.Body)
+	activity := strings.TrimSpace(card.Activity)
 	body := normalizeA2UIMarkdown(card.Body)
 	if strings.TrimSpace(body) == "" {
-		body = "正在处理…"
+		body = "Gathering results…"
 	}
 	footer := strings.TrimSpace(card.Footer)
 	theme := cardTheme(card.Status)
 	flow := cardFlowStatus(card.Status, false)
 	final := cardFinal(card.Status)
 
-	if title == state.lastTitle && body == state.lastBody && footer == state.lastFooter &&
+	if title == state.lastTitle && activity == state.lastActivity && body == state.lastBody && footer == state.lastFooter &&
 		theme == state.lastTheme && flow == state.lastFlow {
 		return nil
 	}
 
 	state.seq++
 	outUpdateID := fmt.Sprintf("%s-%d", state.outTrackID, state.seq)
-	payload := buildUpdatePayload(state, outUpdateID, title, body, footer, theme, flow)
+	payload := buildUpdatePayload(state, outUpdateID, title, activity, body, footer, theme, flow)
 	token, err := a.getAccessToken(ctx)
 	if err != nil {
 		return err
@@ -199,6 +203,7 @@ func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.R
 	}
 
 	state.lastTitle = title
+	state.lastActivity = activity
 	state.lastBody = body
 	state.lastFooter = footer
 	state.lastTheme = theme
@@ -210,10 +215,11 @@ func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.R
 	return nil
 }
 
-func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, title, body, footer, theme, flow string) map[string]any {
+func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, title, activity, body, footer, theme, flow string) map[string]any {
 	data := map[string]string{
-		"title":  title,
-		"footer": footer,
+		"title":    title,
+		"activity": activity,
+		"footer":   footer,
 	}
 	blocks := parseCardBlocks(body)
 	messages := []string{
@@ -236,7 +242,7 @@ func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, tit
 			"version": "v1.0",
 			"updateComponents": map[string]any{
 				"surfaceId":  surfaceID,
-				"components": cardComponents(theme, blocks, strings.TrimSpace(footer) != ""),
+				"components": cardComponents(theme, blocks, strings.TrimSpace(activity) != "", strings.TrimSpace(footer) != ""),
 			},
 		}),
 	}
@@ -282,15 +288,16 @@ func cardAnnotations(surfaceID string, blocks []cardBlock) []map[string]any {
 	return annotations
 }
 
-func buildUpdatePayload(state *cardState, outUpdateID, title, body, footer, theme, flow string) map[string]any {
+func buildUpdatePayload(state *cardState, outUpdateID, title, activity, body, footer, theme, flow string) map[string]any {
 	messages := []string{
 		updateDataModelJSON(state.surfaceID, "/title", title),
+		updateDataModelJSON(state.surfaceID, "/activity", activity),
 		updateDataModelJSON(state.surfaceID, "/footer", footer),
 		mustJSON(map[string]any{
 			"version": "v1.0",
 			"updateComponents": map[string]any{
 				"surfaceId":  state.surfaceID,
-				"components": cardComponents(theme, parseCardBlocks(body), strings.TrimSpace(footer) != ""),
+				"components": cardComponents(theme, parseCardBlocks(body), strings.TrimSpace(activity) != "", strings.TrimSpace(footer) != ""),
 			},
 		}),
 	}
@@ -313,7 +320,7 @@ func updateDataModelJSON(surfaceID, path, value string) string {
 	})
 }
 
-func cardComponents(theme string, blocks []cardBlock, hasFooter bool) []map[string]any {
+func cardComponents(theme string, blocks []cardBlock, hasActivity, hasFooter bool) []map[string]any {
 	children := make([]string, 0, len(blocks))
 	blockComponents := make([]map[string]any, 0, len(blocks))
 	for i, block := range blocks {
@@ -330,7 +337,14 @@ func cardComponents(theme string, blocks []cardBlock, hasFooter bool) []map[stri
 		})
 	}
 
-	rootChildren := []string{"header", "body"}
+	rootChildren := []string{"header"}
+	if hasActivity {
+		rootChildren = append(rootChildren, "activity")
+		if len(blocks) > 0 {
+			rootChildren = append(rootChildren, "activity-divider")
+		}
+	}
+	rootChildren = append(rootChildren, "body")
 	if hasFooter && len(blocks) > 0 {
 		rootChildren = append(rootChildren, "divider")
 	}
@@ -342,6 +356,7 @@ func cardComponents(theme string, blocks []cardBlock, hasFooter bool) []map[stri
 			"component": "Column",
 			"children":  rootChildren,
 			"gap":       8,
+			"align":     "stretch",
 		},
 		{
 			"id":        "header",
@@ -349,19 +364,28 @@ func cardComponents(theme string, blocks []cardBlock, hasFooter bool) []map[stri
 			"title":     map[string]string{"path": "/title"},
 			"theme":     theme,
 		},
-		{
-			"id":        "body",
-			"component": "Column",
-			"children":  children,
-			"gap":       8,
-		},
-		{
-			"id":        "footer",
-			"component": "Text",
-			"variant":   "caption",
-			"text":      map[string]string{"path": "/footer"},
-		},
 	}
+	if hasActivity {
+		root = append(root, map[string]any{
+			"id":        "activity",
+			"component": "Markdown",
+			"content":   map[string]string{"path": "/activity"},
+		})
+		if len(blocks) > 0 {
+			root = append(root, map[string]any{
+				"id":        "activity-divider",
+				"component": "Divider",
+				"axis":      "horizontal",
+			})
+		}
+	}
+	root = append(root, map[string]any{
+		"id":        "body",
+		"component": "Column",
+		"children":  children,
+		"gap":       8,
+		"align":     "stretch",
+	})
 	if hasFooter && len(blocks) > 0 {
 		root = append(root, map[string]any{
 			"id":        "divider",
@@ -369,6 +393,12 @@ func cardComponents(theme string, blocks []cardBlock, hasFooter bool) []map[stri
 			"axis":      "horizontal",
 		})
 	}
+	root = append(root, map[string]any{
+		"id":        "footer",
+		"component": "Text",
+		"variant":   "caption",
+		"text":      map[string]string{"path": "/footer"},
+	})
 	return append(root, blockComponents...)
 }
 

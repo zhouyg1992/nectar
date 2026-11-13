@@ -37,7 +37,7 @@ func TestBuildCreatePayloadGroup(t *testing.T) {
 		isGroup:        true,
 		robotCode:      "robot-test",
 	}
-	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "body", "footer", "blue", "PROCESSING")
+	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "", "body", "footer", "blue", "PROCESSING")
 
 	if payload["openSpaceId"] != "dtv1.card//im_group.cid-1" {
 		t.Fatalf("openSpaceId = %v", payload["openSpaceId"])
@@ -74,7 +74,7 @@ func TestBuildCreatePayloadDirect(t *testing.T) {
 		isGroup:        false,
 		robotCode:      "robot-test",
 	}
-	payload := adapter.buildCreatePayload(rc, "track-2", "surface-2", "title", "body", "", "green", "FINISH")
+	payload := adapter.buildCreatePayload(rc, "track-2", "surface-2", "title", "", "body", "", "green", "FINISH")
 
 	if payload["openSpaceId"] != "dtv1.card//im_robot.staff-1" {
 		t.Fatalf("openSpaceId = %v", payload["openSpaceId"])
@@ -95,12 +95,12 @@ func TestBuildUpdatePayloadFinal(t *testing.T) {
 		surfaceID:  "surface-1",
 		lastTheme:  "blue",
 	}
-	payload := buildUpdatePayload(state, "track-1-1", "done", "answer", "footer", "green", "FINISH")
+	payload := buildUpdatePayload(state, "track-1-1", "done", "", "answer", "footer", "green", "FINISH")
 	if payload["flowStatus"] != "FINISH" {
 		t.Fatalf("flowStatus = %v", payload["flowStatus"])
 	}
 	messages := decodeA2UI(t, payload)
-	if len(messages) != 3 {
+	if len(messages) != 4 {
 		t.Fatalf("messages = %d", len(messages))
 	}
 	last := messages[len(messages)-1]
@@ -121,8 +121,29 @@ func TestBuildUpdatePayloadFinal(t *testing.T) {
 	if len(children) != 4 || children[2] != "divider" || children[3] != "footer" {
 		t.Fatalf("root children = %#v", children)
 	}
-	divider := components[4].(map[string]any)
-	if divider["component"] != "Divider" || divider["axis"] != "horizontal" {
+	if root["align"] != "stretch" {
+		t.Fatalf("root align = %v", root["align"])
+	}
+	var body map[string]any
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["id"] == "body" {
+			body = component
+			break
+		}
+	}
+	if body == nil || body["align"] != "stretch" {
+		t.Fatalf("body = %#v", body)
+	}
+	var divider map[string]any
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["id"] == "divider" {
+			divider = component
+			break
+		}
+	}
+	if divider == nil || divider["component"] != "Divider" || divider["axis"] != "horizontal" {
 		t.Fatalf("divider = %#v", divider)
 	}
 }
@@ -135,7 +156,7 @@ func TestBuildCreatePayloadWithoutFooterOmitsDivider(t *testing.T) {
 		isGroup:        true,
 		robotCode:      "robot-test",
 	}
-	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "body", "", "green", "FINISH")
+	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "", "body", "", "green", "FINISH")
 	messages := decodeA2UI(t, payload)
 	update := messages[2]["updateComponents"].(map[string]any)
 	components := update["components"].([]any)
@@ -153,11 +174,56 @@ func TestBuildUpdatePayloadIncludesComponentsForProgress(t *testing.T) {
 		surfaceID:  "surface-1",
 		lastTheme:  "blue",
 	}
-	payload := buildUpdatePayload(state, "track-1-1", "working", "progress", "", "blue", "INPUTTING")
+	payload := buildUpdatePayload(state, "track-1-1", "working", "", "progress", "", "blue", "INPUTTING")
 	messages := decodeA2UI(t, payload)
 	last := messages[len(messages)-1]
 	if _, ok := last["updateComponents"]; !ok {
 		t.Fatalf("progress update has no components: %#v", last)
+	}
+}
+
+func TestBuildUpdatePayloadIncludesToolActivity(t *testing.T) {
+	state := &cardState{
+		outTrackID: "track-1",
+		surfaceID:  "surface-1",
+		lastTheme:  "blue",
+	}
+	payload := buildUpdatePayload(state, "track-1-1", "working", "⏳ Tool calls · 2", "intermediate output", "footer", "blue", "INPUTTING")
+	messages := decodeA2UI(t, payload)
+	if len(messages) != 4 {
+		t.Fatalf("messages = %d", len(messages))
+	}
+	activityUpdate := messages[1]["updateDataModel"].(map[string]any)
+	if activityUpdate["path"] != "/activity" || activityUpdate["value"] != "⏳ Tool calls · 2" {
+		t.Fatalf("activity update = %#v", activityUpdate)
+	}
+
+	update := messages[3]["updateComponents"].(map[string]any)
+	components := update["components"].([]any)
+	root := components[0].(map[string]any)
+	children := root["children"].([]any)
+	wantChildren := []string{"header", "activity", "activity-divider", "body", "divider", "footer"}
+	if len(children) != len(wantChildren) {
+		t.Fatalf("root children = %#v", children)
+	}
+	for i, want := range wantChildren {
+		if children[i] != want {
+			t.Fatalf("root children = %#v, want %#v", children, wantChildren)
+		}
+	}
+
+	var foundActivity bool
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["id"] == "activity" && component["component"] == "Markdown" {
+			content := component["content"].(map[string]any)
+			if content["path"] == "/activity" {
+				foundActivity = true
+			}
+		}
+	}
+	if !foundActivity {
+		t.Fatalf("missing activity component: %#v", components)
 	}
 }
 
@@ -170,7 +236,7 @@ func TestBuildCreatePayloadRendersTable(t *testing.T) {
 		robotCode:      "robot-test",
 	}
 	body := "| name | value |\n|---|---|\n| alpha | 1 |\n| beta | 2 |"
-	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", body, "", "green", "FINISH")
+	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "", body, "", "green", "FINISH")
 	messages := decodeA2UI(t, payload)
 	update := messages[2]["updateComponents"].(map[string]any)
 	components := update["components"].([]any)

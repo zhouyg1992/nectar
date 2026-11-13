@@ -243,7 +243,7 @@ func formatQuotedMessage(replied *repliedMessage, userText string) string {
 	quoted = truncateRunes(quoted, quotedMessageLimit)
 	quoted = strings.ReplaceAll(quoted, "\r\n", "\n")
 	quoted = strings.ReplaceAll(quoted, "\n", "\n> ")
-	return "[引用消息]\n> " + quoted + "\n\n" + userText
+	return "[Quoted message]\n> " + quoted + "\n\n" + userText
 }
 
 func extractQuotedText(raw json.RawMessage) string {
@@ -345,5 +345,5 @@ func truncateUTF8(value string, limit int) string {
 	if strings.Count(head, "```")%2 == 1 {
 		head += "\n```"
 	}
-	return head + "\n\n…（内容过长，已截断）"
+	return head + "\n\n… (content truncated)"
 }

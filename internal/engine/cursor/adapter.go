@@ -255,7 +255,7 @@ func processError(ctx context.Context, waitErr error, stderr string) string {
 	return waitErr.Error()
 }
 
-const cursorLoginHint = "Cursor CLI 未登录。请在运行 Nectar 的同一用户下执行 `agent login`（旧版命令 `cursor-agent login`），或设置 `CURSOR_API_KEY`，然后重启 Nectar 服务。"
+const cursorLoginHint = "Cursor CLI is not logged in. Run `agent login` (or `cursor-agent login` for older versions) as the same user running Nectar, or set `CURSOR_API_KEY`, then restart the Nectar service."
 
 func cursorAuthHint(text string) (string, bool) {
 	lower := strings.ToLower(text)

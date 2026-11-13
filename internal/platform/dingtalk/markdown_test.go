@@ -83,7 +83,7 @@ func TestTruncateUTF8(t *testing.T) {
 	if !utf8.ValidString(got) {
 		t.Fatal("truncated string is not valid UTF-8")
 	}
-	if !strings.Contains(got, "内容过长") {
+	if !strings.Contains(got, "content truncated") {
 		t.Fatalf("missing truncation marker: %q", got)
 	}
 }

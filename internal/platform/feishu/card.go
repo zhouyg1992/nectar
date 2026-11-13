@@ -22,7 +22,18 @@ func renderCard(card *platform.Card) (string, error) {
 		template = "red"
 	}
 
-	elements := buildCardElements(truncateCardBody(card.Body))
+	bodyElements := buildCardElements(truncateCardBody(card.Body))
+	elements := make([]any, 0, len(bodyElements)+3)
+	if activity := strings.TrimSpace(card.Activity); activity != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": sanitizeMarkdownText(activity),
+		})
+		if len(bodyElements) > 0 {
+			elements = append(elements, map[string]any{"tag": "hr"})
+		}
+	}
+	elements = append(elements, bodyElements...)
 	if card.Footer != "" {
 		if len(elements) > 0 {
 			elements = append(elements, map[string]any{"tag": "hr"})
@@ -76,5 +87,5 @@ func truncateCardBody(body string) string {
 	if strings.Count(head, "```")%2 == 1 {
 		head += "\n```"
 	}
-	return head + "\n\n…（内容过长，已截断）"
+	return head + "\n\n… (content truncated)"
 }

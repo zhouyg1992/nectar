@@ -17,10 +17,11 @@ const (
 
 // Card is a platform-neutral status card rendered by each adapter.
 type Card struct {
-	Title  string
-	Body   string
-	Status CardStatus
-	Footer string
+	Title    string
+	Activity string
+	Body     string
+	Status   CardStatus
+	Footer   string
 }
 
 // Message is the normalized form of an inbound chat message.
