@@ -1,5 +1,11 @@
 # 路线图与待实现
 
+## v0.5.0 已完成
+
+- 钉钉 Stream 模式长连接、A2UI 流式卡片与图片/文件附件
+- 交互式安装脚本：自动检测引擎、生成配置并安装后台服务
+- `/status` 显示当前引擎与模型
+
 ## v0.4.0 已完成
 
 - Cursor Agent CLI 引擎适配
@@ -36,7 +42,7 @@
 - 教训注入与审核卡片
 - 定时任务
 - 云同步
-- 多平台实现与 Codex/OpenCode/Cursor/Claude Code/Pi 之外的引擎
+- 飞书 / 钉钉之外的平台，以及 Codex/OpenCode/Cursor/Claude Code/Pi 之外的引擎
 
 ## 后续
 
@@ -58,7 +64,7 @@
 
 ### 更远
 
-- 钉钉、Telegram、微信、Slack
+- Telegram、微信、Slack
 - Kimi
 - Jev 决策服务
 - Agent Teams / Multi-Bot Relay

@@ -1,5 +1,11 @@
 # Roadmap
 
+## v0.5.0 complete
+
+- DingTalk Stream-mode long connection, A2UI streaming cards, and image/file attachments
+- Interactive installer: detects engines, writes config, and installs the background service
+- `/status` shows the current engine and model
+
 ## v0.4.0 complete
 
 - Cursor Agent CLI engine support
@@ -36,7 +42,7 @@
 - Lesson injection and review cards
 - Scheduled tasks
 - Cloud sync
-- Multi-platform support and engines beyond Codex/OpenCode/Cursor/Claude Code/Pi
+- Platforms beyond Feishu / DingTalk, and engines beyond Codex/OpenCode/Cursor/Claude Code/Pi
 
 ## Later
 
@@ -58,7 +64,7 @@
 
 ### Farther out
 
-- DingTalk, Telegram, WeChat, Slack
+- Telegram, WeChat, Slack
 - Kimi
 - Jev decision service
 - Agent Teams / Multi-Bot Relay

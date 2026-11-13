@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.0 — 2026-11-13
+
+### Added
+
+- DingTalk platform adapter: receives direct and group @ messages over a Stream-mode long connection, with no public callback required
+- DingTalk A2UI streaming cards with Markdown, native tables, and code blocks; falls back to plain Markdown when card permissions are unavailable
+- DingTalk inbound image, file, and mixed rich-text messages are downloaded and handed to engines through the platform-neutral attachment model
+- DingTalk emoji reactions and message deduplication
+- `[dingtalk]` configuration section, `DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET` environment variables, and `bot.platform = "dingtalk"`
+- Interactive installer: detects installed engine CLIs, lets you choose an engine and platform, writes a minimal config, and installs and starts the background service
+- `/status` shows the current engine and model
+- English documentation, DingTalk setup guide, and an animated flow diagram
+
+### Changed
+
+- Upgraded to Go 1.26
+- Streamlined the documentation structure to usage guides only
+
+### Fixed
+
+- DingTalk tables now render with native A2UI table components instead of broken Markdown tables
+
 ## v0.4.1 — 2026-11-12
 
 ### Changed

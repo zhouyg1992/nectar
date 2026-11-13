@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Memory that grows with you.</strong><br>
-  Go 编写的飞书 ↔ Codex/OpenCode Agent 桥接器
+  Go 编写的聊天应用 ↔ 编码 Agent 桥接器
 </p>
 
 <p align="center">
@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.4.1
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.5.0
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
