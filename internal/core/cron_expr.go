@@ -16,9 +16,11 @@ type cronSpec struct {
 	dom    uint64
 	month  uint64
 	dow    uint64
-	domAny bool
-	dowAny bool
-	loc    *time.Location
+	// Vixie cron uses AND for the two day fields when either contains a
+	// wildcard, including stepped forms such as */2.
+	domWildcard bool
+	dowWildcard bool
+	loc         *time.Location
 }
 
 var cronMonthNames = map[string]int{
@@ -77,7 +79,7 @@ func parseCronExpression(expr string) (*cronSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cron hour: %w", err)
 	}
-	dom, domAny, err := parseCronField(fields[2], 1, 31, nil)
+	dom, domWildcard, err := parseCronField(fields[2], 1, 31, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cron day-of-month: %w", err)
 	}
@@ -85,20 +87,20 @@ func parseCronExpression(expr string) (*cronSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cron month: %w", err)
 	}
-	dow, dowAny, err := parseCronField(fields[4], 0, 7, cronWeekdayNames)
+	dow, dowWildcard, err := parseCronField(fields[4], 0, 7, cronWeekdayNames)
 	if err != nil {
 		return nil, fmt.Errorf("cron day-of-week: %w", err)
 	}
 
 	return &cronSpec{
-		minute: minute,
-		hour:   hour,
-		dom:    dom,
-		month:  month,
-		dow:    dow,
-		domAny: domAny,
-		dowAny: dowAny,
-		loc:    loc,
+		minute:      minute,
+		hour:        hour,
+		dom:         dom,
+		month:       month,
+		dow:         dow,
+		domWildcard: domWildcard,
+		dowWildcard: dowWildcard,
+		loc:         loc,
 	}, nil
 }
 
@@ -108,7 +110,7 @@ func parseCronField(raw string, min, max int, names map[string]int) (uint64, boo
 		return 0, false, fmt.Errorf("empty field")
 	}
 	var bits uint64
-	any := raw == "*" || raw == "?"
+	wildcard := strings.Contains(raw, "*") || strings.Contains(raw, "?")
 	for _, part := range strings.Split(raw, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
@@ -163,7 +165,7 @@ func parseCronField(raw string, min, max int, names map[string]int) (uint64, boo
 			bits |= cronBit(value, min, max)
 		}
 	}
-	return bits, any, nil
+	return bits, wildcard, nil
 }
 
 func cronValue(raw string, names map[string]int) (int, error) {
@@ -230,18 +232,12 @@ func (c *cronSpec) matches(t time.Time) bool {
 
 	domMatch := c.dom&(uint64(1)<<uint(t.Day()-1)) != 0
 	dowMatch := c.dow&(uint64(1)<<uint(int(t.Weekday()))) != 0
-	switch {
-	case c.domAny && c.dowAny:
-		return true
-	case c.domAny:
-		return dowMatch
-	case c.dowAny:
-		return domMatch
-	default:
-		// Standard cron treats day-of-month and day-of-week as OR when both
-		// are restricted.
-		return domMatch || dowMatch
+	if c.domWildcard || c.dowWildcard {
+		return domMatch && dowMatch
 	}
+	// Standard cron treats day-of-month and day-of-week as OR only when both
+	// fields are restricted.
+	return domMatch || dowMatch
 }
 
 func parseEvery(value string) (time.Duration, error) {

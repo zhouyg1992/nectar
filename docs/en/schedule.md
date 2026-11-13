@@ -9,9 +9,10 @@ Nectar embeds an in-process scheduler. Tasks are persisted in `~/.nectar/schedul
 enabled = true
 timezone = "Local"
 startup_grace = "5m"
+history_limit = 100
 ```
 
-`startup_grace` is how late a missed task may be while still running once after a restart. Older one-shot tasks are marked missed; recurring tasks move to their next future occurrence.
+`startup_grace` is how late a missed task may be while still running once after a restart. Use `0s` to disable catch-up. Older one-shot tasks are marked missed; recurring tasks move to their next future occurrence. `history_limit` keeps only the newest completed/failed tasks; the default is 100 and `0` means unlimited.
 
 ## Chat commands
 
@@ -70,6 +71,15 @@ Pass `--no-skills` to leave global agent configuration untouched.
 so the global skill and workspace `AGENTS.md` block stay in sync. You can also
 run `nectar skills install` manually.
 
+To remove only the skill and workspace hints:
+
+```bash
+nectar skills uninstall
+```
+
+This removes `nectar-schedule` from the Nectar, Codex, Claude, and shared Agents
+skill roots without deleting config, task data, or `skill-backups`.
+
 ## Semantics
 
 - Standard five-field cron expressions, including `*`, `*/n`, ranges, lists, and month/weekday names.
@@ -77,4 +87,5 @@ run `nectar skills install` manually.
 - A one-shot task interrupted by a restart may run once more inside `startup_grace` (at-least-once semantics).
 - If a task is still running at its next occurrence, that occurrence is skipped and recorded in `last_error`.
 - Deleting a task stops future runs but does not interrupt an in-flight run.
+- `nectar schedule run <id>` executes once without consuming a one-shot task's original plan.
 - Tasks currently reuse the original chat session; `new-per-run` isolation is not implemented yet.

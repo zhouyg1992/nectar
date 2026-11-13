@@ -50,6 +50,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "skills" {
 		return runSkills(args[1:])
 	}
+	if len(args) > 0 && args[0] == "uninstall" {
+		return runUninstall(args[1:])
+	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		printMainUsage()
 		return nil
@@ -80,7 +83,8 @@ func printMainUsage() {
   nectar -version
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
-  nectar skills install
+  nectar skills <install|uninstall>
+  nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
   nectar service <install|uninstall|start|stop|restart|status|logs>
 `)
 }
@@ -162,6 +166,7 @@ func runBot(configPath string) error {
 			Anchors:         anchors,
 			DefaultTimezone: cfg.Schedule.Timezone,
 			StartupGrace:    grace,
+			HistoryLimit:    cfg.Schedule.HistoryLimit,
 			Logger:          logger,
 		})
 		if err != nil {
@@ -181,7 +186,7 @@ func runBot(configPath string) error {
 		}
 		defer scheduleAPI.Close()
 		if err := scheduler.Start(ctx, func(task core.ScheduledTask, anchor core.SessionAnchor) error {
-			router.Handle(platform.Message{
+			return router.ExecuteScheduled(ctx, platform.Message{
 				MessageID: anchor.MessageID,
 				Channel:   anchor.Channel,
 				ChatID:    anchor.ChatID,
@@ -191,7 +196,6 @@ func runBot(configPath string) error {
 				ThreadID:  anchor.ThreadID,
 				Origin:    "schedule",
 			})
-			return nil
 		}); err != nil {
 			return err
 		}

@@ -9,10 +9,12 @@ Nectar 内置一个进程内调度器。任务持久化到 `~/.nectar/schedules.
 enabled = true
 timezone = "Local"      # 或 "Asia/Shanghai"
 startup_grace = "5m"
+history_limit = 100
 ```
 
 - `timezone` 是 cron 的默认时区；也可以在单条任务里覆盖。
-- `startup_grace` 控制重启后错过多久以内的任务仍然补跑。更早的一次性任务会标记为 missed，周期任务直接跳到下一次。
+- `startup_grace` 控制重启后错过多久以内的任务仍然补跑；设为 `0s` 时不补跑。更早的一次性任务会标记为 missed，周期任务直接跳到下一次。
+- `history_limit` 控制保留多少条已完成/失败任务；默认 100，设为 `0` 表示不限制。
 
 ## 聊天命令
 
@@ -82,6 +84,15 @@ CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信。Agent 会话
 自动刷新全局 skill 和工作区 `AGENTS.md` 托管片段。需要单独刷新时也可以手动运行
 `nectar skills install`。
 
+只卸载 Skill 和工作区托管片段时运行：
+
+```bash
+nectar skills uninstall
+```
+
+卸载会删除 Nectar、Codex、Claude、Agents 四个 Skill 安装位置中的
+`nectar-schedule` 目录，但不会删除配置、任务数据和 `skill-backups`。
+
 ## 语义与边界
 
 - cron 使用标准 5 段格式：`minute hour day month weekday`，支持 `*`、`*/n`、`a-b`、`a-b/n`、逗号列表和 `jan-dec` / `sun-sat` 名称。
@@ -90,4 +101,5 @@ CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信。Agent 会话
 - 一次性任务如果在执行过程中进程重启，`startup_grace` 内可能再执行一次（至少一次语义）。
 - 同一任务上一轮未结束时，下一次触发会跳过并记录 `last_error`，不会叠加执行。
 - 删除任务只停止未来调度，默认不打断正在执行的那一轮。
+- `nectar schedule run <id>` 会立即执行一次，但不会消耗一次性任务原来的计划。
 - 目前所有任务复用原聊天会话；需要隔离上下文的长任务请等待后续 `new-per-run` 支持。

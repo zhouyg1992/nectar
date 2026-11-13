@@ -59,6 +59,19 @@ func TestScheduleDefaults(t *testing.T) {
 	if grace != 5*time.Minute {
 		t.Fatalf("grace = %s", grace)
 	}
+	if cfg.Schedule.HistoryLimit != 100 {
+		t.Fatalf("history limit = %d", cfg.Schedule.HistoryLimit)
+	}
+}
+
+func TestScheduleRejectsNegativeHistoryLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[schedule]\nhistory_limit = -1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected negative history_limit error")
+	}
 }
 
 func TestScheduleRejectsInvalidTimezone(t *testing.T) {

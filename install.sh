@@ -772,15 +772,7 @@ log "  $BIN_NAME update"
 
 log ""
 log "Uninstall:"
-if [ "$SERVICE_TOUCHED" -eq 1 ]; then
-	log "  $BIN_NAME service uninstall"
-fi
-log "  rm -f \"$BIN_DIR/$BIN_NAME\""
-log "  rm -rf \"${CODEX_HOME:-$HOME/.codex}/skills/$SKILL_NAME\" \"$HOME/.claude/skills/$SKILL_NAME\" \"$HOME/.agents/skills/$SKILL_NAME\""
-log "  remove the '<!-- BEGIN NECTAR SCHEDULE -->' block from workspace AGENTS.md files"
-case "$CONFIG_FILE" in
-"$HOME/.nectar/"*) ;;
-*) log "  rm -f \"$CONFIG_FILE\"" ;;
-esac
-log "  rm -rf \"$HOME/.nectar\"   # optional: config, data, workspaces, lessons"
+log "  \"$BIN_DIR/$BIN_NAME\" uninstall --config \"$CONFIG_FILE\" --binary \"$BIN_DIR/$BIN_NAME\""
+log "  \"$BIN_DIR/$BIN_NAME\" uninstall --purge-data  # optional: also remove config, data, and backups"
+log "  \"$BIN_DIR/$BIN_NAME\" skills uninstall       # only remove the Agent skill"
 log "docs: https://github.com/${REPO}#readme"

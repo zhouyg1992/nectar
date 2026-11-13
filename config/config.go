@@ -123,6 +123,7 @@ type ScheduleConfig struct {
 	Enabled      *bool  `toml:"enabled"`
 	Timezone     string `toml:"timezone"`
 	StartupGrace string `toml:"startup_grace"`
+	HistoryLimit int    `toml:"history_limit"`
 }
 
 func defaults() Config {
@@ -171,6 +172,7 @@ func defaults() Config {
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
 		Schedule: ScheduleConfig{
 			StartupGrace: "5m",
+			HistoryLimit: 100,
 		},
 	}
 }
@@ -398,6 +400,9 @@ func normalize(cfg *Config) error {
 	}
 	if _, err := cfg.ScheduleGrace(); err != nil {
 		return err
+	}
+	if cfg.Schedule.HistoryLimit < 0 {
+		return errors.New("schedule.history_limit must not be negative")
 	}
 	if err := normalizePlatform(cfg); err != nil {
 		return err

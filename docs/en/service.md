@@ -91,11 +91,17 @@ Logs:
 
 The LaunchAgent starts **after the user logs in**. If nobody logs in after a Mac restart, Nectar does not run. For true 24/7 operation, use an always-on Linux server, NAS, or Mac mini.
 
-Uninstalling only removes the service file; configuration, data, and logs are kept:
+`nectar service uninstall` only removes the service file. It does not remove the binary,
+agent skills, configuration, data, or logs. For a complete uninstall:
 
 ```bash
-nectar service uninstall
+nectar uninstall
+nectar uninstall --purge-data
 ```
+
+The first command removes the service, binary, agent skills, and managed workspace hints
+while keeping config, task data, and backups. The second also removes config, data, and
+backups. Use `nectar skills uninstall` to remove only the agent skill.
 
 ## Linux
 

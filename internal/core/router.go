@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -151,11 +152,39 @@ func (r *Router) Handle(msg platform.Message) {
 	})
 }
 
-func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
+// ExecuteScheduled runs a scheduler-owned prompt through the same per-session
+// queue as chat messages and waits until that turn finishes. The scheduler uses
+// the returned error to report the actual agent result instead of merely
+// whether the prompt was enqueued.
+func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) error {
+	msg.Origin = "schedule"
+	text := strings.TrimSpace(msg.Text)
+	if text == "" && len(msg.Attachments) == 0 {
+		return errors.New("scheduled prompt is empty")
+	}
+	key := SessionKey{
+		Channel:  msg.Channel,
+		ChatID:   msg.ChatID,
+		ThreadID: msg.ThreadID,
+		AgentID:  r.cfg.AgentID,
+	}
+	done := make(chan error, 1)
+	r.queue.Do(key.String(), func() {
+		done <- r.execute(key, msg, text)
+	})
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) error {
 	workdir, err := r.workspaces.ForChat(msg.ChatID)
 	if err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ Failed to create workspace: "+err.Error())
-		return
+		return err
 	}
 
 	opts := r.cfg.EngineOptions
@@ -207,13 +236,13 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	attachments, cleanupAttachments, err := r.prepareAttachments(msg, workdir)
 	if err != nil {
 		answer := "❌ Failed to download attachments: " + err.Error()
-		r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return
+		return errors.Join(err, finishErr)
 	}
 	defer cleanupAttachments()
 	lessonPrompt := prompt
@@ -244,13 +273,13 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		if sessionNotice != "" {
 			answer = sessionNotice + "\n\n" + answer
 		}
-		r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return
+		return errors.Join(err, finishErr)
 	}
 
 	var stream strings.Builder
@@ -371,15 +400,16 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 
 	elapsed := time.Since(startedAt)
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
+	var finishErr error
 	if failed {
-		r.finish(msg, cardID, &platform.Card{
+		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
 		}, answer)
 	} else {
-		r.finish(msg, cardID, &platform.Card{
+		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardComplete,
 			Title:  cardTitleComplete,
 			Body:   answer,
@@ -390,6 +420,13 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	if len(errTexts) > 0 {
 		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"))
 	}
+	var runErr error
+	if len(errTexts) > 0 {
+		runErr = fmt.Errorf("agent error: %s", execguard.Truncate(strings.Join(errTexts, "\n"), 4<<10))
+	} else if failed {
+		runErr = fmt.Errorf("agent tool error: %s", execguard.Truncate(strings.Join(toolErrors, "\n"), 4<<10))
+	}
+	return errors.Join(runErr, finishErr)
 }
 
 func initialCardBody(hasAttachments bool) string {
@@ -399,22 +436,22 @@ func initialCardBody(hasAttachments bool) string {
 	return "Hold on, warming up the hive…"
 }
 
-func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) {
+func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) error {
 	if cardID != "" {
 		if err := r.platform.Update(r.ctx, cardID, platform.Reply{Card: card}); err == nil {
-			return
+			return nil
 		} else {
 			r.logger.Error("update final card failed", "message_id", cardID, "error", err)
 			fallback := replyTarget(msg)
 			fallback.Card = card
 			if _, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
-				return
+				return nil
 			} else {
 				r.logger.Error("send final card failed", "chat", msg.ChatID, "error", sendErr)
 			}
 		}
 	}
-	r.reply(msg, fallbackText)
+	return r.reply(msg, fallbackText)
 }
 
 func (r *Router) stop(key SessionKey, msg platform.Message) {
@@ -462,13 +499,14 @@ func (r *Router) resolvedModel() string {
 	return model
 }
 
-func (r *Router) reply(msg platform.Message, text string) {
+func (r *Router) reply(msg platform.Message, text string) error {
 	reply := replyTarget(msg)
 	reply.Text = text
 	_, err := r.platform.Send(r.ctx, reply)
 	if err != nil {
 		r.logger.Error("send reply failed", "chat", msg.ChatID, "error", err)
 	}
+	return err
 }
 
 func (r *Router) sendHelp(msg platform.Message) {

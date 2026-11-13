@@ -48,6 +48,38 @@ func TestCronDayOfMonthOrWeekday(t *testing.T) {
 	}
 }
 
+func TestCronSteppedWildcardUsesANDForDayFields(t *testing.T) {
+	spec, err := parseCronExpression("0 9 */1 * 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC) // Friday
+	next, err := spec.next(after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC) // Monday
+	if !next.Equal(want) {
+		t.Fatalf("next = %s, want %s", next, want)
+	}
+}
+
+func TestCronSteppedDayOfMonthRequiresWeekdayMatch(t *testing.T) {
+	spec, err := parseCronExpression("0 9 */2 * 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	next, err := spec.next(after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC) // Odd day and Monday
+	if !next.Equal(want) {
+		t.Fatalf("next = %s, want %s", next, want)
+	}
+}
+
 func TestCronTimezonePrefix(t *testing.T) {
 	spec, err := parseCronExpression("CRON_TZ=Asia/Shanghai 0 9 * * *")
 	if err != nil {

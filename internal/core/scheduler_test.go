@@ -1,9 +1,15 @@
 package core
 
 import (
+	"context"
+	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/zhouyg1992/nectar/internal/platform"
 )
 
 func newTestScheduler(t *testing.T, now func() time.Time, withAnchor bool) (*Scheduler, *AnchorStore, SessionKey) {
@@ -215,4 +221,249 @@ func TestSchedulerUpdatePromptKeepsNextRun(t *testing.T) {
 	if !updated.NextRun.Equal(task.NextRun) {
 		t.Fatalf("next changed from %s to %s", task.NextRun, updated.NextRun)
 	}
+}
+
+func TestSchedulerWaitsForRunCompletionAndRejectsUpdate(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	scheduler.trigger = func(ScheduledTask, SessionAnchor) error {
+		close(started)
+		<-release
+		return nil
+	}
+
+	task, err := scheduler.Add(scheduleRequestFor(key, "cron", "long run"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(24 * time.Hour)
+	scheduler.fireDue(now)
+	<-started
+
+	if _, err := scheduler.Update(task.ID, SchedulePatch{Prompt: "changed"}); err == nil {
+		t.Fatal("expected update while running to fail")
+	}
+
+	now = now.Add(24 * time.Hour)
+	scheduler.fireDue(now)
+	current, _ := scheduler.Get(task.ID)
+	if !strings.Contains(current.LastError, "still in progress") {
+		t.Fatalf("last error = %q", current.LastError)
+	}
+
+	close(release)
+	current = waitForSchedulerRun(t, scheduler, task.ID, 1)
+	if current.RunCount != 1 {
+		t.Fatalf("run count = %d, want 1", current.RunCount)
+	}
+	if current.Status != ScheduleActive {
+		t.Fatalf("status = %s, want active", current.Status)
+	}
+}
+
+func TestSchedulerRunNowKeepsOneShotPlan(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
+	scheduler.trigger = func(ScheduledTask, SessionAnchor) error { return nil }
+	task, err := scheduler.Add(scheduleRequestFor(key, "in", "reminder"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantNext := task.NextRun
+	if err := scheduler.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	current := waitForSchedulerRun(t, scheduler, task.ID, 1)
+	if current.Status != ScheduleActive {
+		t.Fatalf("status = %s, want active", current.Status)
+	}
+	if !current.NextRun.Equal(wantNext) {
+		t.Fatalf("next = %s, want original %s", current.NextRun, wantNext)
+	}
+}
+
+func TestSchedulerMutationRollbackOnPersistFailure(t *testing.T) {
+	newTask := func(t *testing.T) (*Scheduler, ScheduledTask) {
+		t.Helper()
+		now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+		scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
+		task, err := scheduler.Add(scheduleRequestFor(key, "cron", "original"), "user-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return scheduler, *task
+	}
+	breakStore := func(t *testing.T, scheduler *Scheduler) {
+		t.Helper()
+		blocker := filepath.Join(t.TempDir(), "not-a-directory")
+		if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		scheduler.storePath = filepath.Join(blocker, "schedules.json")
+	}
+
+	t.Run("pause", func(t *testing.T) {
+		scheduler, before := newTask(t)
+		breakStore(t, scheduler)
+		if err := scheduler.Pause(before.ID); err == nil {
+			t.Fatal("expected persist error")
+		}
+		after, _ := scheduler.Get(before.ID)
+		if after.Status != before.Status || !after.NextRun.Equal(before.NextRun) {
+			t.Fatalf("task changed after failed pause: %#v", after)
+		}
+	})
+
+	t.Run("resume", func(t *testing.T) {
+		scheduler, before := newTask(t)
+		if err := scheduler.Pause(before.ID); err != nil {
+			t.Fatal(err)
+		}
+		paused, _ := scheduler.Get(before.ID)
+		breakStore(t, scheduler)
+		if err := scheduler.Resume(before.ID); err == nil {
+			t.Fatal("expected persist error")
+		}
+		after, _ := scheduler.Get(before.ID)
+		if after.Status != SchedulePaused || !after.NextRun.IsZero() {
+			t.Fatalf("task changed after failed resume: %#v", after)
+		}
+		if after.UpdatedAt != paused.UpdatedAt {
+			t.Fatalf("updated_at changed from %s to %s", paused.UpdatedAt, after.UpdatedAt)
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		scheduler, before := newTask(t)
+		breakStore(t, scheduler)
+		if err := scheduler.Delete(before.ID); err == nil {
+			t.Fatal("expected persist error")
+		}
+		if _, ok := scheduler.Get(before.ID); !ok {
+			t.Fatal("task was removed after failed delete")
+		}
+	})
+
+	t.Run("update", func(t *testing.T) {
+		scheduler, before := newTask(t)
+		breakStore(t, scheduler)
+		if _, err := scheduler.Update(before.ID, SchedulePatch{Prompt: "changed"}); err == nil {
+			t.Fatal("expected persist error")
+		}
+		after, _ := scheduler.Get(before.ID)
+		if after.Prompt != before.Prompt {
+			t.Fatalf("prompt = %q, want %q", after.Prompt, before.Prompt)
+		}
+	})
+}
+
+func TestSchedulerZeroStartupGraceDoesNotCatchUp(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, err := NewScheduler(SchedulerOptions{
+		StartupGrace: 0,
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := &ScheduledTask{
+		ID:        "c_once",
+		Mode:      ScheduleOnce,
+		Status:    ScheduleActive,
+		ExecuteAt: now.Add(-time.Minute),
+		NextRun:   now.Add(-time.Minute),
+	}
+	scheduler.tasks[task.ID] = task
+	scheduler.recoverLocked(now)
+	if task.Status != ScheduleCompleted {
+		t.Fatalf("status = %s, want completed", task.Status)
+	}
+}
+
+func TestSchedulerStartRequiresTrigger(t *testing.T) {
+	scheduler, _, _ := newTestScheduler(t, time.Now, true)
+	if err := scheduler.Start(context.Background(), nil); err == nil {
+		t.Fatal("expected nil trigger to fail")
+	}
+}
+
+func TestSchedulerPrunesFinishedHistory(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, _ := newTestScheduler(t, func() time.Time { return now }, false)
+	scheduler.historyLimit = 2
+	for i := 0; i < 3; i++ {
+		id := fmt.Sprintf("done-%d", i)
+		scheduler.tasks[id] = &ScheduledTask{
+			ID:        id,
+			Status:    ScheduleCompleted,
+			UpdatedAt: now.Add(time.Duration(i) * time.Minute),
+		}
+	}
+	active := &ScheduledTask{ID: "active", Status: ScheduleActive, UpdatedAt: now}
+	scheduler.tasks[active.ID] = active
+
+	if err := scheduler.saveLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := scheduler.tasks["done-0"]; ok {
+		t.Fatal("oldest finished task was not pruned")
+	}
+	if _, ok := scheduler.tasks["done-1"]; !ok {
+		t.Fatal("newer finished task was pruned")
+	}
+	if _, ok := scheduler.tasks["done-2"]; !ok {
+		t.Fatal("newest finished task was pruned")
+	}
+	if _, ok := scheduler.tasks["active"]; !ok {
+		t.Fatal("active task was pruned")
+	}
+}
+
+func TestSchedulerUsesRouterRunResult(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
+	router, _ := newTestRouter(t, &fakeEngine{fail: true}, &fakePlatform{})
+	scheduler.trigger = func(task ScheduledTask, anchor SessionAnchor) error {
+		return router.ExecuteScheduled(context.Background(), platform.Message{
+			Channel:  anchor.Channel,
+			ChatID:   anchor.ChatID,
+			ChatType: anchor.ChatType,
+			UserID:   anchor.UserID,
+			Text:     task.Prompt,
+			Origin:   "schedule",
+		})
+	}
+
+	task, err := scheduler.Add(scheduleRequestFor(key, "in", "fail visibly"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(3 * time.Hour)
+	scheduler.fireDue(now)
+	current := waitForSchedulerRun(t, scheduler, task.ID, 1)
+	if current.Status != ScheduleFailed {
+		t.Fatalf("status = %s, want failed", current.Status)
+	}
+	if !strings.Contains(current.LastError, "boom") {
+		t.Fatalf("last error = %q", current.LastError)
+	}
+}
+
+func waitForSchedulerRun(t *testing.T, scheduler *Scheduler, id string, runCount int) ScheduledTask {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		scheduler.mu.RLock()
+		_, running := scheduler.running[id]
+		task := *scheduler.tasks[id]
+		scheduler.mu.RUnlock()
+		if !running && task.RunCount >= runCount {
+			return task
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("schedule %s did not finish", id)
+	return ScheduledTask{}
 }

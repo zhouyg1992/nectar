@@ -206,5 +206,7 @@ enabled = true
 timezone = "Local"
 # On startup, run a missed task immediately when it is at most this old.
 # Older one-shot tasks are marked missed; recurring tasks move to their next
-# future occurrence.
+# future occurrence. "0s" disables catch-up.
 startup_grace = "5m"
+# Keep at most this many completed/failed tasks. 0 keeps all history.
+history_limit = 100

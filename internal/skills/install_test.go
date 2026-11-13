@@ -83,3 +83,101 @@ func TestInstallNoWorkspace(t *testing.T) {
 		t.Fatalf("unexpected AGENTS.md: %v", err)
 	}
 }
+
+func TestUninstallSkillAndWorkspaceHint(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	dataDir := filepath.Join(home, ".nectar")
+	configPath := filepath.Join(dataDir, "config.toml")
+	workspace := filepath.Join(dataDir, "workspace")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	agents := filepath.Join(workspace, "AGENTS.md")
+	if err := os.WriteFile(agents, []byte("# User rules\n\n- keep me\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{
+		Home:       home,
+		DataDir:    dataDir,
+		ConfigPath: configPath,
+	}
+	if err := Install(opts); err != nil {
+		t.Fatal(err)
+	}
+	if err := Uninstall(UninstallOptions{
+		Home:       home,
+		DataDir:    dataDir,
+		ConfigPath: configPath,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	roots := []string{
+		filepath.Join(dataDir, "skills"),
+		filepath.Join(home, ".codex", "skills"),
+		filepath.Join(home, ".claude", "skills"),
+		filepath.Join(home, ".agents", "skills"),
+	}
+	for _, root := range roots {
+		if _, err := os.Stat(filepath.Join(root, ScheduleSkillName)); !os.IsNotExist(err) {
+			t.Fatalf("skill still exists under %s: %v", root, err)
+		}
+	}
+	data, err := os.ReadFile(agents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "- keep me") {
+		t.Fatal("user AGENTS.md content was removed")
+	}
+	if strings.Contains(string(data), blockBegin) || strings.Contains(string(data), blockEnd) {
+		t.Fatal("managed schedule block was not removed")
+	}
+	info, err := os.Stat(agents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Fatalf("AGENTS.md mode = %o, want 640", info.Mode().Perm())
+	}
+	if err := Uninstall(UninstallOptions{
+		Home:       home,
+		DataDir:    dataDir,
+		ConfigPath: configPath,
+	}); err != nil {
+		t.Fatalf("second uninstall should be idempotent: %v", err)
+	}
+}
+
+func TestUninstallDryRunKeepsSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	dataDir := filepath.Join(home, ".nectar")
+	configPath := filepath.Join(dataDir, "config.toml")
+	if err := Install(Options{
+		Home:        home,
+		DataDir:     dataDir,
+		ConfigPath:  configPath,
+		NoWorkspace: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Uninstall(UninstallOptions{
+		Home:        home,
+		DataDir:     dataDir,
+		ConfigPath:  configPath,
+		NoWorkspace: true,
+		DryRun:      true,
+		Quiet:       true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(dataDir, "skills", ScheduleSkillName, "SKILL.md")
+	if _, err := os.Stat(skill); err != nil {
+		t.Fatalf("dry run removed skill: %v", err)
+	}
+}

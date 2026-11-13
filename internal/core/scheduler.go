@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	schedulerMaxSleep   = 30 * time.Second
-	defaultStartupGrace = 5 * time.Minute
+	schedulerMaxSleep = 30 * time.Second
 )
 
 type ScheduleTrigger func(task ScheduledTask, anchor SessionAnchor) error
@@ -21,6 +20,7 @@ type SchedulerOptions struct {
 	Anchors         *AnchorStore
 	DefaultTimezone string
 	StartupGrace    time.Duration
+	HistoryLimit    int
 	Logger          *slog.Logger
 	Now             func() time.Time
 }
@@ -37,6 +37,7 @@ type Scheduler struct {
 	storePath       string
 	defaultTimezone string
 	startupGrace    time.Duration
+	historyLimit    int
 	logger          *slog.Logger
 	now             func() time.Time
 
@@ -56,17 +57,14 @@ func NewScheduler(opts SchedulerOptions) (*Scheduler, error) {
 	if now == nil {
 		now = time.Now
 	}
-	grace := opts.StartupGrace
-	if grace <= 0 {
-		grace = defaultStartupGrace
-	}
 	s := &Scheduler{
 		tasks:           make(map[string]*ScheduledTask),
 		running:         make(map[string]bool),
 		anchors:         opts.Anchors,
 		storePath:       opts.StorePath,
 		defaultTimezone: opts.DefaultTimezone,
-		startupGrace:    grace,
+		startupGrace:    opts.StartupGrace,
+		historyLimit:    opts.HistoryLimit,
 		logger:          logger,
 		now:             now,
 		wake:            make(chan struct{}, 1),
@@ -85,6 +83,9 @@ func NewScheduler(opts SchedulerOptions) (*Scheduler, error) {
 }
 
 func (s *Scheduler) Start(ctx context.Context, trigger ScheduleTrigger) error {
+	if trigger == nil {
+		return fmt.Errorf("scheduler trigger is required")
+	}
 	s.mu.Lock()
 	if s.started {
 		s.mu.Unlock()
@@ -256,16 +257,18 @@ func (s *Scheduler) fireDue(now time.Time) {
 		task.UpdatedAt = now
 		due = append(due, copy)
 	}
-	_ = s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.logger.Error("could not persist due schedule state", "error", err)
+	}
 	s.mu.Unlock()
 
 	for _, task := range due {
-		go s.execute(task)
+		go s.execute(task, true)
 	}
 }
 
-func (s *Scheduler) execute(task ScheduledTask) {
-	now := s.now()
+func (s *Scheduler) execute(task ScheduledTask, consumeOccurrence bool) {
+	startedAt := s.now()
 	var anchor SessionAnchor
 	var runErr error
 	if s.anchors != nil {
@@ -285,16 +288,16 @@ func (s *Scheduler) execute(task ScheduledTask) {
 		s.signalWake()
 		return
 	}
-	current.LastRun = now
+	current.LastRun = startedAt
 	current.RunCount++
-	current.UpdatedAt = now
+	current.UpdatedAt = s.now()
 	if runErr != nil {
 		current.LastError = runErr.Error()
 		s.logger.Warn("scheduled task failed", "id", task.ID, "error", runErr)
 	} else {
 		current.LastError = ""
 	}
-	if current.Mode == ScheduleOnce {
+	if consumeOccurrence && current.Mode == ScheduleOnce {
 		current.NextRun = time.Time{}
 		if runErr != nil {
 			current.Status = ScheduleFailed
@@ -302,7 +305,9 @@ func (s *Scheduler) execute(task ScheduledTask) {
 			current.Status = ScheduleCompleted
 		}
 	}
-	_ = s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.logger.Error("could not persist completed schedule run", "id", task.ID, "error", err)
+	}
 	s.signalWake()
 }
 
@@ -424,6 +429,10 @@ func (s *Scheduler) Pause(id string) error {
 	if task.Status != ScheduleActive {
 		return fmt.Errorf("schedule %s is %s, not active", id, task.Status)
 	}
+	if s.running[id] && task.Mode == ScheduleOnce {
+		return fmt.Errorf("schedule %s is currently running", id)
+	}
+	previous := *task
 	if task.Mode == ScheduleOnce {
 		remaining := task.ExecuteAt.Sub(now)
 		if remaining < 0 {
@@ -436,6 +445,7 @@ func (s *Scheduler) Pause(id string) error {
 	task.NextRun = time.Time{}
 	task.UpdatedAt = now
 	if err := s.saveLocked(); err != nil {
+		*task = previous
 		return err
 	}
 	s.signalWake()
@@ -456,6 +466,7 @@ func (s *Scheduler) Resume(id string) error {
 	if task.Status != SchedulePaused {
 		return fmt.Errorf("schedule %s is %s, not paused", id, task.Status)
 	}
+	previous := *task
 	task.Status = ScheduleActive
 	if task.Mode == ScheduleOnce {
 		if task.ExecuteAt.IsZero() {
@@ -466,12 +477,14 @@ func (s *Scheduler) Resume(id string) error {
 	} else {
 		next, err := nextRunFor(task, now)
 		if err != nil {
+			*task = previous
 			return err
 		}
 		task.NextRun = next
 	}
 	task.UpdatedAt = now
 	if err := s.saveLocked(); err != nil {
+		*task = previous
 		return err
 	}
 	s.signalWake()
@@ -481,11 +494,13 @@ func (s *Scheduler) Resume(id string) error {
 func (s *Scheduler) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.tasks[id]; !ok {
+	task, ok := s.tasks[id]
+	if !ok {
 		return fmt.Errorf("schedule %s not found", id)
 	}
 	delete(s.tasks, id)
 	if err := s.saveLocked(); err != nil {
+		s.tasks[id] = task
 		return err
 	}
 	s.signalWake()
@@ -499,6 +514,9 @@ func (s *Scheduler) Update(id string, patch SchedulePatch) (*ScheduledTask, erro
 	task, ok := s.tasks[id]
 	if !ok {
 		return nil, fmt.Errorf("schedule %s not found", id)
+	}
+	if s.running[id] {
+		return nil, fmt.Errorf("schedule %s is currently running", id)
 	}
 	previous := *task
 	if err := applySchedulePatch(task, patch, now); err != nil {
@@ -529,11 +547,12 @@ func (s *Scheduler) RunNow(id string) error {
 	}
 	s.running[id] = true
 	copy := *task
-	go s.execute(copy)
+	go s.execute(copy, false)
 	return nil
 }
 
 func (s *Scheduler) saveLocked() error {
+	pruned := s.pruneHistoryLocked()
 	if s.storePath == "" {
 		return nil
 	}
@@ -547,5 +566,38 @@ func (s *Scheduler) saveLocked() error {
 		}
 		return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
 	})
-	return saveScheduleTasks(s.storePath, tasks)
+	if err := saveScheduleTasks(s.storePath, tasks); err != nil {
+		for id, task := range pruned {
+			s.tasks[id] = task
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *Scheduler) pruneHistoryLocked() map[string]*ScheduledTask {
+	if s.historyLimit <= 0 {
+		return nil
+	}
+	var finished []*ScheduledTask
+	for _, task := range s.tasks {
+		if task.Status == ScheduleCompleted || task.Status == ScheduleFailed {
+			finished = append(finished, task)
+		}
+	}
+	if len(finished) <= s.historyLimit {
+		return nil
+	}
+	sort.Slice(finished, func(i, j int) bool {
+		if finished[i].UpdatedAt.Equal(finished[j].UpdatedAt) {
+			return finished[i].ID < finished[j].ID
+		}
+		return finished[i].UpdatedAt.Before(finished[j].UpdatedAt)
+	})
+	pruned := make(map[string]*ScheduledTask, len(finished)-s.historyLimit)
+	for _, task := range finished[:len(finished)-s.historyLimit] {
+		pruned[task.ID] = task
+		delete(s.tasks, task.ID)
+	}
+	return pruned
 }

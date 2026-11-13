@@ -20,6 +20,8 @@ func runSkills(args []string) error {
 	switch args[0] {
 	case "install":
 		return runSkillsInstall(args[1:])
+	case "uninstall", "remove":
+		return runSkillsUninstall(args[1:])
 	default:
 		printSkillsUsage()
 		return fmt.Errorf("unknown skills command %q", args[0])
@@ -58,6 +60,44 @@ func runSkillsInstall(args []string) error {
 	return nil
 }
 
+func runSkillsUninstall(args []string) error {
+	fs := flag.NewFlagSet("skills uninstall", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	configPath := fs.String("config", "", "path to config.toml")
+	dataDir := fs.String("data-dir", "", "Nectar data directory")
+	noWorkspace := fs.Bool("no-workspace", false, "do not update workspace AGENTS.md files")
+	dryRun := fs.Bool("dry-run", false, "show what would be removed")
+	quiet := fs.Bool("quiet", false, "suppress non-error output")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+	if err := skills.Uninstall(skills.UninstallOptions{
+		Home:        home,
+		DataDir:     *dataDir,
+		ConfigPath:  *configPath,
+		NoWorkspace: *noWorkspace,
+		Quiet:       *quiet,
+		DryRun:      *dryRun,
+	}); err != nil {
+		return err
+	}
+	if !*quiet {
+		if *dryRun {
+			fmt.Println("Agent skill uninstall preview complete.")
+		} else {
+			fmt.Println("Agent skill uninstalled.")
+		}
+	}
+	return nil
+}
+
 // refreshAgentSkills runs the newly installed binary so the embedded skill
 // always matches the binary version rather than the process doing the update.
 func refreshAgentSkills(binaryPath, configPath string) error {
@@ -76,8 +116,9 @@ func refreshAgentSkills(binaryPath, configPath string) error {
 func printSkillsUsage() {
 	fmt.Print(`Usage:
   nectar skills install [--config PATH] [--data-dir DIR] [--no-workspace] [--quiet]
+  nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry-run] [--quiet]
 
-Installs the Nectar agent skill for Codex, Claude, and shared Agents roots, and
-updates the managed schedule block in workspace AGENTS.md files.
+Installs or removes the Nectar agent skill for Codex, Claude, and shared Agents
+roots. Workspace cleanup removes only the managed schedule block from AGENTS.md.
 `)
 }

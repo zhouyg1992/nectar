@@ -152,6 +152,12 @@ type fakeEngine struct {
 	resumeErr  error
 }
 
+type blockingEngine struct {
+	started sync.Once
+	startCh chan struct{}
+	release chan struct{}
+}
+
 func (f *fakeEngine) Name() string { return "fake" }
 
 func (f *fakeEngine) Start(_ context.Context, prompt string, opts engine.EngineOptions) (<-chan engine.Event, error) {
@@ -208,6 +214,27 @@ func (f *fakeEngine) lastRequest() (string, engine.EngineOptions) {
 	defer f.mu.Unlock()
 	return f.lastPrompt, f.lastOpts
 }
+
+func (b *blockingEngine) Name() string { return "blocking" }
+
+func (b *blockingEngine) Start(context.Context, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	ch := make(chan engine.Event)
+	go func() {
+		ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: "blocking-session"}
+		b.started.Do(func() { close(b.startCh) })
+		<-b.release
+		ch <- engine.Event{Type: engine.EventMessage, Text: "finished"}
+		ch <- engine.Event{Type: engine.EventDone}
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (b *blockingEngine) Resume(context.Context, string, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	return b.Start(context.Background(), "", engine.EngineOptions{})
+}
+
+func (b *blockingEngine) Cancel(context.Context, string) error { return nil }
 
 type scriptedEngine struct {
 	events []engine.Event
@@ -354,6 +381,40 @@ func TestRouterStartsThenResumes(t *testing.T) {
 	starts, resumes, _ = eng.counts()
 	if starts != 2 || resumes != 1 {
 		t.Fatalf("after /new starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterExecuteScheduledWaitsForAgentCompletion(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &blockingEngine{
+		startCh: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+	done := make(chan error, 1)
+	go func() {
+		done <- router.ExecuteScheduled(context.Background(), platform.Message{
+			Channel: "feishu",
+			ChatID:  "c1",
+			Text:    "scheduled work",
+			Origin:  "schedule",
+		})
+	}()
+
+	<-eng.startCh
+	select {
+	case err := <-done:
+		t.Fatalf("ExecuteScheduled returned before completion: %v", err)
+	default:
+	}
+	close(eng.release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ExecuteScheduled did not wait for completion")
 	}
 }
 

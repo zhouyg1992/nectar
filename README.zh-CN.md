@@ -114,12 +114,14 @@ nectar update
 卸载：
 
 ```bash
-nectar service uninstall
-rm -f ~/.local/bin/nectar
-rm -rf ~/.nectar   # 可选：删除配置、数据、工作区和教训记录
+nectar uninstall                    # 删除服务、二进制、Skill 和 AGENTS.md 托管片段
+nectar uninstall --purge-data       # 同时删除配置、任务数据、工作区和备份
+nectar skills uninstall             # 只卸载 Agent Skill
 ```
 
-如果安装时用了 `--dir` 或 `--config`，请替换成对应路径。
+`nectar uninstall` 默认保留配置和任务数据；`--keep-binary` 可保留二进制，
+`--no-skills` 可跳过 Agent Skill 清理，`--dry-run` 可先预览清理项。如果安装时用了
+`--dir` 或 `--config`，请通过 `--binary`、`--config` 指定对应路径。
 
 > 后台服务支持需要 v0.1.1 及以上版本。
 

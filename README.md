@@ -115,12 +115,15 @@ Session mappings and the last context usage are persisted in `~/.nectar/sessions
 To uninstall:
 
 ```bash
-nectar service uninstall
-rm -f ~/.local/bin/nectar
-rm -rf ~/.nectar   # optional: removes config, data, workspaces, and lessons
+nectar uninstall                    # service, binary, skills, and managed AGENTS.md blocks
+nectar uninstall --purge-data       # also removes config, task data, workspaces, and backups
+nectar skills uninstall             # remove only the agent skill
 ```
 
-Adjust the paths if you used `--dir` or `--config`.
+`nectar uninstall` keeps config and task data by default. Use `--keep-binary` to keep
+the executable, `--no-skills` to leave agent skills untouched, and `--dry-run` to
+preview cleanup. If you used `--dir` or `--config`, pass `--binary` or `--config`
+with the same paths.
 
 > Background service support requires v0.1.1 or later.
 
