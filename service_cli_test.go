@@ -27,6 +27,24 @@ func TestValidateServiceConfig(t *testing.T) {
 			content: "[feishu]\napp_id = \"cli_xxxxxxxxxxxxxxxx\"\napp_secret = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n",
 			wantErr: true,
 		},
+		{
+			name:    "dingtalk configured",
+			content: "[bot]\nplatform = \"dingtalk\"\n\n[dingtalk]\nclient_id = \"dingrealid\"\nclient_secret = \"real-secret-value\"\n",
+		},
+		{
+			name:    "dingtalk auto detected",
+			content: "[dingtalk]\nclient_id = \"dingrealid\"\nclient_secret = \"real-secret-value\"\n",
+		},
+		{
+			name:    "dingtalk placeholders",
+			content: "[bot]\nplatform = \"dingtalk\"\n\n[dingtalk]\nclient_id = \"dingxxxxxxxxxxxxxxxx\"\nclient_secret = \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n",
+			wantErr: true,
+		},
+		{
+			name:    "both platforms require selection",
+			content: "[feishu]\napp_id = \"cli_realid\"\napp_secret = \"real-secret-value\"\n\n[dingtalk]\nclient_id = \"dingrealid\"\nclient_secret = \"real-secret-value\"\n",
+			wantErr: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

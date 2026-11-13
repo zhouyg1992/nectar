@@ -1,82 +1,197 @@
 # Nectar configuration
 # Default location: ~/.nectar/config.toml
+#
+# Only the selected platform's credentials are required. Every other section
+# has built-in defaults and can be omitted.
 
 [feishu]
+# Feishu / Lark app credentials. Create an internal app, enable the bot, and
+# use long-connection event delivery.
 app_id = "cli_xxxxxxxxxxxxxxxx"
 app_secret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# Log level: debug | info | warn | error. Default: info.
 log_level = "info"
 
+# ---------------------------------------------------------------------------
+# DingTalk
+# ---------------------------------------------------------------------------
+# To use DingTalk:
+#   1. Create an internal app in the DingTalk Open Platform.
+#   2. Enable the bot and select Stream mode.
+#   3. Grant message permissions, plus AICard.Instance.Write for streaming cards.
+#   4. Publish the app version.
+#   5. Uncomment [dingtalk] and leave [feishu] credentials empty.
+#
+# No public callback URL, domain, HTTPS certificate, or card template is needed.
+# client_id is the legacy AppKey; client_secret is the legacy AppSecret.
+# [dingtalk]
+# client_id = "dingxxxxxxxxxxxxxxxx"
+# client_secret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# Log level: debug | info | warn | error. Default: info.
+# log_level = "info"
+# Robot code used for sending messages/cards/media. Default: client_id.
+# robot_code = "dingxxxxxxxxxxxxxxxx"
+# Enable A2UI streaming cards. Default: true. Set false to use Markdown only.
+# Requires the AICard.Instance.Write permission; otherwise Nectar degrades to
+# Markdown and shows a Thinking reaction when possible.
+# card_enabled = true
+
+# ---------------------------------------------------------------------------
+# Codex CLI
+# ---------------------------------------------------------------------------
 [codex]
+# Executable name or absolute path. Default: codex.
 path = "codex"
+# Model name. Empty = Codex default.
 # model = "gpt-5.2-codex"
+# Reasoning effort (e.g. minimal, low, medium, high). Empty = Codex default.
 # effort = "high"
+# Sandbox mode: read-only | workspace-write | danger-full-access.
 sandbox = "workspace-write"
+# Base workspace for agent runs. Default: ~/.nectar/workspace.
 working_dir = "~/.nectar/workspace"
+# Per-turn execution timeout. Default: 30m.
 timeout = "30m"
+# Maximum captured stdout bytes. Default: 2 MiB.
 max_output_bytes = 2097152
-# 0 = auto-detect from Codex model catalog; set e.g. 258000 to override
+# Context window used for the card footer. 0 = auto-detect from Codex's model
+# catalog; set an explicit value (e.g. 258000) to override.
 context_window = 0
+# true = create a separate subdirectory per chat under working_dir.
 per_chat_workspace = false
+# true = pass --dangerously-bypass-approvals-and-sandbox. Use only in trusted
+# environments; this disables Codex approvals and sandboxing.
 bypass_approvals = false
 
+# ---------------------------------------------------------------------------
+# OpenCode
+# ---------------------------------------------------------------------------
 [opencode]
+# Executable name or absolute path. Default: opencode.
 path = "opencode"
+# Model in provider/model#variant form. Empty = OpenCode default.
 # model = "provider/model#variant"
+# Agent name passed as --agent. Empty = OpenCode default.
 # agent = "build"
+# Base workspace for agent runs. Default: ~/.nectar/workspace.
 working_dir = "~/.nectar/workspace"
+# Per-turn execution timeout. Default: 30m.
 timeout = "30m"
+# Maximum captured stdout bytes. Default: 2 MiB.
 max_output_bytes = 2097152
-context_window = 0            # 0 = read limit.context from OpenCode config
-standalone = true
-auto_approve = true
-per_chat_workspace = false
-
-[cursor]
-path = "cursor-agent"
-# model = "composer-2.5"
-# mode = "plan"                 # plan | ask; empty = normal agent mode
-# sandbox = "enabled"           # enabled | disabled; empty = Cursor default
-working_dir = "~/.nectar/workspace"
-timeout = "30m"
-max_output_bytes = 2097152
+# Context window used for the card footer. 0 = read limit.context from the
+# OpenCode model configuration.
 context_window = 0
-auto_approve = true             # -f; required for non-interactive bot use
-trust_workspace = true          # --trust; required for headless runs
+# true = pass --standalone.
+standalone = true
+# true = pass --auto (non-interactive execution).
+auto_approve = true
+# true = create a separate subdirectory per chat under working_dir.
 per_chat_workspace = false
 
+# ---------------------------------------------------------------------------
+# Cursor Agent CLI
+# ---------------------------------------------------------------------------
+[cursor]
+# Executable name or absolute path. Default: cursor-agent.
+path = "cursor-agent"
+# Model name. Empty = Cursor default.
+# model = "composer-2.5"
+# Mode: plan | ask. Empty = normal agent mode.
+# mode = "plan"
+# Sandbox mode: enabled | disabled. Empty = Cursor default.
+# sandbox = "enabled"
+# Base workspace for agent runs. Default: ~/.nectar/workspace.
+working_dir = "~/.nectar/workspace"
+# Per-turn execution timeout. Default: 30m.
+timeout = "30m"
+# Maximum captured stdout bytes. Default: 2 MiB.
+max_output_bytes = 2097152
+# Context window used for the card footer. 0 = unknown/omit context usage.
+context_window = 0
+# true = pass -f (required for non-interactive bot use).
+auto_approve = true
+# true = pass --trust (required for headless runs).
+trust_workspace = true
+# true = create a separate subdirectory per chat under working_dir.
+per_chat_workspace = false
+
+# ---------------------------------------------------------------------------
+# Claude Code
+# ---------------------------------------------------------------------------
 [claude]
+# Executable name or absolute path. Default: claude.
 path = "claude"
-# model = "claude-sonnet-4-5"   # empty = Claude Code default
+# Model name. Empty = Claude Code default.
+# model = "claude-sonnet-4-5"
+# Fallback model used when the primary model is unavailable.
 # fallback_model = "claude-haiku-4-5"
-# permission_mode = "acceptEdits" # acceptEdits | plan | bypassPermissions | manual | dontAsk | auto
+# Permission mode: acceptEdits | plan | bypassPermissions | manual | dontAsk | auto.
+# permission_mode = "acceptEdits"
+# Base workspace for agent runs. Default: ~/.nectar/workspace.
 working_dir = "~/.nectar/workspace"
+# Per-turn execution timeout. Default: 30m.
 timeout = "30m"
+# Maximum captured stdout bytes. Default: 2 MiB.
 max_output_bytes = 2097152
-context_window = 0             # 0 = read context_window from the result event
+# Context window used for the card footer. 0 = read from Claude's result event.
+context_window = 0
+# Maximum agent turns. 0 = CLI default/unlimited.
 # max_turns = 0
-auto_approve = true            # --dangerously-skip-permissions; required for headless runs
+# true = pass --dangerously-skip-permissions; takes precedence over
+# permission_mode and is required for headless runs.
+auto_approve = true
+# true = create a separate subdirectory per chat under working_dir.
 per_chat_workspace = false
 
+# ---------------------------------------------------------------------------
+# Pi
+# ---------------------------------------------------------------------------
 [pi]
+# Executable name or absolute path. Default: pi.
 path = "pi"
+# Provider name passed as --provider. Empty = Pi default.
 # provider = "anthropic"
-# model = "claude-sonnet-4-5"   # empty = Pi default model
-# thinking = "high"             # off | minimal | low | medium | high | xhigh | max
+# Model name. Empty = Pi default model.
+# model = "claude-sonnet-4-5"
+# Thinking level: off | minimal | low | medium | high | xhigh | max.
+# thinking = "high"
+# Base workspace for agent runs. Default: ~/.nectar/workspace.
 working_dir = "~/.nectar/workspace"
+# Per-turn execution timeout. Default: 30m.
 timeout = "30m"
+# Maximum captured stdout bytes. Default: 2 MiB.
 max_output_bytes = 2097152
-context_window = 0             # 0 = unknown; footer omits context percentage
-trust_workspace = true         # --approve; load project-local Pi resources
+# Context window used for the card footer. 0 = unknown/omit context usage.
+context_window = 0
+# true = pass --approve and load project-local Pi resources.
+trust_workspace = true
+# true = create a separate subdirectory per chat under working_dir.
 per_chat_workspace = false
 
+# ---------------------------------------------------------------------------
+# Bot behavior
+# ---------------------------------------------------------------------------
 [bot]
+# Bot name. Default: Nectar.
 name = "Nectar"
-engine = "codex"              # codex | opencode | cursor | claude | pi
-agent_id = "codex"            # legacy; defaults to engine
-# Feishu open_id list. When non-empty, DMs are restricted to these users.
+# Engine to use: codex | opencode | cursor | claude | pi.
+engine = "codex"
+# Platform to use: feishu | dingtalk. Empty = auto-detect from credentials.
+# If both platforms have credentials, set this explicitly.
+# platform = "feishu"
+# Optional user allowlist.
+# Feishu: open_id. DingTalk: sender staffId.
+# Empty = allow any user who can reach the bot.
 admin_users = []
-# Feishu chat_id list. When non-empty, only these groups are served.
+# Optional group allowlist.
+# Feishu: chat_id. DingTalk: openConversationId.
+# Empty = allow any group the bot can reach.
 allowed_chats = []
 
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
 [storage]
+# Root directory for Nectar data. Default: ~/.nectar.
 data_dir = "~/.nectar"

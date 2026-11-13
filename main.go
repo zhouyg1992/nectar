@@ -22,6 +22,8 @@ import (
 	"github.com/zhouyg1992/nectar/internal/engine/pi"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
+	"github.com/zhouyg1992/nectar/internal/platform"
+	"github.com/zhouyg1992/nectar/internal/platform/dingtalk"
 	"github.com/zhouyg1992/nectar/internal/platform/feishu"
 )
 
@@ -80,7 +82,7 @@ func runBot(configPath string) error {
 		return err
 	}
 
-	logger := newLogger(cfg.Feishu.LogLevel)
+	logger := newLogger(platformLogLevel(cfg))
 	slog.SetDefault(logger)
 
 	if err := os.MkdirAll(cfg.Storage.DataDir, 0o700); err != nil {
@@ -95,13 +97,7 @@ func runBot(configPath string) error {
 		return err
 	}
 
-	platformAdapter, err := feishu.New(feishu.Config{
-		AppID:        cfg.Feishu.AppID,
-		AppSecret:    cfg.Feishu.AppSecret,
-		LogLevel:     cfg.Feishu.LogLevel,
-		AllowedUsers: cfg.Bot.AdminUsers,
-		AllowedChats: cfg.Bot.AllowedChats,
-	})
+	platformAdapter, platformName, err := newPlatformAdapter(cfg)
 	if err != nil {
 		return err
 	}
@@ -120,7 +116,7 @@ func runBot(configPath string) error {
 		decision.Noop{},
 		logger,
 		core.RouterConfig{
-			AgentID:       cfg.Bot.AgentID,
+			AgentID:       cfg.Bot.Engine,
 			ModelName:     setup.model,
 			ContextWindow: setup.contextWindow,
 			EngineOptions: setup.options,
@@ -129,19 +125,23 @@ func runBot(configPath string) error {
 
 	logger.Info("nectar starting",
 		"version", version,
-		"platform", "feishu",
+		"platform", platformName,
 		"engine", setup.name,
 		"workspace", workspaces.Root(),
 		"data_dir", cfg.Storage.DataDir,
 		"model", setup.model,
 		"context_window", setup.contextWindow,
 	)
-	logger.Info("connecting to feishu; wait for 'feishu websocket connected' before sending messages")
+	if platformName == "feishu" {
+		logger.Info("connecting to feishu; wait for 'feishu websocket connected' before sending messages")
+	} else {
+		logger.Info("connecting to dingtalk; wait for 'dingtalk stream connected' before sending messages")
+	}
 	if setup.name == "codex" && setup.contextWindow == 0 {
 		logger.Warn("codex context window unknown; card footer will omit context usage (set codex.context_window to override)")
 	}
 	if len(cfg.Bot.AdminUsers) == 0 && len(cfg.Bot.AllowedChats) == 0 {
-		logger.Warn("no user/chat allowlist configured; anyone outside Feishu app scope who can reach the bot can run the configured agent")
+		logger.Warn("no user/chat allowlist configured; anyone who can reach the bot may run the configured agent")
 	}
 
 	errCh := make(chan error, 1)
@@ -163,6 +163,46 @@ func runBot(configPath string) error {
 		}
 		return nil
 	}
+}
+
+func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, error) {
+	switch cfg.Bot.Platform {
+	case "dingtalk":
+		adapter, err := dingtalk.New(dingtalk.Config{
+			ClientID:     cfg.DingTalk.ClientID,
+			ClientSecret: cfg.DingTalk.ClientSecret,
+			RobotCode:    cfg.DingTalk.RobotCode,
+			LogLevel:     cfg.DingTalk.LogLevel,
+			AllowedUsers: cfg.Bot.AdminUsers,
+			AllowedChats: cfg.Bot.AllowedChats,
+			CardEnabled:  cfg.DingTalk.CardEnabled,
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		return adapter, "dingtalk", nil
+	case "feishu", "":
+		adapter, err := feishu.New(feishu.Config{
+			AppID:        cfg.Feishu.AppID,
+			AppSecret:    cfg.Feishu.AppSecret,
+			LogLevel:     cfg.Feishu.LogLevel,
+			AllowedUsers: cfg.Bot.AdminUsers,
+			AllowedChats: cfg.Bot.AllowedChats,
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		return adapter, "feishu", nil
+	default:
+		return nil, "", fmt.Errorf("unsupported bot.platform %q", cfg.Bot.Platform)
+	}
+}
+
+func platformLogLevel(cfg config.Config) string {
+	if cfg.Bot.Platform == "dingtalk" {
+		return cfg.DingTalk.LogLevel
+	}
+	return cfg.Feishu.LogLevel
 }
 
 type engineSetup struct {

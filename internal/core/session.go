@@ -2,8 +2,8 @@ package core
 
 import "sync"
 
-// SessionKey is deliberately a triple so multiple engines and bots can share
-// one chat without colliding. v1 always uses AgentID "codex".
+// SessionKey is deliberately a tuple so multiple engines and bots can share
+// one chat without colliding. AgentID is the configured engine name in v1.
 type SessionKey struct {
 	Channel  string
 	ChatID   string
