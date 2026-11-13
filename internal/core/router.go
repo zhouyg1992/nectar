@@ -100,9 +100,6 @@ func (r *Router) Handle(msg platform.Message) {
 	case "/stop":
 		r.stop(key, msg)
 		return
-	case "/markdown-test":
-		r.sendCardOrText(msg, markdownTestCard(), markdownTestCardBody)
-		return
 	}
 
 	if isHelpRequest(text) {
@@ -595,7 +592,6 @@ const helpCardBody = "**会话**\n" +
 	"- `/new` / `/reset` — 开始新会话\n" +
 	"- `/status` — 查看引擎、模型与会话\n" +
 	"- `/stop` — 停止当前任务\n" +
-	"- `/markdown-test` — 发送 Markdown 渲染测试卡片\n" +
 	"- `/help` / `/commands` — 显示这张命令卡片\n\n" +
 	"**使用**\n" +
 	"- 普通消息会交给 Codex 执行\n" +
@@ -605,7 +601,6 @@ const helpText = `Nectar 命令:
 /new、/reset    开始新会话
 /status         查看引擎、模型与会话
 /stop           停止当前任务
-/markdown-test  发送 Markdown 渲染测试卡片
 /help、/commands 显示命令卡片
 
 其他消息会发送给 Codex 执行。`

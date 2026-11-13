@@ -604,7 +604,6 @@ func TestRouterCommandResultsUseCards(t *testing.T) {
 		{"/new", platform.CardInfo, "🌱 New Session", "已开始新会话"},
 		{"/status", platform.CardInfo, "🌿 Session Status", "新会话"},
 		{"/stop", platform.CardInfo, "✋ Stop", "还没有正在运行的 Agent"},
-		{"/markdown-test", platform.CardInfo, "🧪 Markdown Syntax Test", "| 列 A |"},
 		{"", platform.CardError, "⚠️ Unsupported Message", "只支持文本、图片或文件消息"},
 	}
 
