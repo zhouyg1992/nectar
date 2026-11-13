@@ -64,13 +64,54 @@ func TestRenderCardStatusAndBody(t *testing.T) {
 	}
 }
 
+func TestRenderCardIncludesToolActivity(t *testing.T) {
+	raw, err := renderCard(&platform.Card{
+		Status:   platform.CardThinking,
+		Title:    "🐝 Working...",
+		Activity: "⏳ Tool calls · 2",
+		Body:     "intermediate output",
+		Footer:   "codex · 1.0s",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Header struct {
+			Title struct {
+				Content string `json:"content"`
+			} `json:"title"`
+		} `json:"header"`
+		Body struct {
+			Elements []map[string]any `json:"elements"`
+		} `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Header.Title.Content != "🐝 Working..." {
+		t.Fatalf("title = %q", payload.Header.Title.Content)
+	}
+	if len(payload.Body.Elements) != 5 {
+		t.Fatalf("elements = %#v", payload.Body.Elements)
+	}
+	wantTags := []string{"markdown", "hr", "markdown", "hr", "markdown"}
+	for i, want := range wantTags {
+		if payload.Body.Elements[i]["tag"] != want {
+			t.Fatalf("element %d = %#v, want %s", i, payload.Body.Elements[i], want)
+		}
+	}
+	if content, _ := payload.Body.Elements[0]["content"].(string); !strings.Contains(content, "Tool calls · 2") {
+		t.Fatalf("activity = %q", content)
+	}
+}
+
 func TestTruncateCardBody(t *testing.T) {
 	body := strings.Repeat("a", maxCardBodyBytes+100)
 	got := truncateCardBody(body)
 	if len(got) <= maxCardBodyBytes {
 		t.Fatalf("truncated body length = %d, want > %d", len(got), maxCardBodyBytes)
 	}
-	if !strings.Contains(got, "已截断") {
+	if !strings.Contains(got, "content truncated") {
 		t.Fatal("missing truncation marker")
 	}
 }

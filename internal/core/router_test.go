@@ -442,7 +442,7 @@ func TestRouterReportsAttachmentDownloadFailure(t *testing.T) {
 	})
 	waitForReplies(t, plat, 1)
 
-	if got := plat.lastReply(); !strings.Contains(got, "下载附件失败") || !strings.Contains(got, "boom") {
+	if got := plat.lastReply(); !strings.Contains(got, "Failed to download attachments") || !strings.Contains(got, "boom") {
 		t.Fatalf("reply = %q", got)
 	}
 	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
@@ -660,10 +660,10 @@ func TestRouterCommandResultsUseCards(t *testing.T) {
 		title    string
 		bodyPart string
 	}{
-		{"/new", platform.CardInfo, "🌱 New Session", "已开始新会话"},
-		{"/status", platform.CardInfo, "🌿 Session Status", "新会话"},
-		{"/stop", platform.CardInfo, "✋ Stop", "还没有正在运行的 Agent"},
-		{"", platform.CardError, "⚠️ Unsupported Message", "只支持文本、图片或文件消息"},
+		{"/new", platform.CardInfo, "🌱 New Session", "Started a new session"},
+		{"/status", platform.CardInfo, "🌿 Session Status", "New session"},
+		{"/stop", platform.CardInfo, "✋ Stop", "No agent is running"},
+		{"", platform.CardError, "⚠️ Unsupported Message", "Only text, image, or file messages are supported"},
 	}
 
 	for i, tc := range cases {
@@ -700,7 +700,7 @@ func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
 	plat.mu.Lock()
 	body := plat.sentCards[0].Body
 	plat.mu.Unlock()
-	for _, want := range []string{"引擎: fake", "模型: gpt-5.2-codex", "会话: session-123"} {
+	for _, want := range []string{"Engine: fake", "Model: gpt-5.2-codex", "Session: session-123"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("status body = %q, want %q", body, want)
 		}
@@ -843,6 +843,58 @@ func TestRouterStreamsProgressAndFinalOnly(t *testing.T) {
 	}
 }
 
+func TestInitialCardBody(t *testing.T) {
+	if got := initialCardBody(false); got != "Hold on, warming up the hive…" {
+		t.Fatalf("initialCardBody(false) = %q", got)
+	}
+	if got := initialCardBody(true); got != "Gathering your attachments…" {
+		t.Fatalf("initialCardBody(true) = %q", got)
+	}
+}
+
+func TestRouterShowsToolCountAndReplacesIntermediateOutput(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventToolCall, Text: "ls"},
+		{Type: engine.EventMessage, Text: "first intermediate output"},
+		{Type: engine.EventToolCall, Text: "cat a.txt"},
+		{Type: engine.EventMessage, Text: "final answer"},
+		{Type: engine.EventDone},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.CardUpdateInterval = time.Hour
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "run"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	plat.mu.Lock()
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+
+	foundOne := false
+	foundTwo := false
+	for _, card := range updates {
+		if card.Activity == "⏳ Tool calls · 1" && card.Body == "first intermediate output" {
+			foundOne = true
+		}
+		if card.Activity == "⏳ Tool calls · 2" && card.Body == "final answer" {
+			foundTwo = true
+		}
+	}
+	if !foundOne || !foundTwo {
+		t.Fatalf("missing tool activity progress: %#v", updates)
+	}
+
+	final := plat.lastUpdate()
+	if final.Activity != "" {
+		t.Fatalf("final activity = %q, want empty", final.Activity)
+	}
+	if final.Body != "final answer" {
+		t.Fatalf("final body = %q", final.Body)
+	}
+}
+
 func TestRouterRendersEngineUsage(t *testing.T) {
 	plat := &fakePlatform{cards: true}
 	eng := &scriptedEngine{events: []engine.Event{
@@ -875,7 +927,7 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 	plat.mu.Lock()
 	statusBody := plat.sentCards[1].Body
 	plat.mu.Unlock()
-	for _, want := range []string{"上下文: 180/1k (18.0%)", "上一轮 token: ↑120 ↓30"} {
+	for _, want := range []string{"Context: 180/1k (18.0%)", "Last turn: ↑120 ↓30"} {
 		if !strings.Contains(statusBody, want) {
 			t.Fatalf("status body = %q, want %q", statusBody, want)
 		}

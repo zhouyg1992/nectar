@@ -112,9 +112,9 @@ func normalizeReference(ref string) string {
 func imageLabel(alt string) string {
 	alt = strings.TrimSpace(alt)
 	if alt == "" {
-		return "图片"
+		return "Image"
 	}
-	return "图片：" + alt
+	return "Image: " + alt
 }
 
 var knownTags = []string{

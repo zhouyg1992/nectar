@@ -87,10 +87,10 @@ func TestSanitizeMarkdownTextConvertsImages(t *testing.T) {
 	body := "![替代文本](https://example.com/a.png)\n\n[![点击图片](https://example.com/b.png)](https://example.com)\n\n![image_key](img_v3_abc)\n\n![引用图片][img1]\n\n[img1]: https://example.com/ref.png"
 	got := sanitizeMarkdownText(body)
 	for _, want := range []string{
-		"[图片：替代文本](https://example.com/a.png)",
-		"[图片：点击图片](https://example.com)",
-		"图片：image_key",
-		"[图片：引用图片](https://example.com/ref.png)",
+		"[Image: 替代文本](https://example.com/a.png)",
+		"[Image: 点击图片](https://example.com)",
+		"Image: image_key",
+		"[Image: 引用图片](https://example.com/ref.png)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("normalized body = %q, want %q", got, want)
@@ -121,7 +121,7 @@ func TestTruncateCardBodyClosesFence(t *testing.T) {
 	if strings.Count(got, "```")%2 != 0 {
 		t.Fatalf("truncated body left an unclosed fence:\n%s", got[len(got)-200:])
 	}
-	if !strings.Contains(got, "已截断") {
+	if !strings.Contains(got, "content truncated") {
 		t.Fatal("missing truncation marker")
 	}
 }
