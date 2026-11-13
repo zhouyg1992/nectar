@@ -14,11 +14,11 @@ import (
 // the developer opts in, because it needs a logged-in Cursor account.
 func TestCursorAgentEndToEnd(t *testing.T) {
 	if os.Getenv("NECTAR_CURSOR_E2E") == "" {
-		t.Skip("set NECTAR_CURSOR_E2E=1 to run against the real cursor-agent CLI")
+		t.Skip("set NECTAR_CURSOR_E2E=1 to run against the real Cursor CLI")
 	}
 	executable := os.Getenv("CURSOR_AGENT_PATH")
 	if executable == "" {
-		executable = "cursor-agent"
+		executable = "agent"
 	}
 
 	adapter := NewAdapter(Config{

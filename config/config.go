@@ -139,7 +139,7 @@ func defaults() Config {
 			AutoApprove:    true,
 		},
 		Cursor: CursorConfig{
-			Path:           "cursor-agent",
+			Path:           "agent",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
@@ -320,7 +320,7 @@ func normalize(cfg *Config) error {
 		cfg.OpenCode.Path = "opencode"
 	}
 	if strings.TrimSpace(cfg.Cursor.Path) == "" {
-		cfg.Cursor.Path = "cursor-agent"
+		cfg.Cursor.Path = "agent"
 	}
 	if strings.TrimSpace(cfg.Claude.Path) == "" {
 		cfg.Claude.Path = "claude"

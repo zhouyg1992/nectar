@@ -225,7 +225,7 @@ func TestCursorEngineSelection(t *testing.T) {
 	if cfg.Bot.Engine != "cursor" {
 		t.Fatalf("bot = %#v", cfg.Bot)
 	}
-	if cfg.Cursor.Path != "cursor-agent" || cfg.Cursor.MaxOutputBytes <= 0 {
+	if cfg.Cursor.Path != "agent" || cfg.Cursor.MaxOutputBytes <= 0 {
 		t.Fatalf("cursor defaults = %#v", cfg.Cursor)
 	}
 	if !cfg.Cursor.AutoApprove || !cfg.Cursor.TrustWorkspace {

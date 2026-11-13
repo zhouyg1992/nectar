@@ -116,7 +116,7 @@ sudo loginctl enable-linger "$USER"
 - `PATH`（包含 Nectar 所在目录和常见系统路径）
 - `CODEX_HOME`（如果当前 shell 设置了）
 
-如果 `codex` / `opencode` / `cursor-agent` 通过 nvm、asdf 或其他版本管理器安装，确保其目录在安装服务时的 `PATH` 里，或者在 `~/.nectar/config.toml` 中把对应引擎的 `path` 指向可执行文件。
+如果 `codex` / `opencode` / `agent`（或旧版 `cursor-agent`）通过 nvm、asdf 或其他版本管理器安装，确保其目录在安装服务时的 `PATH` 里，或者在 `~/.nectar/config.toml` 中把对应引擎的 `path` 指向可执行文件。
 
 ## 排查
 
@@ -125,7 +125,7 @@ sudo loginctl enable-linger "$USER"
 | 服务安装失败，提示占位配置 | 先编辑 `~/.nectar/config.toml` |
 | 服务启动后立即退出 | `nectar service logs` 查看引擎/平台错误（飞书或钉钉） |
 | 引擎 CLI 找不到 | 检查服务 `PATH`，或在配置里设置 `codex.path` / `opencode.path` / `cursor.path` |
-| Cursor 提示未登录 | 用运行服务的同一用户执行 `cursor-agent login`，或设置 `CURSOR_API_KEY` |
+| Cursor 提示未登录 | 用运行服务的同一用户执行 `agent login`（旧版 `cursor-agent login`），或设置 `CURSOR_API_KEY` |
 | 两个实例抢飞书/钉钉事件 | 停掉手动运行的 `nectar`，只保留服务实例 |
 | macOS 睡眠后消息丢失 | 睡眠期间长连接会断，唤醒后自动重连；睡眠中消息不会补发 |
 | Linux 开机没启动 | 检查 `loginctl show-user "$USER" -p Linger` 是否为 `yes` |

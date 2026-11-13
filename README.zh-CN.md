@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 安装脚本是交互式的，会：
 
 - 自动识别操作系统和 CPU 架构，从 GitHub Releases 下载对应版本并校验 `checksums.txt` 里的 SHA-256
-- 检测当前电脑已安装的引擎 CLI（`codex`、`opencode`、`cursor-agent`、`claude`、`pi`），一个都没有时提示并退出
+- 检测当前电脑已安装的引擎 CLI（`codex`、`opencode`、`agent` / `cursor-agent`、`claude`、`pi`），一个都没有时提示并退出
 - 让你选择引擎和平台（默认飞书 / Lark，可选钉钉）
 - 写入一份最小化的 `~/.nectar/config.toml`
 - 默认安装并启动后台服务
@@ -76,7 +76,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 指定版本或安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.5.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.5.1
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -140,19 +140,13 @@ opencode run --format json "Reply with exactly OK"
 curl https://cursor.com/install -fsS | bash
 ```
 
-部分安装方式会把可执行文件命名为 `agent`，而 Nectar 和安装脚本默认查找 `cursor-agent`，所以请把它重命名，或创建一个 `cursor-agent` 软链接：
-
-```bash
-# 如果 command -v agent 指向 Cursor CLI：
-mkdir -p ~/.local/bin
-ln -sf "$(command -v agent)" ~/.local/bin/cursor-agent
-```
+官方安装脚本会同时提供 `agent`（主命令）和 `cursor-agent`（兼容名）。Nectar 和安装脚本优先使用 `agent`，找不到时回退 `cursor-agent`，不需要手动创建软链接。
 
 确保 `~/.local/bin` 在 `PATH` 中，然后确认下面的命令可以正常运行：
 
 ```bash
-cursor-agent login
-cursor-agent -p --trust --mode ask "Reply with exactly OK"
+agent login
+agent -p --trust --mode ask "Reply with exactly OK"
 ```
 
 ### Claude Code
@@ -215,7 +209,7 @@ auto_approve = true           # 非交互 bot 场景需要
 per_chat_workspace = false
 
 [cursor]
-path = "cursor-agent"
+path = "agent"
 model = ""                    # 例如 composer-2.5；空则使用 Cursor 默认模型
 mode = ""                     # plan / ask；空为普通 Agent 模式
 sandbox = ""                  # enabled / disabled；空则使用 Cursor 默认
@@ -268,7 +262,7 @@ data_dir = "~/.nectar"
 
 使用 OpenCode 时设置 `bot.engine = "opencode"`，Nectar 会读取 `[opencode]`；`model` 为空时从 `~/.config/opencode/opencode.json` 读取，并通过 `opencode session export` 获取最后一轮 assistant 的 token 用量。上下文上限从模型的 `limit.context` 自动读取；模型未在 OpenCode 配置中声明时，可用 `opencode.context_window` 手动指定。
 
-使用 Cursor 时设置 `bot.engine = "cursor"`，Nectar 会读取 `[cursor]`，以 `cursor-agent -p --output-format stream-json --stream-partial-output` 运行，并用 `--resume` 续接会话。`auto_approve` 映射为 `-f`，`trust_workspace` 映射为 `--trust`，无头 bot 场景两者都需要。附件通过 prompt 中的本地路径交给 Agent。需要上下文占比时显式设置 `cursor.context_window`。
+使用 Cursor 时设置 `bot.engine = "cursor"`，Nectar 会读取 `[cursor]`，以 Cursor CLI（优先 `agent`，找不到时回退 `cursor-agent`）加 `-p --output-format stream-json --stream-partial-output` 运行，并用 `--resume` 续接会话。`auto_approve` 映射为 `-f`，`trust_workspace` 映射为 `--trust`，无头 bot 场景两者都需要。附件通过 prompt 中的本地路径交给 Agent。需要上下文占比时显式设置 `cursor.context_window`。
 
 使用 Claude Code 时设置 `bot.engine = "claude"`，Nectar 会读取 `[claude]`，以 `claude -p --output-format stream-json --verbose --include-partial-messages` 运行，通过 stdin 传入 prompt，并用 `--resume` 续接会话。`auto_approve` 映射为 `--dangerously-skip-permissions`；关闭时使用 `permission_mode`。token 用量和上下文上限从最终 `result` 事件读取，`claude.context_window` 仅用于手动覆盖。附件通过 prompt 中的本地路径交给 Agent。
 
@@ -281,7 +275,7 @@ export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
-export CURSOR_AGENT_PATH=cursor-agent
+export CURSOR_AGENT_PATH=agent
 export CLAUDE_PATH=claude
 export PI_PATH=pi
 export NECTAR_ENGINE=codex

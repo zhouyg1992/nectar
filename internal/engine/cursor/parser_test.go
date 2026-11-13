@@ -119,6 +119,25 @@ func TestParseCursorResultError(t *testing.T) {
 	}
 }
 
+func TestParseCursorAuthErrorIsActionable(t *testing.T) {
+	input := `{"type":"result","subtype":"error","is_error":true,"result":"Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.","session_id":"sess_err"}`
+	var got []engine.Event
+	if err := Parse(strings.NewReader(input), func(ev engine.Event) {
+		got = append(got, ev)
+	}, 1024); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("events = %#v", got)
+	}
+	if got[1].Type != engine.EventError {
+		t.Fatalf("error = %#v", got[1])
+	}
+	if !strings.Contains(got[1].Text, "agent login") || !strings.Contains(got[1].Text, "CURSOR_API_KEY") {
+		t.Fatalf("error text = %q", got[1].Text)
+	}
+}
+
 func TestParseCursorDeduplicatesAssistantEcho(t *testing.T) {
 	input := strings.Join([]string{
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"alpha"}]},"session_id":"sess_1"}`,

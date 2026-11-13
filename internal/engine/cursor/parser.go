@@ -134,7 +134,7 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 				return err
 			}
 		case "error":
-			emit(engine.Event{Type: engine.EventError, Text: errorText(event.Error, event.Text)})
+			emit(engine.Event{Type: engine.EventError, Text: authErrorMessage(errorText(event.Error, event.Text))})
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -160,7 +160,7 @@ func emitResult(event rawEvent, emit func(engine.Event)) error {
 		if text == "" {
 			text = errorText(event.Error, "")
 		}
-		emit(engine.Event{Type: engine.EventError, Text: text})
+		emit(engine.Event{Type: engine.EventError, Text: authErrorMessage(text)})
 		return nil
 	}
 

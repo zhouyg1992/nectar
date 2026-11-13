@@ -38,12 +38,34 @@ type Adapter struct {
 
 func NewAdapter(cfg Config) *Adapter {
 	if cfg.Executable == "" {
-		cfg.Executable = "cursor-agent"
+		cfg.Executable = "agent"
 	}
+	cfg.Executable = resolveExecutable(cfg.Executable)
 	if cfg.MaxOutputBytes <= 0 {
 		cfg.MaxOutputBytes = defaultMaxOutputBytes
 	}
 	return &Adapter{cfg: cfg, running: make(map[string]context.CancelFunc)}
+}
+
+func resolveExecutable(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsRune(name, os.PathSeparator) {
+		return name
+	}
+	if path, err := exec.LookPath(name); err == nil {
+		return path
+	}
+	switch name {
+	case "agent":
+		if path, err := exec.LookPath("cursor-agent"); err == nil {
+			return path
+		}
+	case "cursor-agent":
+		if path, err := exec.LookPath("agent"); err == nil {
+			return path
+		}
+	}
+	return name
 }
 
 func (a *Adapter) Name() string { return "cursor" }
@@ -224,10 +246,39 @@ func processError(ctx context.Context, waitErr error, stderr string) string {
 		return "cursor execution canceled"
 	}
 	msg := strings.TrimSpace(stderr)
+	if hint, ok := cursorAuthHint(msg); ok {
+		return hint
+	}
 	if msg != "" {
 		return fmt.Sprintf("%v: %s", waitErr, execguard.Truncate(msg, 2000))
 	}
 	return waitErr.Error()
+}
+
+const cursorLoginHint = "Cursor CLI 未登录。请在运行 Nectar 的同一用户下执行 `agent login`（旧版命令 `cursor-agent login`），或设置 `CURSOR_API_KEY`，然后重启 Nectar 服务。"
+
+func cursorAuthHint(text string) (string, bool) {
+	lower := strings.ToLower(text)
+	for _, marker := range []string{
+		"authentication required",
+		"not logged in",
+		"login required",
+		"please run 'agent login'",
+		"please run 'cursor-agent login'",
+		"cursor_api_key",
+	} {
+		if strings.Contains(lower, marker) {
+			return cursorLoginHint, true
+		}
+	}
+	return "", false
+}
+
+func authErrorMessage(text string) string {
+	if hint, ok := cursorAuthHint(text); ok {
+		return hint
+	}
+	return text
 }
 
 func firstNonEmpty(values ...string) string {

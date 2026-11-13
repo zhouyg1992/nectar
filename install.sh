@@ -22,7 +22,7 @@ SERVICE_TOUCHED=0
 
 ENGINE_DEFS='codex|codex|Codex CLI
 opencode|opencode|OpenCode
-cursor|cursor-agent|Cursor Agent CLI
+cursor|agent,cursor-agent|Cursor Agent CLI
 claude|claude|Claude Code
 pi|pi|Pi'
 
@@ -333,16 +333,31 @@ engine_command() {
 	case "$1" in
 	codex) printf 'codex' ;;
 	opencode) printf 'opencode' ;;
-	cursor) printf 'cursor-agent' ;;
+	cursor) printf 'agent,cursor-agent' ;;
 	claude) printf 'claude' ;;
 	pi) printf 'pi' ;;
 	*) return 1 ;;
 	esac
 }
 
+engine_command_path() {
+	ECP_CMDS=$1
+	ECP_OLD_IFS=$IFS
+	IFS=','
+	for ECP_CMD in $ECP_CMDS; do
+		if command -v "$ECP_CMD" >/dev/null 2>&1; then
+			IFS=$ECP_OLD_IFS
+			command -v "$ECP_CMD"
+			return 0
+		fi
+	done
+	IFS=$ECP_OLD_IFS
+	return 1
+}
+
 normalize_engine() {
 	case "$1" in
-	cursor-agent) printf 'cursor' ;;
+	agent | cursor-agent) printf 'cursor' ;;
 	claude-code) printf 'claude' ;;
 	*) printf '%s' "$1" ;;
 	esac
@@ -371,7 +386,8 @@ detect_engines() {
 		REST=${DEF#*|}
 		ENGINE_CMD=${REST%%|*}
 		ENGINE_LABEL=${REST#*|}
-		if command -v "$ENGINE_CMD" >/dev/null 2>&1; then
+		ENGINE_PATH=
+		if ENGINE_PATH=$(engine_command_path "$ENGINE_CMD"); then
 			DETECTED_COUNT=$((DETECTED_COUNT + 1))
 			if [ -z "$DETECTED_DEFS" ]; then
 				DETECTED_DEFS=$DEF
@@ -379,7 +395,6 @@ detect_engines() {
 				DETECTED_DEFS="$DETECTED_DEFS
 $DEF"
 			fi
-			ENGINE_PATH=$(command -v "$ENGINE_CMD")
 			printf '  %d) %-18s %s\n' "$DETECTED_COUNT" "$ENGINE_LABEL" "$ENGINE_PATH" >&2
 		fi
 	done
@@ -390,8 +405,8 @@ select_engine() {
 	if [ -n "$ENGINE" ]; then
 		ENGINE=$(normalize_engine "$(printf '%s' "$(trim_value "$ENGINE")" | tr '[:upper:]' '[:lower:]')")
 		ENGINE_CMD=$(engine_command "$ENGINE") || err "unsupported engine: $ENGINE"
-		command -v "$ENGINE_CMD" >/dev/null 2>&1 || err "engine CLI not found in PATH: $ENGINE_CMD"
-		ENGINE_PATH=$(command -v "$ENGINE_CMD")
+		ENGINE_PATH=$(engine_command_path "$ENGINE_CMD") ||
+			err "engine CLI not found in PATH: $(printf '%s' "$ENGINE_CMD" | tr ',' '/')"
 		return 0
 	fi
 	need_tty "--engine codex|opencode|cursor|claude|pi"
@@ -400,7 +415,7 @@ select_engine() {
 	ENGINE=${DEF%%|*}
 	REST=${DEF#*|}
 	ENGINE_CMD=${REST%%|*}
-	ENGINE_PATH=$(command -v "$ENGINE_CMD")
+	ENGINE_PATH=$(engine_command_path "$ENGINE_CMD") || err "engine CLI not found in PATH: $ENGINE_CMD"
 }
 
 select_platform() {
@@ -535,7 +550,7 @@ log "🍯 Nectar installer"
 step 1 "Detect installed engine CLIs"
 detect_engines
 if [ "$DETECTED_COUNT" -eq 0 ]; then
-	err "no supported engine CLI found in PATH (codex, opencode, cursor-agent, claude, pi); install and log in to one engine, then rerun the installer"
+	err "no supported engine CLI found in PATH (codex, opencode, agent/cursor-agent, claude, pi); install and log in to one engine, then rerun the installer"
 fi
 
 step 2 "Configure Nectar"

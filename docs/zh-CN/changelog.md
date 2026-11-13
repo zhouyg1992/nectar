@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.1 — 2026-11-13
+
+### 变更
+
+- Cursor CLI 对齐官方 `agent` 主命令，配置默认值与安装器检测优先使用 `agent`，同时兼容旧版 `cursor-agent`
+- 安装器支持 `--engine agent`、`--engine cursor` 和 `--engine cursor-agent`
+
+### 修复
+
+- Cursor CLI 未登录时，失败卡片会提示执行 `agent login`（或 `cursor-agent login`），或设置 `CURSOR_API_KEY`
+
 ## v0.5.0 — 2026-11-13
 
 ### 新增

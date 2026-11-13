@@ -116,7 +116,7 @@ The service environment does not load `.zshrc` / `.bashrc`. The following are wr
 - `PATH` (including Nectar's directory and common system paths)
 - `CODEX_HOME` (if set in the current shell)
 
-If `codex` / `opencode` / `cursor-agent` is installed through nvm, asdf, or another version manager, make sure its directory is in `PATH` when installing the service, or point the corresponding engine's `path` in `~/.nectar/config.toml` at the executable.
+If `codex` / `opencode` / `agent` (or legacy `cursor-agent`) is installed through nvm, asdf, or another version manager, make sure its directory is in `PATH` when installing the service, or point the corresponding engine's `path` in `~/.nectar/config.toml` at the executable.
 
 ## Troubleshooting
 
@@ -125,7 +125,7 @@ If `codex` / `opencode` / `cursor-agent` is installed through nvm, asdf, or anot
 | Service installation fails with a placeholder configuration error | Edit `~/.nectar/config.toml` first |
 | The service exits immediately after starting | Run `nectar service logs` to inspect engine/platform errors (Feishu or DingTalk) |
 | Engine CLI not found | Check the service `PATH`, or set `codex.path` / `opencode.path` / `cursor.path` in the configuration |
-| Cursor reports not logged in | Run `cursor-agent login` as the same user running the service, or set `CURSOR_API_KEY` |
+| Cursor reports not logged in | Run `agent login` (or legacy `cursor-agent login`) as the same user running the service, or set `CURSOR_API_KEY` |
 | Two instances compete for Feishu/DingTalk events | Stop the manually started `nectar` and keep only the service instance |
 | Messages are lost after macOS sleep | The long connection disconnects during sleep and reconnects after wake; messages sent while asleep are not replayed |
 | Linux does not start at boot | Check whether `loginctl show-user "$USER" -p Linger` is `yes` |

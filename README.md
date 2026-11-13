@@ -65,7 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 
 The installer is interactive. It:
 
-- detects installed engine CLIs (`codex`, `opencode`, `cursor-agent`, `claude`, `pi`) and exits if none are found
+- detects installed engine CLIs (`codex`, `opencode`, `agent` / `cursor-agent`, `claude`, `pi`) and exits if none are found
 - lets you choose an engine and platform (Feishu / Lark by default, DingTalk optional)
 - writes a minimal `~/.nectar/config.toml`
 - installs and starts the background service by default
@@ -75,7 +75,7 @@ If `~/.nectar/config.toml` already exists, it is kept by default.
 Pin a version or choose an install directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.5.0
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --version v0.5.1
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
@@ -141,19 +141,13 @@ Install Cursor Agent CLI:
 curl https://cursor.com/install -fsS | bash
 ```
 
-Some installation methods name the executable `agent`. Nectar and the installer look for `cursor-agent`, so rename it or create a `cursor-agent` symlink:
-
-```bash
-# If `command -v agent` points to the Cursor CLI:
-mkdir -p ~/.local/bin
-ln -sf "$(command -v agent)" ~/.local/bin/cursor-agent
-```
+The official installer provides both `agent` (primary) and `cursor-agent` (legacy alias). Nectar and the installer prefer `agent` and fall back to `cursor-agent`, so no symlink is needed.
 
 Make sure `~/.local/bin` is in `PATH`, then verify:
 
 ```bash
-cursor-agent login
-cursor-agent -p --trust --mode ask "Reply with exactly OK"
+agent login
+agent -p --trust --mode ask "Reply with exactly OK"
 ```
 
 ### Claude Code CLI
@@ -209,7 +203,7 @@ auto_approve = true           # required for non-interactive bot use
 per_chat_workspace = false
 
 [cursor]
-path = "cursor-agent"
+path = "agent"
 model = ""                    # e.g. composer-2.5; empty = Cursor default
 mode = ""                     # plan | ask; empty = normal agent mode
 sandbox = ""                  # enabled | disabled; empty = Cursor default
@@ -262,7 +256,7 @@ The footer model name uses `codex.model` when set, otherwise the model from Code
 
 For OpenCode, set `bot.engine = "opencode"`; Nectar uses `[opencode]`, resolves the model from `~/.config/opencode/opencode.json` when unset, and reads the last assistant turn's token usage from `opencode session export`. The context window is read from the model's `limit.context`; set `opencode.context_window` to override it when the model is not declared in OpenCode's config.
 
-For Cursor, set `bot.engine = "cursor"`; Nectar runs `cursor-agent -p --output-format stream-json --stream-partial-output` and resumes sessions with `--resume`. `auto_approve` maps to `-f`, and `trust_workspace` maps to `--trust`; both are required for unattended bot use. Attachments are referenced by local path in the prompt. Set `cursor.context_window` explicitly if you want the context percentage in the footer.
+For Cursor, set `bot.engine = "cursor"`; Nectar runs the Cursor CLI (`agent`, falling back to `cursor-agent`) with `-p --output-format stream-json --stream-partial-output` and resumes sessions with `--resume`. `auto_approve` maps to `-f`, and `trust_workspace` maps to `--trust`; both are required for unattended bot use. Attachments are referenced by local path in the prompt. Set `cursor.context_window` explicitly if you want the context percentage in the footer.
 
 For Claude Code, set `bot.engine = "claude"`; Nectar runs `claude -p --output-format stream-json --verbose --include-partial-messages`, passes the prompt on stdin, and resumes sessions with `--resume`. `auto_approve` maps to `--dangerously-skip-permissions`; when it is off, `permission_mode` is passed through. Token usage and the context window are read from the final `result` event, so `claude.context_window` is only needed as an override. Attachments are referenced by local path in the prompt.
 
@@ -275,7 +269,7 @@ export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
-export CURSOR_AGENT_PATH=cursor-agent
+export CURSOR_AGENT_PATH=agent
 export CLAUDE_PATH=claude
 export PI_PATH=pi
 export NECTAR_ENGINE=codex

@@ -93,8 +93,8 @@ per_chat_workspace = false
 # Cursor Agent CLI
 # ---------------------------------------------------------------------------
 [cursor]
-# Executable name or absolute path. Default: cursor-agent.
-path = "cursor-agent"
+# Executable name or absolute path. Default: agent. The legacy cursor-agent name is also supported.
+path = "agent"
 # Model name. Empty = Cursor default.
 # model = "composer-2.5"
 # Mode: plan | ask. Empty = normal agent mode.

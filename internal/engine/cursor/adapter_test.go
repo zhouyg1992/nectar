@@ -12,6 +12,59 @@ import (
 	"github.com/zhouyg1992/nectar/internal/engine"
 )
 
+func TestNewAdapterResolvesExecutableAliases(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable fixture is unix-only")
+	}
+	writeBin := func(t *testing.T, dir, name string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("prefers agent", func(t *testing.T) {
+		dir := t.TempDir()
+		agent := writeBin(t, dir, "agent")
+		writeBin(t, dir, "cursor-agent")
+		t.Setenv("PATH", dir)
+		adapter := NewAdapter(Config{Executable: "agent"})
+		if adapter.cfg.Executable != agent {
+			t.Fatalf("executable = %q, want %q", adapter.cfg.Executable, agent)
+		}
+	})
+
+	t.Run("agent falls back to legacy", func(t *testing.T) {
+		dir := t.TempDir()
+		legacy := writeBin(t, dir, "cursor-agent")
+		t.Setenv("PATH", dir)
+		adapter := NewAdapter(Config{Executable: "agent"})
+		if adapter.cfg.Executable != legacy {
+			t.Fatalf("executable = %q, want %q", adapter.cfg.Executable, legacy)
+		}
+	})
+
+	t.Run("legacy falls back to agent", func(t *testing.T) {
+		dir := t.TempDir()
+		agent := writeBin(t, dir, "agent")
+		t.Setenv("PATH", dir)
+		adapter := NewAdapter(Config{Executable: "cursor-agent"})
+		if adapter.cfg.Executable != agent {
+			t.Fatalf("executable = %q, want %q", adapter.cfg.Executable, agent)
+		}
+	})
+
+	t.Run("absolute path unchanged", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "custom-agent")
+		adapter := NewAdapter(Config{Executable: path})
+		if adapter.cfg.Executable != path {
+			t.Fatalf("executable = %q, want %q", adapter.cfg.Executable, path)
+		}
+	})
+}
+
 func TestAdapterRunsFakeCursorAgent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fixture is unix-only")
@@ -99,8 +152,30 @@ exit 7
 			errText = event.Text
 		}
 	}
-	if !strings.Contains(errText, "not logged in") {
+	if !strings.Contains(errText, "agent login") || !strings.Contains(errText, "CURSOR_API_KEY") {
 		t.Fatalf("error = %q", errText)
+	}
+}
+
+func TestAuthErrorMessage(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{name: "authentication required", in: "Error: Authentication required. Please run 'agent login' first.", want: true},
+		{name: "not logged in", in: "fatal: not logged in", want: true},
+		{name: "api key hint", in: "set CURSOR_API_KEY environment variable", want: true},
+		{name: "model error", in: "model unavailable", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := authErrorMessage(tc.in)
+			isHint := strings.Contains(got, "agent login")
+			if isHint != tc.want {
+				t.Fatalf("authErrorMessage(%q) = %q, want hint=%v", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

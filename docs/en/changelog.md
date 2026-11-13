@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.1 — 2026-11-13
+
+### Changed
+
+- Aligned Cursor CLI with the official `agent` primary command: the config default and installer detection now prefer `agent` while remaining compatible with legacy `cursor-agent`
+- The installer accepts `--engine agent`, `--engine cursor`, and `--engine cursor-agent`
+
+### Fixed
+
+- Cursor login failures now show an actionable card hint to run `agent login` (or `cursor-agent login`) or set `CURSOR_API_KEY`
+
 ## v0.5.0 — 2026-11-13
 
 ### Added
