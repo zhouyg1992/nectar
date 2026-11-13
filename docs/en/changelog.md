@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.3 — 2026-11-13
+
+### Fixed
+
+- systemd units now use an unquoted `WorkingDirectory`, so the service starts correctly on Linux
+
 ## v0.5.2 — 2026-11-13
 
 ### Added

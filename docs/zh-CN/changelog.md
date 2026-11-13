@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.3 — 2026-11-13
+
+### 修复
+
+- systemd unit 的 `WorkingDirectory` 不再加引号，修复 Linux 下服务启动失败的问题
+
 ## v0.5.2 — 2026-11-13
 
 ### 新增
