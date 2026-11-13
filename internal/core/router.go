@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -167,6 +168,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 		"NECTAR_AGENT_ID":   key.AgentID,
 		"NECTAR_DATA_DIR":   r.cfg.DataDir,
 		"NECTAR_API_SOCKET": r.cfg.APISocket,
+	}
+	if executable, execErr := os.Executable(); execErr == nil {
+		opts.Env["NECTAR_CLI"] = executable
 	}
 	if key.ThreadID != "" {
 		opts.Env["NECTAR_THREAD_ID"] = key.ThreadID

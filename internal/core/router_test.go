@@ -1053,7 +1053,8 @@ func TestRouterInjectsNectarSessionEnv(t *testing.T) {
 	if opts.Env["NECTAR_CHAT_ID"] != "chat-1" ||
 		opts.Env["NECTAR_THREAD_ID"] != "thread-1" ||
 		opts.Env["NECTAR_USER_ID"] != "user-1" ||
-		opts.Env["NECTAR_API_SOCKET"] != "/tmp/nectar-data/run/api.sock" {
+		opts.Env["NECTAR_API_SOCKET"] != "/tmp/nectar-data/run/api.sock" ||
+		opts.Env["NECTAR_CLI"] == "" {
 		t.Fatalf("env = %#v", opts.Env)
 	}
 }

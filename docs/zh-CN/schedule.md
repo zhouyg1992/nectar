@@ -50,7 +50,7 @@ nectar schedule pause|resume|run|delete <id>
 nectar schedule update <id> --prompt "新内容" --cron "0 10 * * 1-5"
 ```
 
-CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信。Agent 会话里会自动注入 `NECTAR_CHANNEL`、`NECTAR_CHAT_ID`、`NECTAR_THREAD_ID` 和 `NECTAR_AGENT_ID`，所以 Agent 不需要手动传聊天 ID。
+CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信。Agent 会话里会自动注入 `NECTAR_CHANNEL`、`NECTAR_CHAT_ID`、`NECTAR_THREAD_ID`、`NECTAR_AGENT_ID` 和 `NECTAR_CLI`（Nectar 二进制绝对路径），所以 Agent 不需要手动传聊天 ID，也不依赖服务进程的 `PATH` 是否包含 `~/.local/bin`。
 
 ## 自然语言
 
@@ -66,6 +66,20 @@ CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信。Agent 会话
 - 时间、星期或时区有歧义时先问用户。
 - 创建成功后返回任务 ID 和下次执行时间。
 ```
+
+`install.sh` 默认会做好这件事：
+
+- 把 `nectar-schedule` skill 安装到 `~/.nectar/skills`、`~/.codex/skills`、
+  `~/.claude/skills` 和 `~/.agents/skills`；
+- 向 Nectar 工作区（以及配置里出现的 `working_dir`）的 `AGENTS.md` 写入一个
+  带 `<!-- BEGIN NECTAR SCHEDULE -->` 标记的托管片段，供 OpenCode、Pi、Cursor
+  等主要依赖 `AGENTS.md` 的引擎使用；
+- 升级时会备份旧 skill 到 `~/.nectar/skill-backups`，并原地替换托管片段。
+
+不想修改全局 Agent 配置时，安装时加 `--no-skills`。
+
+`nectar update` 只替换二进制，不会刷新 skill；如果新版本更新了 skill，重跑
+`install.sh` 或手动复制 `skills/nectar-schedule`。
 
 ## 语义与边界
 

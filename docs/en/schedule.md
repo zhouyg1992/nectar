@@ -38,7 +38,7 @@ nectar schedule preview --cron "0 9 * * 1-5"
 nectar schedule pause|resume|run|delete <id>
 ```
 
-The CLI talks to the bot over `~/.nectar/run/api.sock`. Agent sessions receive `NECTAR_CHANNEL`, `NECTAR_CHAT_ID`, `NECTAR_THREAD_ID` and `NECTAR_AGENT_ID`, so the target chat is auto-detected.
+The CLI talks to the bot over `~/.nectar/run/api.sock`. Agent sessions receive `NECTAR_CHANNEL`, `NECTAR_CHAT_ID`, `NECTAR_THREAD_ID`, `NECTAR_AGENT_ID`, and `NECTAR_CLI` (the absolute Nectar binary path), so the target chat is auto-detected and the command works even when the service `PATH` omits `~/.local/bin`.
 
 ## Natural language
 
@@ -53,6 +53,21 @@ Use `nectar schedule` to manage scheduled tasks.
 - Rewrite the prompt so it is self-contained.
 - Ask when the time, weekday, or timezone is ambiguous.
 ```
+
+`install.sh` handles this by default:
+
+- it installs the `nectar-schedule` skill into `~/.nectar/skills`,
+  `~/.codex/skills`, `~/.claude/skills`, and `~/.agents/skills`;
+- it adds a managed `<!-- BEGIN NECTAR SCHEDULE -->` block to `AGENTS.md` in the
+  Nectar workspace and any configured `working_dir`, covering engines that
+  primarily read `AGENTS.md` (OpenCode, Pi, Cursor);
+- upgrades back up the old skill to `~/.nectar/skill-backups` and replace the
+  managed block in place.
+
+Pass `--no-skills` to leave global agent configuration untouched.
+
+`nectar update` replaces the binary only. If a release changes the skill, rerun
+`install.sh` or copy `skills/nectar-schedule` manually.
 
 ## Semantics
 

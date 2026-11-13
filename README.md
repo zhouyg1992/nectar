@@ -68,6 +68,7 @@ The installer is interactive. It:
 - detects installed engine CLIs (`codex`, `opencode`, `agent` / `cursor-agent`, `claude`, `pi`) and exits if none are found
 - lets you choose an engine and platform (Feishu / Lark by default, DingTalk optional)
 - writes a minimal `~/.nectar/config.toml`
+- installs the `nectar-schedule` skill for Codex / Claude / shared Agents roots and adds a managed `AGENTS.md` hint to the workspace
 - installs and starts the background service by default
 
 If `~/.nectar/config.toml` already exists, it is kept by default.

@@ -69,6 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 - 检测当前电脑已安装的引擎 CLI（`codex`、`opencode`、`agent` / `cursor-agent`、`claude`、`pi`），一个都没有时提示并退出
 - 让你选择引擎和平台（默认飞书 / Lark，可选钉钉）
 - 写入一份最小化的 `~/.nectar/config.toml`
+- 安装 `nectar-schedule` skill 到 Codex / Claude / Agents 的全局 skill 目录，并向工作区 `AGENTS.md` 写入托管片段
 - 默认安装并启动后台服务
 
 如果 `~/.nectar/config.toml` 已存在，默认保留现有配置。
