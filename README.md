@@ -20,6 +20,10 @@
 
 Nectar forwards Feishu or DingTalk messages to Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi and streams the result back as an interactive card. v1 supports Feishu / Lark and DingTalk with any of these engines.
 
+<p align="center">
+  <img src="docs/assets/nectar-flow.svg" alt="Feishu and DingTalk messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
+</p>
+
 ## Support matrix
 
 **v1 supports Feishu / Lark and DingTalk with Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi.**
@@ -30,8 +34,8 @@ Legend: ✅ supported · 🚧 planned
 
 | Platform | Status | Configuration | Notes |
 |---|---|---|---|
-| Feishu / Lark | ✅ Supported | [Feishu setup (ZH)](docs/zh-CN/feishu.md) | WebSocket + @Bot<br>Cards: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>Footer: context usage, model, time, tokens |
-| DingTalk | ✅ Supported | [DingTalk setup (ZH)](docs/zh-CN/dingtalk.md) | Stream mode + @Bot<br>A2UI streaming cards<br>No public callback or card template |
+| Feishu / Lark | ✅ Supported | [Feishu setup](docs/en/feishu.md) | WebSocket + @Bot<br>Cards: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed<br>Footer: context usage, model, time, tokens |
+| DingTalk | ✅ Supported | [DingTalk setup](docs/en/dingtalk.md) | Stream mode + @Bot<br>A2UI streaming cards<br>No public callback or card template |
 | Telegram | 🚧 Planned | — | Long polling |
 | WeCom / WeChat | 🚧 Planned | — | Platform-dependent |
 | Slack | 🚧 Planned | — | Socket Mode |
@@ -49,7 +53,7 @@ Legend: ✅ supported · 🚧 planned
 | Kimi Code | 🚧 Planned | Local server API adapter |
 | More engines | 🚧 Planned | Implement `EngineAdapter` |
 
-> Planned items indicate direction, not a schedule. See the [Roadmap](docs/zh-CN/roadmap.md) and Releases for progress.
+> Planned items indicate direction, not a schedule. See the [Roadmap](docs/en/roadmap.md) and Releases for progress.
 
 ## Install
 
@@ -58,6 +62,15 @@ macOS / Linux (amd64 / arm64):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh
 ```
+
+The installer is interactive. It:
+
+- detects installed engine CLIs (`codex`, `opencode`, `cursor-agent`, `claude`, `pi`) and exits if none are found
+- lets you choose an engine and platform (Feishu / Lark by default, DingTalk optional)
+- writes a minimal `~/.nectar/config.toml`
+- installs and starts the background service by default
+
+If `~/.nectar/config.toml` already exists, it is kept by default.
 
 Pin a version or choose an install directory:
 
@@ -73,50 +86,88 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh -
 sh install.sh
 ```
 
-The installer verifies the SHA-256 checksum, installs to `~/.local/bin/nectar`, and creates `~/.nectar/config.toml` if it does not exist.
+The installer verifies the SHA-256 checksum and installs to `~/.local/bin/nectar`.
 
 Windows: use WSL or download a release manually. The repository must be public for anonymous `curl | sh`.
 
-The installer can also install the background service on a subsequent run, after `~/.nectar/config.toml` contains real credentials:
+For non-interactive installs, pass the engine, platform, and credentials explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --service
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
+  FEISHU_APP_ID=cli_xxx FEISHU_APP_SECRET=xxx sh -s -- --engine codex --platform feishu
 ```
 
-On Linux, add `--linger` to start at boot without a login session.
+For DingTalk, use `--platform dingtalk` with `DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET`.
+
+Use `--no-service` to install the binary only, `--reconfigure` to back up and replace an existing config, and `--config PATH` to use a custom config path. On Linux, add `--linger` to start at boot without a login session.
+
+To uninstall:
+
+```bash
+nectar service uninstall
+rm -f ~/.local/bin/nectar
+rm -rf ~/.nectar   # optional: removes config, data, workspaces, and lessons
+```
+
+Adjust the paths if you used `--dir` or `--config`.
 
 > Background service support requires v0.1.1 or later.
 
 ## Prerequisites
 
-- Codex CLI installed and logged in:
+Install and log in to **one** of the following engines. You do not need all of them; the installer only requires one.
+
+### Codex CLI
+
+Install Codex CLI and log in:
 
 ```bash
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
-- Or OpenCode installed, configured with a provider/model, and working:
+### OpenCode
+
+Install OpenCode, configure a provider/model, and confirm it works:
 
 ```bash
 opencode run --format json "Reply with exactly OK"
 ```
 
-- Or Cursor Agent CLI installed and logged in:
+### Cursor Agent CLI
+
+Install Cursor Agent CLI:
 
 ```bash
 curl https://cursor.com/install -fsS | bash
+```
+
+Some installation methods name the executable `agent`. Nectar and the installer look for `cursor-agent`, so rename it or create a `cursor-agent` symlink:
+
+```bash
+# If `command -v agent` points to the Cursor CLI:
+mkdir -p ~/.local/bin
+ln -sf "$(command -v agent)" ~/.local/bin/cursor-agent
+```
+
+Make sure `~/.local/bin` is in `PATH`, then verify:
+
+```bash
 cursor-agent login
 cursor-agent -p --trust --mode ask "Reply with exactly OK"
 ```
 
-- Or Claude Code CLI installed and logged in:
+### Claude Code CLI
+
+Install Claude Code CLI and log in:
 
 ```bash
 claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
-- Or Pi installed and logged in:
+### Pi
+
+Install Pi and log in:
 
 ```bash
 pi auth check --provider anthropic
@@ -273,7 +324,7 @@ nectar service install
 - `--no-start` installs and enables the service without starting it immediately
 - Manage with `nectar service status|logs|restart|stop|uninstall`
 
-Service mode reads the selected platform's credentials from the config file, not from shell environment variables. See [service management](docs/zh-CN/service.md) for details.
+Service mode reads the selected platform's credentials from the config file, not from shell environment variables. See [service management](docs/en/service.md) for details.
 
 ### Commands
 
@@ -286,15 +337,12 @@ Service mode reads the selected platform's credentials from the config file, not
 
 ## Docs
 
-- [English docs](docs/en/README.md) (translation in progress)
+- [English docs](docs/en/README.md)
 - [Chinese docs](docs/zh-CN/README.md)
-- [Service management](docs/zh-CN/service.md)
-- [Architecture](docs/zh-CN/architecture.md)
-- [Development](docs/zh-CN/development.md)
-- [Security](docs/zh-CN/security.md)
-- [Release process](docs/zh-CN/release.md)
-- [Roadmap](docs/zh-CN/roadmap.md)
-- [Changelog](docs/zh-CN/changelog.md)
+- [Service management](docs/en/service.md)
+- [Security](docs/en/security.md)
+- [Roadmap](docs/en/roadmap.md)
+- [Changelog](docs/en/changelog.md)
 
 ## License
 

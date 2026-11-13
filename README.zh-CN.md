@@ -20,6 +20,10 @@
 
 Nectar 把飞书或钉钉消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code 或 Pi 执行，再以交互卡片把结果回传。v1 支持飞书 / Lark、钉钉 + 上述任一引擎，安装后一条命令即可启动。
 
+<p align="center">
+  <img src="docs/assets/nectar-flow.svg" alt="飞书和钉钉消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
+</p>
+
 ## 支持矩阵
 
 **v1 支持：飞书 / Lark、钉钉 + Codex CLI / OpenCode / Cursor Agent / Claude Code / Pi。**
@@ -59,13 +63,15 @@ macOS / Linux（amd64 / arm64）：
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh
 ```
 
-安装脚本会：
+安装脚本是交互式的，会：
 
-- 自动识别操作系统和 CPU 架构
-- 从 GitHub Releases 下载对应版本
-- 校验 `checksums.txt` 里的 SHA-256
-- 安装到 `~/.local/bin/nectar`
-- 如果 `~/.nectar/config.toml` 不存在，从示例配置创建一份
+- 自动识别操作系统和 CPU 架构，从 GitHub Releases 下载对应版本并校验 `checksums.txt` 里的 SHA-256
+- 检测当前电脑已安装的引擎 CLI（`codex`、`opencode`、`cursor-agent`、`claude`、`pi`），一个都没有时提示并退出
+- 让你选择引擎和平台（默认飞书 / Lark，可选钉钉）
+- 写入一份最小化的 `~/.nectar/config.toml`
+- 默认安装并启动后台服务
+
+如果 `~/.nectar/config.toml` 已存在，默认保留现有配置。
 
 指定版本或安装目录：
 
@@ -83,17 +89,32 @@ sh install.sh
 
 Windows 请使用 WSL，或从 Releases 手动下载。仓库必须是公开的，`curl | sh` 才能匿名访问。
 
-如果已经配置好 `~/.nectar/config.toml`，也可以让安装脚本顺便安装后台服务：
+非交互安装可以显式传入引擎、平台和凭证：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh -s -- --service
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
+  FEISHU_APP_ID=cli_xxx FEISHU_APP_SECRET=xxx sh -s -- --engine codex --platform feishu
 ```
 
-Linux 额外加 `--linger` 可开机启动，无需登录。
+钉钉使用 `--platform dingtalk`，并通过 `DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET` 传入凭证。
+
+用 `--no-service` 只安装二进制，用 `--reconfigure` 备份并替换现有配置，用 `--config PATH` 指定配置路径。Linux 额外加 `--linger` 可开机启动，无需登录。
+
+卸载：
+
+```bash
+nectar service uninstall
+rm -f ~/.local/bin/nectar
+rm -rf ~/.nectar   # 可选：删除配置、数据、工作区和教训记录
+```
+
+如果安装时用了 `--dir` 或 `--config`，请替换成对应路径。
 
 > 后台服务支持需要 v0.1.1 及以上版本。
 
 ## 前置条件
+
+以下引擎**任选其一**安装并登录即可，不需要全部安装；安装脚本会检测已安装的引擎并让你选择。
 
 ### Codex CLI
 
@@ -113,10 +134,23 @@ opencode run --format json "Reply with exactly OK"
 
 ### Cursor Agent CLI
 
-安装并登录 Cursor Agent，确认下面的命令可以正常运行：
+安装 Cursor Agent：
 
 ```bash
 curl https://cursor.com/install -fsS | bash
+```
+
+部分安装方式会把可执行文件命名为 `agent`，而 Nectar 和安装脚本默认查找 `cursor-agent`，所以请把它重命名，或创建一个 `cursor-agent` 软链接：
+
+```bash
+# 如果 command -v agent 指向 Cursor CLI：
+mkdir -p ~/.local/bin
+ln -sf "$(command -v agent)" ~/.local/bin/cursor-agent
+```
+
+确保 `~/.local/bin` 在 `PATH` 中，然后确认下面的命令可以正常运行：
+
+```bash
 cursor-agent login
 cursor-agent -p --trust --mode ask "Reply with exactly OK"
 ```
@@ -320,13 +354,10 @@ nectar service install
 - [飞书配置与排查](docs/zh-CN/feishu.md)
 - [钉钉配置与排查](docs/zh-CN/dingtalk.md)
 - [后台服务](docs/zh-CN/service.md)
-- [架构与扩展点](docs/zh-CN/architecture.md)
-- [开发与测试](docs/zh-CN/development.md)
 - [安全边界](docs/zh-CN/security.md)
-- [发布流程](docs/zh-CN/release.md)
 - [路线图与待实现](docs/zh-CN/roadmap.md)
 - [Changelog](docs/zh-CN/changelog.md)
-- [English docs](docs/en/README.md)（translation in progress）
+- [English docs](docs/en/README.md)
 
 ## License
 
