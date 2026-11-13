@@ -2,7 +2,7 @@
 
 ## 环境
 
-- Go 1.22+
+- Go 1.26+
 - Codex CLI、OpenCode CLI、Cursor Agent CLI、Claude Code 或 Pi（真实端到端测试需要）
 - 飞书自建应用（真实端到端测试需要）
 
