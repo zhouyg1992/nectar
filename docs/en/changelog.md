@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.2 — 2026-11-13
+
+### Added
+
+- Progress cards now show a live tool-call count; intermediate tool output stays in the card body and hides when the final answer arrives
+- `nectar update` self-updater: checks releases, verifies `checksums.txt`, atomically replaces the binary, and restarts the service; supports `--check`, `--force`, `--version`, and `--no-restart`
+- Sessions persist across restarts: chat/thread to engine session mappings and last usage are stored in `~/.nectar/sessions.json` and restored on startup; resume failures show a notice and start a new session
+
+### Changed
+
+- User-facing card copy is now consistently in English
+- Simplified the card footer and added a divider before it on Feishu and DingTalk
+
+### Fixed
+
+- Context percentage now uses the latest model call's token count across Codex, Claude, and Cursor; `/status` keeps the current turn's token usage
+
 ## v0.5.1 — 2026-11-13
 
 ### Changed

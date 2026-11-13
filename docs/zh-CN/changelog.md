@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.2 — 2026-11-13
+
+### 新增
+
+- 进度卡片实时显示工具调用数量，工具输出保留在卡片正文，最终回答到达后自动隐藏
+- `nectar update` 自更新命令：检查 Release、校验 `checksums.txt`、原子替换二进制并重启服务；支持 `--check`、`--force`、`--version` 和 `--no-restart`
+- 会话跨重启持久化：聊天/线程到引擎 session 的映射和 last usage 保存到 `~/.nectar/sessions.json`，启动时自动恢复；resume 失败时提示并新建会话
+
+### 变更
+
+- 卡片用户可见文案统一为英文
+- 简化卡片底部信息，并在飞书和钉钉的 footer 前增加分隔线
+
+### 修复
+
+- 上下文占比改用最近一次模型调用的 token 数计算，适配 Codex、Claude 和 Cursor；`/status` 保留本轮 token 用量
+
 ## v0.5.1 — 2026-11-13
 
 ### 变更
