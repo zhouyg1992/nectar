@@ -157,7 +157,7 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 			events <- ev
 		}
 
-		parseErr := Parse(stdout, emit, maxOutput)
+		parsedUsage, parseErr := ParseWithUsage(stdout, emit, maxOutput)
 		if parseErr != nil && cmd.Process != nil {
 			_ = cmd.Process.Signal(os.Interrupt)
 		}
@@ -171,14 +171,18 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 		} else if !sentDone {
 			done := engine.Event{Type: engine.EventDone}
 			if parseErr == nil && trackedSession != "" {
-				if usage := a.sessionUsage(trackedSession, workdir); usage != nil {
-					if data, err := json.Marshal(map[string]int{
-						"input_tokens":   usage.Input,
-						"output_tokens":  usage.Output,
-						"context_tokens": usage.contextTokens(),
-					}); err == nil {
-						done.Meta = map[string]any{"usage": string(data)}
-					}
+				contextUsage := a.sessionUsage(trackedSession, workdir)
+				if contextUsage == nil && parsedUsage != nil && !parsedUsage.Last.empty() {
+					last := parsedUsage.Last
+					contextUsage = &last
+				}
+				var turnUsage *tokenUsage
+				if parsedUsage != nil && !parsedUsage.Turn.empty() {
+					turn := parsedUsage.Turn
+					turnUsage = &turn
+				}
+				if meta := opencodeUsageMeta(contextUsage, turnUsage); meta != nil {
+					done.Meta = meta
 				}
 			}
 			emit(done)
@@ -206,6 +210,42 @@ func (u tokenUsage) contextTokens() int {
 
 func (u tokenUsage) empty() bool {
 	return u.contextTokens() == 0
+}
+
+func (u tokenUsage) add(other tokenUsage) tokenUsage {
+	return tokenUsage{
+		Input:     u.Input + other.Input,
+		Output:    u.Output + other.Output,
+		Reasoning: u.Reasoning + other.Reasoning,
+		Cache: cacheUsage{
+			Read:  u.Cache.Read + other.Cache.Read,
+			Write: u.Cache.Write + other.Cache.Write,
+		},
+	}
+}
+
+func opencodeUsageMeta(contextUsage, turnUsage *tokenUsage) map[string]any {
+	data := map[string]int{}
+	if contextUsage != nil && !contextUsage.empty() {
+		data["context_tokens"] = contextUsage.contextTokens()
+	}
+	usage := turnUsage
+	if usage == nil {
+		usage = contextUsage
+	}
+	if usage != nil && !usage.empty() {
+		data["input_tokens"] = usage.Input
+		data["cached_input_tokens"] = usage.Cache.Read + usage.Cache.Write
+		data["output_tokens"] = usage.Output + usage.Reasoning
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{"usage": string(encoded)}
 }
 
 func (a *Adapter) sessionUsage(sessionID, workdir string) *tokenUsage {

@@ -52,11 +52,14 @@ func TestRenderCardStatusAndBody(t *testing.T) {
 		if payload.Header.Title.Content != "title" {
 			t.Fatalf("%s title = %q", tc.status, payload.Header.Title.Content)
 		}
-		if len(payload.Body.Elements) != 2 {
-			t.Fatalf("%s elements = %d, want 2", tc.status, len(payload.Body.Elements))
+		if len(payload.Body.Elements) != 3 {
+			t.Fatalf("%s elements = %d, want 3", tc.status, len(payload.Body.Elements))
 		}
-		if payload.Body.Elements[0]["tag"] != "markdown" || payload.Body.Elements[1]["tag"] != "markdown" {
-			t.Fatalf("%s body tags = %v, %v", tc.status, payload.Body.Elements[0]["tag"], payload.Body.Elements[1]["tag"])
+		if payload.Body.Elements[0]["tag"] != "markdown" ||
+			payload.Body.Elements[1]["tag"] != "hr" ||
+			payload.Body.Elements[2]["tag"] != "markdown" {
+			t.Fatalf("%s body tags = %v, %v, %v", tc.status,
+				payload.Body.Elements[0]["tag"], payload.Body.Elements[1]["tag"], payload.Body.Elements[2]["tag"])
 		}
 	}
 }

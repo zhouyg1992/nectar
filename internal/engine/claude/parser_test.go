@@ -56,7 +56,7 @@ func TestParseClaudeStream(t *testing.T) {
 	if got[5].Text != "alpha" || got[5].Meta["status"] != "completed" {
 		t.Fatalf("tool result = %#v", got[5])
 	}
-	if got[8].Meta["usage"] != `{"context_tokens":32,"input_tokens":29,"output_tokens":3}` {
+	if got[8].Meta["usage"] != `{"cached_input_tokens":9,"context_tokens":23,"input_tokens":20,"output_tokens":3}` {
 		t.Fatalf("usage = %v", got[8].Meta["usage"])
 	}
 	if got[8].Meta["context_window"] != 200000 {
@@ -103,7 +103,7 @@ func TestParseClaudeResultError(t *testing.T) {
 	}
 }
 
-func TestParseClaudeUsagePrefersResultUsage(t *testing.T) {
+func TestParseClaudeUsageSplitsContextAndTurn(t *testing.T) {
 	input := strings.Join([]string{
 		`{"type":"stream_event","event":{"type":"message_delta","usage":{"input_tokens":100,"output_tokens":1}},"session_id":"sess_1"}`,
 		`{"type":"result","subtype":"success","result":"ok","session_id":"sess_1","usage":{"input_tokens":30,"output_tokens":2,"cache_creation_input_tokens":1,"cache_read_input_tokens":7},"modelUsage":{"m":{"inputTokens":999,"outputTokens":999,"contextWindow":1000000}}}`,
@@ -119,10 +119,30 @@ func TestParseClaudeUsagePrefersResultUsage(t *testing.T) {
 	if last.Type != engine.EventDone {
 		t.Fatalf("last event = %#v", last)
 	}
-	if last.Meta["usage"] != `{"context_tokens":40,"input_tokens":38,"output_tokens":2}` {
+	if last.Meta["usage"] != `{"cached_input_tokens":8,"context_tokens":101,"input_tokens":30,"output_tokens":2}` {
 		t.Fatalf("usage = %v", last.Meta["usage"])
 	}
 	if last.Meta["context_window"] != 1000000 {
 		t.Fatalf("context window = %v", last.Meta["context_window"])
+	}
+}
+
+func TestParseClaudeContextUsesLastStreamCall(t *testing.T) {
+	input := strings.Join([]string{
+		`{"type":"stream_event","event":{"type":"message_start","message":{"usage":{"input_tokens":16161,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}},"session_id":"sess_1"}`,
+		`{"type":"stream_event","event":{"type":"message_delta","usage":{"input_tokens":16161,"output_tokens":60,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}},"session_id":"sess_1"}`,
+		`{"type":"stream_event","event":{"type":"message_delta","usage":{"input_tokens":108,"output_tokens":18,"cache_read_input_tokens":16128,"cache_creation_input_tokens":0}},"session_id":"sess_1"}`,
+		`{"type":"result","subtype":"success","result":"ok","session_id":"sess_1","usage":{"input_tokens":16269,"output_tokens":78,"cache_creation_input_tokens":0,"cache_read_input_tokens":16128},"modelUsage":{"m":{"inputTokens":16269,"outputTokens":78,"cacheReadInputTokens":16128,"cacheCreationInputTokens":0,"contextWindow":1000000}}}`,
+	}, "\n")
+
+	var got []engine.Event
+	if err := Parse(strings.NewReader(input), func(ev engine.Event) {
+		got = append(got, ev)
+	}, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	last := got[len(got)-1]
+	if last.Meta["usage"] != `{"cached_input_tokens":16128,"context_tokens":16254,"input_tokens":16269,"output_tokens":78}` {
+		t.Fatalf("usage = %v", last.Meta["usage"])
 	}
 }

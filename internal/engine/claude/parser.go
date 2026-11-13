@@ -91,6 +91,7 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 	total := 0
 	sessionID := ""
 	lastMessage := ""
+	var lastCallUsage *rawUsage
 	emitMessage := func(text string) {
 		if strings.TrimSpace(text) == "" {
 			return
@@ -128,17 +129,27 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			if event.Stream == nil {
 				continue
 			}
+			if event.Stream.Message != nil && event.Stream.Message.Usage != nil &&
+				!event.Stream.Message.Usage.empty() {
+				lastCallUsage = event.Stream.Message.Usage
+			}
+			if event.Stream.Usage != nil && !event.Stream.Usage.empty() {
+				lastCallUsage = event.Stream.Usage
+			}
 			if event.Stream.Delta != nil &&
 				event.Stream.Delta.Type == "text_delta" &&
 				event.Stream.Delta.Text != "" {
 				emit(engine.Event{Type: engine.EventTextDelta, Text: event.Stream.Delta.Text})
 			}
 		case "assistant":
+			if event.Message != nil && event.Message.Usage != nil && !event.Message.Usage.empty() {
+				lastCallUsage = event.Message.Usage
+			}
 			emitAssistant(event.Message, emitMessage, emit)
 		case "user":
 			emitToolResults(event.Message, emit)
 		case "result":
-			emitResult(event, emitMessage, emit)
+			emitResult(event, lastCallUsage, emitMessage, emit)
 		case "error":
 			emit(engine.Event{Type: engine.EventError, Text: errorText(event)})
 		}
@@ -220,7 +231,7 @@ func emitToolResults(message *rawMessage, emit func(engine.Event)) {
 	}
 }
 
-func emitResult(event rawEvent, emitMessage func(string), emit func(engine.Event)) {
+func emitResult(event rawEvent, lastCallUsage *rawUsage, emitMessage func(string), emit func(engine.Event)) {
 	if event.IsError || (event.Subtype != "" && event.Subtype != "success") {
 		text := strings.TrimSpace(event.Result)
 		if text == "" {
@@ -238,24 +249,40 @@ func emitResult(event rawEvent, emitMessage func(string), emit func(engine.Event
 	}
 
 	meta := map[string]any{}
-	usage := event.Usage
+	turnUsage := event.Usage
 	usageFromModels, contextWindow := modelUsageSummary(event.ModelUsage)
-	if usage == nil || usage.empty() {
-		usage = usageFromModels
+	if turnUsage == nil || turnUsage.empty() {
+		turnUsage = usageFromModels
 	}
-	if usage != nil && !usage.empty() {
-		if data, err := json.Marshal(map[string]int{
-			"input_tokens":   usage.inputTotal(),
-			"output_tokens":  usage.OutputTokens,
-			"context_tokens": usage.contextTotal(),
-		}); err == nil {
-			meta["usage"] = string(data)
-		}
+	if usageMeta := resultUsageMeta(lastCallUsage, turnUsage); usageMeta != nil {
+		meta["usage"] = usageMeta["usage"]
 	}
 	if contextWindow > 0 {
 		meta["context_window"] = contextWindow
 	}
 	emit(engine.Event{Type: engine.EventDone, Meta: meta})
+}
+
+func resultUsageMeta(contextUsage, turnUsage *rawUsage) map[string]any {
+	data := map[string]int{}
+	// Stream message starts/deltas carry the final API call's context usage;
+	// result usage is cumulative across every model call in the query.
+	if contextUsage != nil && !contextUsage.empty() {
+		data["context_tokens"] = contextUsage.contextTotal()
+	}
+	if turnUsage != nil && !turnUsage.empty() {
+		data["input_tokens"] = turnUsage.InputTokens
+		data["cached_input_tokens"] = turnUsage.CacheReadInputTokens + turnUsage.CacheCreationInputTokens
+		data["output_tokens"] = turnUsage.OutputTokens
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{"usage": string(encoded)}
 }
 
 func modelUsageSummary(usages map[string]rawModelUsage) (*rawUsage, int) {

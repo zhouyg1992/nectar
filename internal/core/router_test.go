@@ -518,11 +518,70 @@ func TestRouterStartsAndStopsTyping(t *testing.T) {
 
 func TestCardFooterIncludesContextUsage(t *testing.T) {
 	footer := cardFooter("deepseek/deepseek-flash", 2*time.Second, &tokenUsage{
-		InputTokens:  55200,
-		OutputTokens: 100,
+		InputTokens:   55200,
+		OutputTokens:  100,
+		ContextTokens: 55300,
 	}, 258000)
 	if !strings.Contains(footer, "ctx: 55.3k/258k (21.4%)") || !strings.Contains(footer, "deepseek-flash") {
 		t.Fatalf("footer = %q", footer)
+	}
+}
+
+func TestCardFooterOmitsTurnTokens(t *testing.T) {
+	footer := cardFooter("deepseek/deepseek-flash", 7600*time.Millisecond, &tokenUsage{
+		InputTokens:       201,
+		CachedInputTokens: 17280,
+		OutputTokens:      16,
+		ContextTokens:     17497,
+	}, 996147)
+	for _, want := range []string{"ctx: 17.5k/996.1k (1.8%)", "deepseek-flash", "7.6s"} {
+		if !strings.Contains(footer, want) {
+			t.Fatalf("footer = %q, want %q", footer, want)
+		}
+	}
+	for _, unwanted := range []string{"↑", "↓", "cached"} {
+		if strings.Contains(footer, unwanted) {
+			t.Fatalf("footer = %q, should not contain %q", footer, unwanted)
+		}
+	}
+}
+
+func TestFormatTurnUsage(t *testing.T) {
+	got := formatTurnUsage(&tokenUsage{
+		InputTokens:       201,
+		CachedInputTokens: 17280,
+		OutputTokens:      16,
+	})
+	if got != "↑201 (+17.3k cached) ↓16" {
+		t.Fatalf("formatTurnUsage() = %q", got)
+	}
+}
+
+func TestCardFooterOmitsContextWithoutLastCallUsage(t *testing.T) {
+	footer := cardFooter("deepseek/deepseek-flash", time.Second, &tokenUsage{
+		InputTokens:  55200,
+		OutputTokens: 100,
+	}, 258000)
+	for _, unwanted := range []string{"ctx:", "↑", "↓"} {
+		if strings.Contains(footer, unwanted) {
+			t.Fatalf("footer = %q, should not contain %q", footer, unwanted)
+		}
+	}
+	if !strings.Contains(footer, "deepseek-flash") || !strings.Contains(footer, "1.0s") {
+		t.Fatalf("footer = %q", footer)
+	}
+}
+
+func TestParseUsageIncludesCachedInput(t *testing.T) {
+	usage := parseUsage(map[string]any{
+		"usage": `{"input_tokens":201,"cached_input_tokens":17280,"output_tokens":16,"context_tokens":17497}`,
+	})
+	if usage == nil {
+		t.Fatal("parseUsage() = nil")
+	}
+	if usage.InputTokens != 201 || usage.CachedInputTokens != 17280 ||
+		usage.OutputTokens != 16 || usage.ContextTokens != 17497 {
+		t.Fatalf("usage = %#v", usage)
 	}
 }
 
@@ -800,9 +859,25 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 	waitForCardStatus(t, plat, platform.CardComplete)
 
 	final := plat.lastUpdate()
-	for _, want := range []string{"ctx: 180/1k (18.0%)", "↑120", "↓30"} {
+	for _, want := range []string{"ctx: 180/1k (18.0%)"} {
 		if !strings.Contains(final.Footer, want) {
 			t.Fatalf("footer = %q, want %q", final.Footer, want)
+		}
+	}
+	for _, unwanted := range []string{"↑", "↓"} {
+		if strings.Contains(final.Footer, unwanted) {
+			t.Fatalf("footer = %q, should not contain %q", final.Footer, unwanted)
+		}
+	}
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m2", Text: "/status"})
+	waitForCardSends(t, plat, 2)
+	plat.mu.Lock()
+	statusBody := plat.sentCards[1].Body
+	plat.mu.Unlock()
+	for _, want := range []string{"上下文: 180/1k (18.0%)", "上一轮 token: ↑120 ↓30"} {
+		if !strings.Contains(statusBody, want) {
+			t.Fatalf("status body = %q, want %q", statusBody, want)
 		}
 	}
 }

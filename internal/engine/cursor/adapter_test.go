@@ -82,6 +82,7 @@ printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"ty
 printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"lo"}]},"session_id":"sess_fake","timestamp_ms":2}'
 printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hello"}]},"session_id":"sess_fake","timestamp_ms":3}'
 printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hello"}]},"session_id":"sess_fake"}'
+printf '%s\n' '{"type":"usage","subtype":"model_call","usage":{"inputTokens":100,"outputTokens":5,"cacheReadTokens":50,"cacheWriteTokens":0,"reasoningTokens":2},"session_id":"sess_fake"}'
 printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"hello","session_id":"sess_fake","usage":{"inputTokens":10,"outputTokens":2,"cacheReadTokens":3,"cacheWriteTokens":0,"reasoningTokens":1}}'
 `
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
@@ -122,7 +123,7 @@ printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"result":"h
 	if got[4].Type != engine.EventDone {
 		t.Fatalf("done = %#v", got[4])
 	}
-	if got[4].Meta["usage"] != `{"context_tokens":16,"input_tokens":10,"output_tokens":2}` {
+	if got[4].Meta["usage"] != `{"cached_input_tokens":3,"context_tokens":155,"input_tokens":10,"output_tokens":2}` {
 		t.Fatalf("usage = %v", got[4].Meta["usage"])
 	}
 }
