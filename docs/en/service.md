@@ -72,6 +72,8 @@ nectar update --no-restart
 
 Use `--force` to reinstall the same version. Updates are supported on macOS and Linux; Windows is not supported by the release assets.
 
+Session mappings and last usage are stored in `~/.nectar/sessions.json`. After a restart Nectar resumes the same engine session; if that session is no longer valid, it reports the failure and starts a new one.
+
 ## macOS
 
 Service file:

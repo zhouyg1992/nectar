@@ -72,6 +72,8 @@ nectar update --no-restart
 
 用 `--force` 可重装当前版本。更新支持 macOS 和 Linux；Release 不提供 Windows 资产。
 
+会话映射和 last usage 会保存到 `~/.nectar/sessions.json`。重启后 Nectar 会 resume 原来的引擎会话；如果该 session 已失效，会提示并启动新会话。
+
 ## macOS
 
 服务文件：

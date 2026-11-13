@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -106,6 +107,12 @@ func runBot(configPath string) error {
 		return err
 	}
 
+	sessions, err := core.NewPersistentSessionStore(filepath.Join(cfg.Storage.DataDir, "sessions.json"))
+	if err != nil {
+		logger.Warn("could not load persisted sessions; starting with empty sessions", "error", err)
+		sessions = core.NewSessionStore()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -113,7 +120,7 @@ func runBot(configPath string) error {
 		ctx,
 		platformAdapter,
 		setup.adapter,
-		core.NewSessionStore(),
+		sessions,
 		core.NewQueue(),
 		workspaces,
 		lessons,

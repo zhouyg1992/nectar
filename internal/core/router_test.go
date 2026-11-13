@@ -149,6 +149,7 @@ type fakeEngine struct {
 	lastPrompt string
 	lastOpts   engine.EngineOptions
 	fail       bool
+	resumeErr  error
 }
 
 func (f *fakeEngine) Name() string { return "fake" }
@@ -168,7 +169,11 @@ func (f *fakeEngine) Resume(_ context.Context, sessionID, prompt string, opts en
 	f.lastResume = sessionID
 	f.lastPrompt = prompt
 	f.lastOpts = opts
+	resumeErr := f.resumeErr
 	f.mu.Unlock()
+	if resumeErr != nil {
+		return nil, resumeErr
+	}
 	return f.events("session-resume"), nil
 }
 
@@ -349,6 +354,33 @@ func TestRouterStartsThenResumes(t *testing.T) {
 	starts, resumes, _ = eng.counts()
 	if starts != 2 || resumes != 1 {
 		t.Fatalf("after /new starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterFallsBackWhenResumeFails(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &fakeEngine{resumeErr: errors.New("session not found")}
+	router, _ := newTestRouter(t, eng, plat)
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	if err := router.sessions.Set(key, "stale-session"); err != nil {
+		t.Fatal(err)
+	}
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "hello"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	final := plat.lastUpdate()
+	for _, want := range []string{"Previous session could not be resumed", "answer"} {
+		if !strings.Contains(final.Body, want) {
+			t.Fatalf("final body = %q, want %q", final.Body, want)
+		}
+	}
+	if got, ok := router.sessions.Get(key); !ok || got != "session-start" {
+		t.Fatalf("session = %q, %v, want session-start", got, ok)
+	}
+	starts, resumes, _ := eng.counts()
+	if starts != 1 || resumes != 1 {
+		t.Fatalf("starts=%d resumes=%d, want 1/1", starts, resumes)
 	}
 }
 
@@ -692,7 +724,9 @@ func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
 	eng := &fakeEngine{}
 	router, _ := newTestRouter(t, eng, plat)
 	router.cfg.ModelName = "gpt-5.2-codex"
-	router.sessions.Set(SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}, "session-123")
+	if err := router.sessions.Set(SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}, "session-123"); err != nil {
+		t.Fatal(err)
+	}
 
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/status"})
 	waitForCardSends(t, plat, 1)
