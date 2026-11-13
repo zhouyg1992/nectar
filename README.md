@@ -20,6 +20,10 @@
 
 Nectar forwards Feishu or DingTalk messages to Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi and streams the result back as an interactive card. v1 supports Feishu / Lark and DingTalk with any of these engines.
 
+<p align="center">
+  <img src="docs/assets/nectar-flow.svg" alt="Feishu and DingTalk messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
+</p>
+
 ## Support matrix
 
 **v1 supports Feishu / Lark and DingTalk with Codex CLI, OpenCode, Cursor Agent, Claude Code, or Pi.**

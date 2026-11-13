@@ -20,6 +20,10 @@
 
 Nectar 把飞书或钉钉消息交给 Codex CLI、OpenCode、Cursor Agent、Claude Code 或 Pi 执行，再以交互卡片把结果回传。v1 支持飞书 / Lark、钉钉 + 上述任一引擎，安装后一条命令即可启动。
 
+<p align="center">
+  <img src="docs/assets/nectar-flow.svg" alt="飞书和钉钉消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
+</p>
+
 ## 支持矩阵
 
 **v1 支持：飞书 / Lark、钉钉 + Codex CLI / OpenCode / Cursor Agent / Claude Code / Pi。**
