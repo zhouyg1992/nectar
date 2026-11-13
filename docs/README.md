@@ -2,7 +2,7 @@
 
 ## Languages
 
-- [English](en/README.md)（translation in progress）
+- [English](en/README.md)
 - [简体中文](zh-CN/README.md)
 
 Project home: [English README](../README.md) · [中文 README](../README.zh-CN.md)

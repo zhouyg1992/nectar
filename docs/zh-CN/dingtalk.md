@@ -141,9 +141,4 @@ dingtalk: stream connected
 | 群聊没有反应 | 消息没有 @ 机器人，或机器人不在群里 |
 | 图片/文件下载失败 | 缺少消息文件下载权限，或 `downloadCode` 已过期 |
 
-## 相关文档
-
-- [钉钉平台接入设计](dingtalk-design.md)
-- [架构与扩展点](architecture.md)
-
 返回：[文档索引](README.md)

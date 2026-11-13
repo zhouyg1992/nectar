@@ -1,17 +1,10 @@
 # Nectar Docs (English)
 
-English translations are in progress.
+- [Feishu setup and troubleshooting](feishu.md)
+- [DingTalk setup and troubleshooting](dingtalk.md)
+- [Background service](service.md)
+- [Security boundaries](security.md)
+- [Roadmap](roadmap.md)
+- [Changelog](changelog.md)
 
-For now, the Chinese documentation is the source of truth:
-
-- [Feishu setup](../zh-CN/feishu.md)
-- [DingTalk setup](../zh-CN/dingtalk.md)
-- [Background service](../zh-CN/service.md)
-- [Architecture](../zh-CN/architecture.md)
-- [Development](../zh-CN/development.md)
-- [Security](../zh-CN/security.md)
-- [Release](../zh-CN/release.md)
-- [Roadmap](../zh-CN/roadmap.md)
-- [Changelog](../zh-CN/changelog.md)
-
-Back to [English README](../../README.md) · [中文 README](../../README.zh-CN.md)
+Project home: [English README](../../README.md) · [中文 README](../../README.zh-CN.md) · [Chinese docs](../zh-CN/README.md)
