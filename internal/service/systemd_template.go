@@ -17,7 +17,7 @@ Description=Nectar Feishu-Codex bridge
 [Service]
 Type=simple
 ExecStart="{{systemd .BinaryPath}}" -config "{{systemd .ConfigPath}}"
-WorkingDirectory="{{systemd .Home}}"
+WorkingDirectory={{systemd .Home}}
 Environment="HOME={{systemd .Home}}"
 Environment="PATH={{systemd .Path}}"
 {{- if .CodexHome}}

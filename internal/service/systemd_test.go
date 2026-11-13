@@ -19,6 +19,7 @@ func TestRenderSystemd(t *testing.T) {
 	}
 	for _, want := range []string{
 		`ExecStart="/home/test/.local/bin/nectar" -config "/home/test/.nectar/config.toml"`,
+		"WorkingDirectory=/home/test",
 		`Environment="HOME=/home/test"`,
 		`Environment="CODEX_HOME=/home/test/.codex"`,
 		"Restart=on-failure",
