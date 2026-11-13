@@ -129,13 +129,7 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	opts := r.cfg.EngineOptions
 	opts.WorkingDir = workdir
 	startedAt := time.Now()
-	modelName := r.cfg.ModelName
-	if modelName == "" {
-		modelName = opts.Model
-	}
-	if modelName == "" {
-		modelName = r.engine.Name()
-	}
+	modelName := r.resolvedModel()
 
 	cardID := ""
 	if caps := r.platform.Capabilities(); caps.Card && caps.Streaming {
@@ -350,9 +344,20 @@ func (r *Router) stop(key SessionKey, msg platform.Message) {
 func (r *Router) status(key SessionKey) string {
 	sessionID, ok := r.sessions.Get(key)
 	if !ok {
-		return "会话: 新会话（尚未启动）"
+		sessionID = "新会话（尚未启动）"
 	}
-	return fmt.Sprintf("会话: %s", sessionID)
+	return fmt.Sprintf("引擎: %s\n模型: %s\n会话: %s", r.engine.Name(), r.resolvedModel(), sessionID)
+}
+
+func (r *Router) resolvedModel() string {
+	model := r.cfg.ModelName
+	if model == "" {
+		model = r.cfg.EngineOptions.Model
+	}
+	if model == "" {
+		model = r.engine.Name()
+	}
+	return model
 }
 
 func (r *Router) reply(msg platform.Message, text string) {
@@ -573,7 +578,7 @@ func (r *Router) recordLesson(msg platform.Message, prompt, errText string) {
 
 const helpCardBody = "**会话**\n" +
 	"- `/new` / `/reset` — 开始新会话\n" +
-	"- `/status` — 查看当前会话\n" +
+	"- `/status` — 查看引擎、模型与会话\n" +
 	"- `/stop` — 停止当前任务\n" +
 	"- `/help` / `/commands` — 显示这张命令卡片\n\n" +
 	"**使用**\n" +
@@ -582,7 +587,7 @@ const helpCardBody = "**会话**\n" +
 
 const helpText = `Nectar 命令:
 /new、/reset    开始新会话
-/status         查看当前会话
+/status         查看引擎、模型与会话
 /stop           停止当前任务
 /help、/commands 显示命令卡片
 

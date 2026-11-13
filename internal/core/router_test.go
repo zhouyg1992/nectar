@@ -598,6 +598,26 @@ func TestRouterCommandResultsUseCards(t *testing.T) {
 	}
 }
 
+func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.ModelName = "gpt-5.2-codex"
+	router.sessions.Set(SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}, "session-123")
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/status"})
+	waitForCardSends(t, plat, 1)
+
+	plat.mu.Lock()
+	body := plat.sentCards[0].Body
+	plat.mu.Unlock()
+	for _, want := range []string{"引擎: fake", "模型: gpt-5.2-codex", "会话: session-123"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("status body = %q, want %q", body, want)
+		}
+	}
+}
+
 func TestRouterThreadRepliesStayInThread(t *testing.T) {
 	t.Run("help card", func(t *testing.T) {
 		plat := &fakePlatform{cards: true}

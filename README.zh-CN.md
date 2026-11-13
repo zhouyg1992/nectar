@@ -312,7 +312,7 @@ nectar service install
 | 命令 | 作用 |
 |---|---|
 | `/new`、`/reset` | 清空当前会话，下一条消息启动新的 agent thread |
-| `/status` | 查看当前 agent thread ID |
+| `/status` | 查看当前引擎、模型和 agent thread ID |
 | `/stop` | 中断当前任务 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
