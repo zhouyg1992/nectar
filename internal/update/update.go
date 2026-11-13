@@ -26,6 +26,7 @@ type Config struct {
 	DownloadBase   string
 	LatestURL      string
 	ExecutablePath string
+	RefreshSkills  func(binaryPath string) error
 	Logf           func(string, ...any)
 }
 
@@ -40,6 +41,7 @@ type Result struct {
 	TargetVersion   string
 	UpdateAvailable bool
 	Updated         bool
+	SkillsUpdated   bool
 }
 
 type Updater struct {
@@ -147,6 +149,14 @@ func (u *Updater) Run(ctx context.Context, opts Options) (Result, error) {
 		return result, err
 	}
 	u.logf("Installed %s", targetPath)
+	if u.cfg.RefreshSkills != nil {
+		if err := u.cfg.RefreshSkills(targetPath); err != nil {
+			u.logf("warning: binary updated, but agent skill refresh failed: %v", err)
+		} else {
+			result.SkillsUpdated = true
+			u.logf("Refreshed agent skill")
+		}
+	}
 	result.Updated = true
 	return result, nil
 }

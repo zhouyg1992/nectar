@@ -62,6 +62,45 @@ func TestRunInstallsRelease(t *testing.T) {
 	}
 }
 
+func TestRunRefreshesSkillsAfterInstall(t *testing.T) {
+	targetPath := filepath.Join(t.TempDir(), "nectar")
+	if err := os.WriteFile(targetPath, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	asset := assetName("v0.2.0", testGOOS, testGOARCH)
+	archive := makeArchive(t, "new binary")
+	server := newReleaseServer(t, asset, archive, checksum(archive))
+	defer server.Close()
+
+	refreshed := ""
+	updater := New(Config{
+		Repo:           "owner/repo",
+		CurrentVersion: "v0.1.0",
+		GOOS:           testGOOS,
+		GOARCH:         testGOARCH,
+		DownloadBase:   server.URL,
+		ExecutablePath: targetPath,
+		RefreshSkills: func(binaryPath string) error {
+			refreshed = binaryPath
+			return nil
+		},
+	})
+	result, err := updater.Run(t.Context(), Options{Version: "v0.2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed != want {
+		t.Fatalf("refreshed %q, want %q", refreshed, want)
+	}
+	if !result.SkillsUpdated {
+		t.Fatal("SkillsUpdated = false")
+	}
+}
+
 func TestRunCheckLatest(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "nectar")
 	if err := os.WriteFile(targetPath, []byte("old"), 0o755); err != nil {

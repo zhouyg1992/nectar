@@ -61,7 +61,7 @@ nectar service uninstall
 
 ## Update
 
-`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, and restarts the installed service. It leaves `~/.nectar/config.toml` and data untouched.
+`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, refreshes the agent skill with the new binary, and restarts the installed service. It leaves `~/.nectar/config.toml` and data untouched.
 
 ```bash
 nectar update

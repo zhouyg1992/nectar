@@ -47,6 +47,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "schedule" {
 		return runSchedule(args[1:])
 	}
+	if len(args) > 0 && args[0] == "skills" {
+		return runSkills(args[1:])
+	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		printMainUsage()
 		return nil
@@ -77,6 +80,7 @@ func printMainUsage() {
   nectar -version
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
+  nectar skills install
   nectar service <install|uninstall|start|stop|restart|status|logs>
 `)
 }

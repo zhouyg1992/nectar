@@ -107,7 +107,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 nectar update
 ```
 
-`nectar update --check` 只检查最新版本，不安装；`--version vX.Y.Z` 可指定版本或降级，`--force` 可重装当前版本，`--no-restart` 只替换二进制、不重启服务。
+`nectar update --check` 只检查最新版本，不安装；`--version vX.Y.Z` 可指定版本或降级，`--force` 可重装当前版本，`--no-restart` 更新二进制和 Agent skill 但不重启服务，`--no-skills` 跳过 skill 刷新。
 
 会话映射和最近一次上下文用量会持久化到 `~/.nectar/sessions.json`，所以更新重启后会继续 resume 原来的引擎会话。如果旧 session 已失效，Nectar 会在最终卡片里提示并自动启动新会话。
 

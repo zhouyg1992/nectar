@@ -19,6 +19,7 @@ func runUpdate(args []string) error {
 	force := fs.Bool("force", false, "reinstall even when already on the target version")
 	targetVersion := fs.String("version", "", "release version to install, for example v1.2.3")
 	noRestart := fs.Bool("no-restart", false, "update the binary without restarting the service")
+	noSkills := fs.Bool("no-skills", false, "update the binary without refreshing the agent skill")
 	configPath := fs.String("config", "", "path to config.toml for service restart detection")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -27,12 +28,18 @@ func runUpdate(args []string) error {
 		return err
 	}
 
-	updater := update.New(update.Config{
+	cfg := update.Config{
 		CurrentVersion: version,
 		Logf: func(format string, args ...any) {
 			fmt.Printf(format+"\n", args...)
 		},
-	})
+	}
+	if !*noSkills {
+		cfg.RefreshSkills = func(binaryPath string) error {
+			return refreshAgentSkills(binaryPath, *configPath)
+		}
+	}
+	updater := update.New(cfg)
 	result, err := updater.Run(context.Background(), update.Options{
 		Version:   *targetVersion,
 		CheckOnly: *checkOnly,
@@ -61,6 +68,9 @@ func runUpdate(args []string) error {
 	}
 
 	fmt.Printf("Updated Nectar: %s -> %s\n", result.CurrentVersion, result.TargetVersion)
+	if result.SkillsUpdated {
+		fmt.Println("Agent skill refreshed.")
+	}
 	if *noRestart {
 		return nil
 	}
@@ -93,13 +103,14 @@ func runUpdate(args []string) error {
 
 func printUpdateUsage() {
 	fmt.Print(`Usage:
-  nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--config PATH]
+  nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills] [--config PATH]
 
 Options:
   --check          check for a newer release without installing it
   --force          reinstall even when already on the target version
   --version TAG    install a specific release (default: latest)
   --no-restart     update the binary without restarting the service
+  --no-skills      update the binary without refreshing the agent skill
   --config PATH    config path used to detect the installed service
 `)
 }

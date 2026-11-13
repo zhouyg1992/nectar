@@ -78,8 +78,9 @@ CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信。Agent 会话
 
 不想修改全局 Agent 配置时，安装时加 `--no-skills`。
 
-`nectar update` 只替换二进制，不会刷新 skill；如果新版本更新了 skill，重跑
-`install.sh` 或手动复制 `skills/nectar-schedule`。
+`nectar update` 在替换二进制后会用新二进制执行 `nectar skills install`，
+自动刷新全局 skill 和工作区 `AGENTS.md` 托管片段。需要单独刷新时也可以手动运行
+`nectar skills install`。
 
 ## 语义与边界
 

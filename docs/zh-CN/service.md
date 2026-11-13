@@ -61,7 +61,7 @@ nectar service uninstall
 
 ## 更新
 
-`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制，并重启已安装的后台服务；不会修改 `~/.nectar/config.toml` 和数据。
+`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制、用新二进制刷新 Agent skill，并重启已安装的后台服务；不会修改 `~/.nectar/config.toml` 和数据。
 
 ```bash
 nectar update

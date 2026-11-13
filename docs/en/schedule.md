@@ -66,8 +66,9 @@ Use `nectar schedule` to manage scheduled tasks.
 
 Pass `--no-skills` to leave global agent configuration untouched.
 
-`nectar update` replaces the binary only. If a release changes the skill, rerun
-`install.sh` or copy `skills/nectar-schedule` manually.
+`nectar update` runs `nectar skills install` from the newly installed binary,
+so the global skill and workspace `AGENTS.md` block stay in sync. You can also
+run `nectar skills install` manually.
 
 ## Semantics
 

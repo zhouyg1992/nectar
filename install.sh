@@ -89,115 +89,6 @@ need() {
 	command -v "$1" >/dev/null 2>&1 || err "required command not found: $1"
 }
 
-install_one_skill() {
-	source_dir="$1"
-	dest_dir="$2"
-	if [ -d "$dest_dir" ] && diff -r "$source_dir" "$dest_dir" >/dev/null 2>&1; then
-		log "$SKILL_NAME skill already up to date → $dest_dir"
-		return 0
-	fi
-	if [ -e "$dest_dir" ] || [ -L "$dest_dir" ]; then
-		backup_root="$HOME/.nectar/skill-backups"
-		mkdir -p "$backup_root" || err "cannot create skill backup directory"
-		backup="$(mktemp -d "$backup_root/$SKILL_NAME.XXXXXX" 2>/dev/null || true)"
-		[ -n "$backup" ] || err "cannot create skill backup directory"
-		mv "$dest_dir" "$backup/$SKILL_NAME" || err "cannot back up existing skill: $dest_dir"
-		log "backed up existing skill to $backup/$SKILL_NAME"
-	fi
-	mkdir -p "$(dirname "$dest_dir")" || err "cannot create skill directory: $dest_dir"
-	cp -R "$source_dir" "$dest_dir" || err "cannot install skill to $dest_dir"
-	log "installed $SKILL_NAME skill → $dest_dir"
-}
-
-install_agent_skills() {
-	skill_source="$TMP_DIR/pkg/skills/$SKILL_NAME"
-	if [ ! -d "$skill_source" ]; then
-		log "warning: bundled $SKILL_NAME skill not found; skipping skill install"
-		return 0
-	fi
-
-	codex_home="${CODEX_HOME:-$HOME/.codex}"
-	install_one_skill "$skill_source" "$HOME/.nectar/skills/$SKILL_NAME"
-	install_one_skill "$skill_source" "$codex_home/skills/$SKILL_NAME"
-	install_one_skill "$skill_source" "$HOME/.claude/skills/$SKILL_NAME"
-	install_one_skill "$skill_source" "$HOME/.agents/skills/$SKILL_NAME"
-}
-
-write_schedule_block() {
-	cat >"$TMP_DIR/nectar-schedule-block.md" <<'EOF'
-<!-- BEGIN NECTAR SCHEDULE -->
-## Nectar scheduled tasks
-
-When the user asks for a reminder or a scheduled/repeating task, use the local
-`"${NECTAR_CLI:-nectar}" schedule` CLI. Full workflow:
-`~/.nectar/skills/nectar-schedule/SKILL.md`.
-
-- Calendar schedule: `"${NECTAR_CLI:-nectar}" schedule add --cron "0 9 * * 1-5" --prompt "..."`
-- Fixed interval: `--every 90m` or `--every 14d`
-- One-shot: `--in 30m` or `--at 2026-11-14T15:00:00+08:00`
-- Preview first: `${NECTAR_CLI:-nectar} schedule preview ...`; show next runs.
-- Make the prompt self-contained; scheduled runs do not reliably inherit this chat.
-- Ask when the time, weekday, or timezone is ambiguous.
-- Manage with `"${NECTAR_CLI:-nectar}" schedule list|pause|resume|run|update|delete`.
-<!-- END NECTAR SCHEDULE -->
-EOF
-}
-
-install_workspace_hint() {
-	write_schedule_block
-	block_file="$TMP_DIR/nectar-schedule-block.md"
-	seen_file="$TMP_DIR/seen-workspace-dirs"
-	: >"$seen_file"
-
-	{
-		printf '%s\n' "$HOME/.nectar/workspace"
-		if [ -f "$CONFIG_FILE" ]; then
-			sed -n 's/^[[:space:]]*working_dir[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$CONFIG_FILE"
-		fi
-	} | while IFS= read -r dir; do
-		[ -n "$dir" ] || continue
-		case "$dir" in
-		"~/"*) dir="$HOME/${dir#~/}" ;;
-		esac
-		case "$dir" in
-		/*) ;;
-		*) continue ;;
-		esac
-		if grep -qxF "$dir" "$seen_file" 2>/dev/null; then
-			continue
-		fi
-		printf '%s\n' "$dir" >>"$seen_file"
-		mkdir -p "$dir" 2>/dev/null || {
-			log "warning: cannot create workspace for AGENTS.md hint: $dir"
-			continue
-		}
-		agents="$dir/AGENTS.md"
-		if [ -f "$agents" ] && grep -q '<!-- BEGIN NECTAR SCHEDULE -->' "$agents" 2>/dev/null; then
-			awk -v block="$block_file" '
-				BEGIN {
-					while ((getline line < block) > 0) text = text line "\n"
-					close(block)
-					inblock = 0
-				}
-				/<!-- BEGIN NECTAR SCHEDULE -->/ { printf "%s", text; inblock = 1; next }
-				/<!-- END NECTAR SCHEDULE -->/ { inblock = 0; next }
-				inblock != 1 { print }
-			' "$agents" >"$TMP_DIR/agents.md.new" || {
-				log "warning: cannot update $agents"
-				continue
-			}
-			cat "$TMP_DIR/agents.md.new" >"$agents" || log "warning: cannot write $agents"
-			log "updated schedule hint → $agents"
-		else
-			if [ -s "$agents" ]; then
-				printf '\n' >>"$agents" || log "warning: cannot append to $agents"
-			fi
-			cat "$block_file" >>"$agents" || log "warning: cannot write $agents"
-			log "installed schedule hint → $agents"
-		fi
-	done
-}
-
 cleanup() {
 	if [ "$HAVE_TTY" -eq 1 ]; then
 		stty echo <&3 2>/dev/null || true
@@ -834,8 +725,8 @@ else
 fi
 
 if [ "$SKILLS" -eq 1 ]; then
-	install_agent_skills
-	install_workspace_hint
+	"$BIN_DIR/$BIN_NAME" skills install --config "$CONFIG_FILE" ||
+		err "failed to install the agent skill; rerun with --no-skills to skip it"
 else
 	log "skipped agent skill installation"
 fi
