@@ -32,13 +32,32 @@ func TestNormalizeA2UIMarkdownBalancesFence(t *testing.T) {
 	}
 }
 
-func TestNormalizeA2UIMarkdownConvertsTable(t *testing.T) {
-	got := normalizeA2UIMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
+func TestPreprocessDingTalkMarkdownConvertsTable(t *testing.T) {
+	got := preprocessDingTalkMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
 	if !strings.Contains(got, "```text") {
 		t.Fatalf("table was not converted: %q", got)
 	}
 	if !strings.Contains(got, "| a | b |") {
 		t.Fatalf("table content lost: %q", got)
+	}
+}
+
+func TestParseCardBlocksTable(t *testing.T) {
+	blocks := parseCardBlocks("before\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nafter")
+	if len(blocks) != 3 {
+		t.Fatalf("blocks = %#v", blocks)
+	}
+	if blocks[0].Markdown != "before" || blocks[2].Markdown != "after" {
+		t.Fatalf("markdown blocks = %#v", blocks)
+	}
+	if blocks[1].Table == nil {
+		t.Fatalf("middle block is not a table: %#v", blocks[1])
+	}
+	if len(blocks[1].Table.Headers) != 2 || blocks[1].Table.Headers[0] != "a" {
+		t.Fatalf("table = %#v", blocks[1].Table)
+	}
+	if len(blocks[1].Table.Rows) != 1 || blocks[1].Table.Rows[0][1] != "2" {
+		t.Fatalf("table rows = %#v", blocks[1].Table.Rows)
 	}
 }
 

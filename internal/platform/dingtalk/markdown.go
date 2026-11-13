@@ -24,7 +24,8 @@ var (
 // Leading spaces become NBSP and single newlines become hard line breaks.
 // Fenced code blocks are left untouched.
 func preprocessDingTalkMarkdown(s string) string {
-	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	s = normalizeMarkdownTables(strings.ReplaceAll(s, "\r\n", "\n"))
+	lines := strings.Split(s, "\n")
 	inCodeBlock := false
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -63,7 +64,6 @@ func normalizeA2UIMarkdown(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	s = truncateUTF8(s, maxCardBodyBytes)
-	s = normalizeMarkdownTables(s)
 	s = escapeHTMLOutsideCode(s)
 	if strings.Count(s, "```")%2 == 1 {
 		s += "\n```"

@@ -212,10 +212,10 @@ func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.R
 
 func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, title, body, footer, theme, flow string) map[string]any {
 	data := map[string]string{
-		"title":   title,
-		"content": body,
-		"footer":  footer,
+		"title":  title,
+		"footer": footer,
 	}
+	blocks := parseCardBlocks(body)
 	messages := []string{
 		mustJSON(map[string]any{
 			"version": "v1.0",
@@ -236,7 +236,7 @@ func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, tit
 			"version": "v1.0",
 			"updateComponents": map[string]any{
 				"surfaceId":  surfaceID,
-				"components": cardComponents(theme),
+				"components": cardComponents(theme, blocks),
 			},
 		}),
 	}
@@ -246,30 +246,53 @@ func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, tit
 		"protocolVersion": "1.0",
 		"flowStatus":      flow,
 		"a2uiMessages":    messages,
-		"a2uiAnnotations": []map[string]any{
-			{"surfaceId": surfaceID, "componentId": "header", "type": "artifact"},
-			{"surfaceId": surfaceID, "componentId": "body", "type": "artifact"},
-		},
-		"summary": cardSummary(body, title),
+		"a2uiAnnotations": cardAnnotations(surfaceID, blocks),
+		"summary":         cardSummary(body, title),
 	}
 	applySpaceModels(payload, rc, a.robotCode, cardSummary(body, title))
 	return payload
 }
 
+func cardAnnotations(surfaceID string, blocks []cardBlock) []map[string]any {
+	annotations := []map[string]any{
+		{"surfaceId": surfaceID, "componentId": "header", "type": "artifact"},
+	}
+	added := 0
+	for i, block := range blocks {
+		if block.Table != nil {
+			continue
+		}
+		annotations = append(annotations, map[string]any{
+			"surfaceId": surfaceID, "componentId": fmt.Sprintf("block-%d", i), "type": "artifact",
+		})
+		added++
+		if added >= 5 {
+			break
+		}
+	}
+	if added == 0 {
+		componentID := "body"
+		if len(blocks) > 0 {
+			componentID = "block-0"
+		}
+		annotations = append(annotations, map[string]any{
+			"surfaceId": surfaceID, "componentId": componentID, "type": "artifact",
+		})
+	}
+	return annotations
+}
+
 func buildUpdatePayload(state *cardState, outUpdateID, title, body, footer, theme, flow string) map[string]any {
 	messages := []string{
 		updateDataModelJSON(state.surfaceID, "/title", title),
-		updateDataModelJSON(state.surfaceID, "/content", body),
 		updateDataModelJSON(state.surfaceID, "/footer", footer),
-	}
-	if theme != state.lastTheme || flow == "FINISH" || flow == "ERROR" {
-		messages = append(messages, mustJSON(map[string]any{
+		mustJSON(map[string]any{
 			"version": "v1.0",
 			"updateComponents": map[string]any{
 				"surfaceId":  state.surfaceID,
-				"components": cardComponents(theme),
+				"components": cardComponents(theme, parseCardBlocks(body)),
 			},
-		}))
+		}),
 	}
 	return map[string]any{
 		"outTrackId":   state.outTrackID,
@@ -290,8 +313,24 @@ func updateDataModelJSON(surfaceID, path, value string) string {
 	})
 }
 
-func cardComponents(theme string) []map[string]any {
-	return []map[string]any{
+func cardComponents(theme string, blocks []cardBlock) []map[string]any {
+	children := make([]string, 0, len(blocks))
+	blockComponents := make([]map[string]any, 0, len(blocks))
+	for i, block := range blocks {
+		id := fmt.Sprintf("block-%d", i)
+		children = append(children, id)
+		if block.Table != nil {
+			blockComponents = append(blockComponents, tableComponent(id, *block.Table))
+			continue
+		}
+		blockComponents = append(blockComponents, map[string]any{
+			"id":        id,
+			"component": "Markdown",
+			"content":   block.Markdown,
+		})
+	}
+
+	root := []map[string]any{
 		{
 			"id":        "root",
 			"component": "Column",
@@ -306,8 +345,9 @@ func cardComponents(theme string) []map[string]any {
 		},
 		{
 			"id":        "body",
-			"component": "Markdown",
-			"content":   map[string]string{"path": "/content"},
+			"component": "Column",
+			"children":  children,
+			"gap":       8,
 		},
 		{
 			"id":        "footer",
@@ -316,6 +356,7 @@ func cardComponents(theme string) []map[string]any {
 			"text":      map[string]string{"path": "/footer"},
 		},
 	}
+	return append(root, blockComponents...)
 }
 
 func openSpaceID(rc replyContext) string {

@@ -98,6 +98,8 @@ dingtalk: stream connected
 
 图片和文件会下载到当前聊天工作目录下的 `.nectar/attachments/`，Agent 运行结束后自动清理。
 
+卡片内的 GFM 表格会解析为钉钉原生 `Table` 组件；旧客户端无法渲染时使用原始表格文本兜底。
+
 当前版本暂不支持出站图片、文件和音频。
 
 ## 群聊与单聊

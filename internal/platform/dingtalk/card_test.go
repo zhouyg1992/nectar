@@ -100,7 +100,7 @@ func TestBuildUpdatePayloadFinal(t *testing.T) {
 		t.Fatalf("flowStatus = %v", payload["flowStatus"])
 	}
 	messages := decodeA2UI(t, payload)
-	if len(messages) < 4 {
+	if len(messages) != 3 {
 		t.Fatalf("messages = %d", len(messages))
 	}
 	last := messages[len(messages)-1]
@@ -109,12 +109,65 @@ func TestBuildUpdatePayloadFinal(t *testing.T) {
 		t.Fatalf("last message = %#v", last)
 	}
 	components, ok := update["components"].([]any)
-	if !ok || len(components) != 4 {
+	if !ok || len(components) != 5 {
 		t.Fatalf("components = %#v", update["components"])
 	}
 	header := components[1].(map[string]any)
 	if header["theme"] != "green" {
 		t.Fatalf("theme = %v", header["theme"])
+	}
+}
+
+func TestBuildUpdatePayloadIncludesComponentsForProgress(t *testing.T) {
+	state := &cardState{
+		outTrackID: "track-1",
+		surfaceID:  "surface-1",
+		lastTheme:  "blue",
+	}
+	payload := buildUpdatePayload(state, "track-1-1", "working", "progress", "", "blue", "INPUTTING")
+	messages := decodeA2UI(t, payload)
+	last := messages[len(messages)-1]
+	if _, ok := last["updateComponents"]; !ok {
+		t.Fatalf("progress update has no components: %#v", last)
+	}
+}
+
+func TestBuildCreatePayloadRendersTable(t *testing.T) {
+	adapter := testAdapter(t)
+	rc := replyContext{
+		conversationID: "cid-1",
+		senderStaffID:  "staff-1",
+		isGroup:        true,
+		robotCode:      "robot-test",
+	}
+	body := "| name | value |\n|---|---|\n| alpha | 1 |\n| beta | 2 |"
+	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", body, "", "green", "FINISH")
+	messages := decodeA2UI(t, payload)
+	update := messages[2]["updateComponents"].(map[string]any)
+	components := update["components"].([]any)
+
+	var table map[string]any
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["component"] == "Table" {
+			table = component
+			break
+		}
+	}
+	if table == nil {
+		t.Fatalf("no Table component: %#v", components)
+	}
+	data := table["data"].(map[string]any)
+	meta := data["meta"].([]any)
+	rows := data["data"].([]any)
+	if len(meta) != 2 || len(rows) != 2 {
+		t.Fatalf("table data = %#v", data)
+	}
+	if meta[0].(map[string]any)["colName"] != "name" {
+		t.Fatalf("meta = %#v", meta)
+	}
+	if rows[0].(map[string]any)["c0"] != "alpha" {
+		t.Fatalf("rows = %#v", rows)
 	}
 }
 

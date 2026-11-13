@@ -382,7 +382,8 @@ type replyContext struct {
 - 统一换行为 `\n`。
 - 保证 fenced code block 成对出现；截断时补上代码围栏的结束标记。
 - 转义原始 HTML，避免 agent 输出中的 `<div>` 等标签被意外解释；后续支持 @ 时只放行 `<a atId="...">`。
-- GFM 表格不在原生支持范围内。MVP 检测表格块并转换为等宽代码块；P1 再拆成 A2UI `Table` 组件。
+- GFM 表格由 `parseCardBlocks` 从 Markdown 中拆出，转换为 A2UI `Table` 组件；
+  原始表格文本写入组件的 `fallbackMarkdown`，旧客户端无法渲染时仍可显示。
 - 超长内容按字节截断，落在 UTF-8 边界，并追加 `…（内容过长，已截断）`。
 
 渲染矩阵：
@@ -392,7 +393,7 @@ type replyContext struct {
 | 标题、列表、引用 | A2UI `Markdown` 原生渲染 |
 | 行内代码、代码块 | 原生渲染；截断时自动闭合代码块 |
 | 粗体、斜体、链接 | 原生渲染 |
-| 表格 | MVP 转等宽代码块；P1 使用 A2UI `Table` 组件 |
+| 表格 | 解析为 A2UI `Table` 组件，`fallbackMarkdown` 保留原始表格 |
 | 图片 | 保留 Markdown 图片语法；P1 解析为 A2UI `Image` 组件 |
 | 原始 HTML | 默认转义；后续只放行 @ 提及标签 |
 
@@ -778,7 +779,7 @@ platform.Capabilities{
 - `parseCallback`：text、richText、image、file、引用回复。
 - `extractRichText`：文字和图片顺序、空内容、只有图片。
 - `A2UI` 请求构造：创建、更新、最终状态、单聊/群聊 `openSpaceId`。
-- Markdown 适配：代码块、引用、列表、表格降级、截断和代码块闭合。
+- Markdown 适配：代码块、引用、列表、表格解析、截断和代码块闭合。
 - `sampleMarkdown`：行首空格、单换行、代码块不处理、标题提取。
 - `shouldUseProactive`：webhook 为空、过期边界、cron 上下文。
 - Access Token：缓存、并发刷新、`expireIn` 缺失。
@@ -850,14 +851,15 @@ MVP 以 M1 + M2 为准：M1 单独可用，但只有 M2 完成后才满足“流
 - A2UI 卡片创建和更新。
 - 状态映射、节流、最终收尾。
 - Markdown 适配和截断。
+- GFM 表格解析为 A2UI `Table` 组件。
+- 卡片不可用时的 `🤔Thinking` 表情提示与撤回。
 - 卡片降级和 `Capabilities()` 动态切换。
 - 单元测试和 HTTP 测试。
 
 ### M3：体验补齐
 
-- 群聊 @ 和表情回复。
+- 群聊 @ 体验优化。
 - 出站图片/文件。
-- Markdown 表格转 A2UI `Table`。
 - 卡片按钮和 Stream 卡片回调（可选）。
 
 ## 10. 风险与待验证
@@ -867,7 +869,7 @@ MVP 以 M1 + M2 为准：M1 单独可用，但只有 M2 完成后才满足“流
 | A2UI 在部分组织未开通 | 卡片创建失败 | 自动降级 Markdown，30 分钟后重试 |
 | 单聊 `im_robot` 投递字段与文档示例不完全一致 | 单聊卡片无法发送 | 适配器内部兼容 `recipients` / `userId`，联调确认 |
 | 旧版钉钉客户端不支持部分 A2UI 组件 | 卡片局部显示异常 | 给关键组件设置 `fallbackMarkdown`，并保留普通 Markdown 兜底 |
-| Markdown 组件不支持 GFM 表格 | 表格显示为原始文本 | MVP 转代码块，P1 使用 `Table` 组件 |
+| 旧客户端不支持 A2UI `Table` | 表格显示异常 | `Table` 组件设置 `fallbackMarkdown`，保留原始表格文本 |
 | 卡片完成后会话列表预览不刷新 | 预览停留在“处理中” | 可选发送一条最终预览消息；默认不发送，避免噪音 |
 | 钉钉群 @ 文本可能带机器人前缀 | 命令匹配失败 | 按 `robotCode` / 机器人名称剥离，联调确认 |
 | Access Token 或卡片接口限流 | 卡片更新变慢 | 节流、single-flight、指数退避；最终消息必须送达 |
