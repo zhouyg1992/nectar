@@ -281,7 +281,7 @@ Service mode reads Feishu credentials from the config file, not from shell envir
 | Command | Description |
 |---|---|
 | `/new`, `/reset` | Start a new agent thread |
-| `/status` | Show the current agent thread ID |
+| `/status` | Show the current engine, model, and agent thread ID |
 | `/stop` | Cancel the current run |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
