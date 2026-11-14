@@ -139,7 +139,7 @@ export PATH="$HOME/.local/bin:$PATH"
 nectar update
 ```
 
-`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, refreshes agent skills with the new binary, and restarts the installed background service. It leaves `~/.nectar/config.toml` and data untouched.
+`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, refreshes agent skills with the new binary, and restarts the installed background service. It leaves `~/.nectar/config.toml` and data untouched. Asset downloads show a progress bar, and transient connection, TLS, or 5xx failures are retried automatically.
 
 ```bash
 nectar update --check          # check without installing
@@ -147,6 +147,9 @@ nectar update --version v0.6.0 # pin or downgrade
 nectar update --force          # reinstall the current version
 nectar update --no-restart     # update binary and skills without restarting
 nectar update --no-skills      # skip the skill refresh
+nectar update --timeout 15m    # wait up to 15 minutes per download attempt
+nectar update --attempts 3     # try up to 3 times on transient failures
+nectar update --no-progress    # suitable for scripts; hide the progress bar
 ```
 
 Session mappings and last context usage are stored in `~/.nectar/sessions.json`. After a restart, Nectar resumes the same engine session; if that session is no longer valid, it reports the failure and starts a new one.

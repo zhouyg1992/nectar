@@ -61,7 +61,8 @@ nectar service restart
 ## 更新
 
 ```bash
-nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills] [--config PATH]
+nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills]
+  [--config PATH] [--binary PATH] [--timeout 10m] [--attempts 2] [--no-progress]
 ```
 
 | 参数 | 说明 |
@@ -72,6 +73,10 @@ nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills
 | `--no-restart` | 更新二进制和 Skill，但不重启服务 |
 | `--no-skills` | 跳过 Agent Skill 刷新 |
 | `--config PATH` | 用于检测已安装服务 |
+| `--binary PATH` | 更新的二进制路径，默认当前可执行文件 |
+| `--timeout 10m` | 每次下载尝试的超时，默认 10 分钟 |
+| `--attempts 2` | 元数据和下载请求的最大尝试次数 |
+| `--no-progress` | 不显示下载进度条 |
 
 示例：
 
@@ -80,7 +85,10 @@ nectar update
 nectar update --check
 nectar update --version v0.6.0
 nectar update --no-restart
+nectar update --timeout 15m --attempts 3
 ```
+
+下载资产时，终端会显示百分比进度条；重定向或 TLS 连接短暂失败会自动重试。
 
 ## 定时任务
 

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -31,6 +32,7 @@ func TestRunInstallsRelease(t *testing.T) {
 	server := newReleaseServer(t, asset, archive, checksum(archive))
 	defer server.Close()
 
+	var progress []Progress
 	updater := New(Config{
 		Repo:           "owner/repo",
 		CurrentVersion: "v0.1.0",
@@ -38,6 +40,9 @@ func TestRunInstallsRelease(t *testing.T) {
 		GOARCH:         testGOARCH,
 		DownloadBase:   server.URL,
 		ExecutablePath: targetPath,
+		Progress: func(value Progress) {
+			progress = append(progress, value)
+		},
 	})
 	result, err := updater.Run(t.Context(), Options{Version: "v0.2.0"})
 	if err != nil {
@@ -45,6 +50,9 @@ func TestRunInstallsRelease(t *testing.T) {
 	}
 	if !result.Updated || !result.UpdateAvailable || result.TargetVersion != "v0.2.0" {
 		t.Fatalf("result = %#v", result)
+	}
+	if result.ExecutablePath != targetPath {
+		t.Fatalf("installed path = %q, want %q", result.ExecutablePath, targetPath)
 	}
 	data, err := os.ReadFile(targetPath)
 	if err != nil {
@@ -59,6 +67,13 @@ func TestRunInstallsRelease(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("target mode = %o", info.Mode().Perm())
+	}
+	if len(progress) == 0 {
+		t.Fatal("no download progress reported")
+	}
+	final := progress[len(progress)-1]
+	if !final.Done || final.Downloaded != int64(len(archive)) || final.Total != int64(len(archive)) {
+		t.Fatalf("final progress = %#v, archive bytes = %d", final, len(archive))
 	}
 }
 
@@ -138,6 +153,93 @@ func TestRunCheckLatest(t *testing.T) {
 	}
 	if string(data) != "old" {
 		t.Fatalf("check changed binary to %q", data)
+	}
+}
+
+func TestRunFallsBackToGitHubAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/latest", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "edge unavailable", http.StatusBadGateway)
+	})
+	mux.HandleFunc("/api/latest", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"tag_name":"v0.3.0"}`)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	updater := New(Config{
+		CurrentVersion: "v0.2.0",
+		GOOS:           testGOOS,
+		GOARCH:         testGOARCH,
+		LatestURL:      server.URL + "/latest",
+		LatestAPIURL:   server.URL + "/api/latest",
+		Attempts:       1,
+	})
+	result, err := updater.Run(t.Context(), Options{CheckOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TargetVersion != "v0.3.0" || !result.UpdateAvailable {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestRunRetriesTransientDownload(t *testing.T) {
+	targetPath := filepath.Join(t.TempDir(), "nectar")
+	if err := os.WriteFile(targetPath, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	asset := assetName("v0.2.0", testGOOS, testGOARCH)
+	archive := makeArchive(t, "new binary")
+	archiveRequests := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/"+asset, func(w http.ResponseWriter, _ *http.Request) {
+		archiveRequests++
+		if archiveRequests == 1 {
+			http.Error(w, "temporary failure", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write(archive)
+	})
+	mux.HandleFunc("/checksums.txt", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, "%s  %s\n", checksum(archive), asset)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	updater := New(Config{
+		CurrentVersion: "v0.1.0",
+		GOOS:           testGOOS,
+		GOARCH:         testGOARCH,
+		DownloadBase:   server.URL,
+		ExecutablePath: targetPath,
+		Attempts:       2,
+		RetryDelay:     time.Millisecond,
+	})
+	result, err := updater.Run(t.Context(), Options{Version: "v0.2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Updated {
+		t.Fatalf("result = %#v", result)
+	}
+	if archiveRequests != 2 {
+		t.Fatalf("archive requests = %d, want 2", archiveRequests)
+	}
+}
+
+func TestDefaultClientHasNoOverallTimeout(t *testing.T) {
+	updater := New(Config{})
+	if updater.client.Timeout != 0 {
+		t.Fatalf("client timeout = %s, want no overall timeout", updater.client.Timeout)
+	}
+	transport, ok := updater.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T", updater.client.Transport)
+	}
+	if transport.ResponseHeaderTimeout <= 0 {
+		t.Fatal("response header timeout is not configured")
 	}
 }
 
