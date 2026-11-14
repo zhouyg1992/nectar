@@ -187,6 +187,22 @@ data_dir = "~/.nectar"
 
 `data_dir` stores sessions, scheduled tasks, workspaces, attachments, and skill backups.
 
+## Memory
+
+```toml
+[memory]
+enabled = true                # false disables storage, commands, and injection
+max_items = 6                 # maximum memories injected per turn
+max_chars = 1500              # maximum memory context characters per turn
+auto_learn_failures = true    # record failures as pending candidates for review
+```
+
+Memories are stored in `~/.nectar/memory/memory.json`. Explicit `/remember` entries become active immediately; failure lessons start as `candidate` and only join retrieval after `/memory approve <id>`.
+
+Agents read and write memory through the `nectar memory` CLI. `nectar skills install` also installs the `nectar-memory` skill and its managed `AGENTS.md` instructions so the agent can handle natural-language requests in any supported language.
+
+Memories record a `locality` (portable / templated / device), a stable `project_id`, revision, and content hash. Project/home paths become `${PROJECT_ROOT}` / `${HOME}`; other absolute paths are marked device-local so future sync does not assume they exist everywhere.
+
 ## Scheduled tasks
 
 Scheduled tasks are enabled by default; no `[schedule]` section is required. Optional overrides:

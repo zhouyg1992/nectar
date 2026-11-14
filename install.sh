@@ -55,7 +55,7 @@ Options:
   --reconfigure           back up and replace an existing config
   --no-service            install the binary only
   --service               accepted for compatibility; service is default
-  --no-skills             skip installing the Nectar schedule skill
+  --no-skills             skip installing the Nectar agent skills
   --linger                enable systemd user linger (Linux)
   --no-start              install the service without starting it now
   -h, --help              show this help
@@ -798,5 +798,5 @@ log ""
 log "Uninstall:"
 log "  \"$BIN_DIR/$BIN_NAME\" uninstall --config \"$CONFIG_FILE\" --binary \"$BIN_DIR/$BIN_NAME\""
 log "  \"$BIN_DIR/$BIN_NAME\" uninstall --purge-data  # optional: also remove config, data, and backups"
-log "  \"$BIN_DIR/$BIN_NAME\" skills uninstall       # only remove the Agent skill"
+log "  \"$BIN_DIR/$BIN_NAME\" skills uninstall       # only remove the Agent skills"
 log "docs: https://github.com/${REPO}#readme"

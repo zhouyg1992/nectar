@@ -40,6 +40,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 - **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`，服务重启后，如果原会话仍然有效，就继续使用它。
 - **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
+- **记忆可携带**：本地优先的 profile / project / chat 记忆，支持审核、检索注入和 Agent CLI 读写。
 - **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
 
 ## 快速开始
@@ -149,6 +150,7 @@ nectar service uninstall              卸载服务
 nectar update                         升级到最新版本
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
 nectar skills install|uninstall       Agent Skill 管理
+nectar memory add|search|list|get|approve|reject|pin|unpin|forget
 nectar uninstall                      卸载 Nectar
 ```
 

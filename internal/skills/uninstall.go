@@ -20,8 +20,8 @@ type UninstallOptions struct {
 	Logf         func(string, ...any)
 }
 
-// Uninstall removes the Nectar-managed skill from all known agent roots and
-// deletes only the managed schedule block from workspace AGENTS.md files.
+// Uninstall removes the Nectar-managed skills from all known agent roots and
+// deletes only the managed blocks from workspace AGENTS.md files.
 func Uninstall(opts UninstallOptions) error {
 	home := strings.TrimSpace(opts.Home)
 	if home == "" {
@@ -66,22 +66,24 @@ func Uninstall(opts UninstallOptions) error {
 		filepath.Join(home, ".claude", "skills"),
 		filepath.Join(home, ".agents", "skills"),
 	})
-	for _, root := range roots {
-		dest := filepath.Join(root, ScheduleSkillName)
-		if _, err := os.Lstat(dest); os.IsNotExist(err) {
-			logf("%s skill already absent → %s", ScheduleSkillName, dest)
-			continue
-		} else if err != nil {
-			return fmt.Errorf("inspect skill %s: %w", dest, err)
+	for _, spec := range managedSkills {
+		for _, root := range roots {
+			dest := filepath.Join(root, spec.name)
+			if _, err := os.Lstat(dest); os.IsNotExist(err) {
+				logf("%s skill already absent → %s", spec.name, dest)
+				continue
+			} else if err != nil {
+				return fmt.Errorf("inspect skill %s: %w", dest, err)
+			}
+			if opts.DryRun {
+				logf("would remove %s skill → %s", spec.name, dest)
+				continue
+			}
+			if err := os.RemoveAll(dest); err != nil {
+				return fmt.Errorf("remove skill %s: %w", dest, err)
+			}
+			logf("removed %s skill → %s", spec.name, dest)
 		}
-		if opts.DryRun {
-			logf("would remove %s skill → %s", ScheduleSkillName, dest)
-			continue
-		}
-		if err := os.RemoveAll(dest); err != nil {
-			return fmt.Errorf("remove skill %s: %w", dest, err)
-		}
-		logf("removed %s skill → %s", ScheduleSkillName, dest)
 	}
 
 	if opts.NoWorkspace {
@@ -91,15 +93,17 @@ func Uninstall(opts UninstallOptions) error {
 	if len(workspaceDirs) == 0 {
 		workspaceDirs = defaultWorkspaceDirs(home, cfg, cfgLoaded)
 	}
-	for _, dir := range uniqueDirs(workspaceDirs) {
-		if err := uninstallWorkspaceHint(dir, logf, opts.DryRun); err != nil {
-			return err
+	for _, spec := range managedSkills {
+		for _, dir := range uniqueDirs(workspaceDirs) {
+			if err := uninstallWorkspaceHint(dir, spec, logf, opts.DryRun); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func uninstallWorkspaceHint(dir string, logf func(string, ...any), dryRun bool) error {
+func uninstallWorkspaceHint(dir string, spec skillSpec, logf func(string, ...any), dryRun bool) error {
 	agentsPath := filepath.Join(dir, "AGENTS.md")
 	existing, err := os.ReadFile(agentsPath)
 	if os.IsNotExist(err) {
@@ -109,13 +113,13 @@ func uninstallWorkspaceHint(dir string, logf func(string, ...any), dryRun bool) 
 		return fmt.Errorf("read %s: %w", agentsPath, err)
 	}
 	content := string(existing)
-	updated := blockPattern.ReplaceAllLiteralString(content, "")
+	updated := spec.pattern.ReplaceAllLiteralString(content, "")
 	if updated == content {
-		logf("schedule hint already absent → %s", agentsPath)
+		logf("%s hint already absent → %s", spec.name, agentsPath)
 		return nil
 	}
 	if dryRun {
-		logf("would remove schedule hint → %s", agentsPath)
+		logf("would remove %s hint → %s", spec.name, agentsPath)
 		return nil
 	}
 
@@ -149,6 +153,6 @@ func uninstallWorkspaceHint(dir string, logf func(string, ...any), dryRun bool) 
 		return fmt.Errorf("replace %s: %w", agentsPath, err)
 	}
 	cleanup = false
-	logf("removed schedule hint → %s", agentsPath)
+	logf("removed %s hint → %s", spec.name, agentsPath)
 	return nil
 }

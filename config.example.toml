@@ -217,6 +217,20 @@ allowed_chats = []
 data_dir = "~/.nectar"
 
 # ---------------------------------------------------------------------------
+# Memory
+# ---------------------------------------------------------------------------
+[memory]
+# Enable the local-first memory store and prompt injection.
+enabled = true
+# Maximum number of memories injected into one agent turn.
+max_items = 6
+# Maximum characters of memory context injected into one prompt.
+max_chars = 1500
+# Record failed runs as pending memory candidates. Candidates are not injected
+# until an admin approves them with /memory approve <id>.
+auto_learn_failures = true
+
+# ---------------------------------------------------------------------------
 # Scheduled tasks
 # ---------------------------------------------------------------------------
 [schedule]

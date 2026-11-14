@@ -22,6 +22,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/engine/opencode"
 	"github.com/zhouyg1992/nectar/internal/engine/pi"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
+	"github.com/zhouyg1992/nectar/internal/memory"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
 	"github.com/zhouyg1992/nectar/internal/platform"
 	"github.com/zhouyg1992/nectar/internal/platform/dingtalk"
@@ -50,6 +51,9 @@ func run(args []string) error {
 	}
 	if len(args) > 0 && args[0] == "skills" {
 		return runSkills(args[1:])
+	}
+	if len(args) > 0 && args[0] == "memory" {
+		return runMemory(args[1:])
 	}
 	if len(args) > 0 && args[0] == "uninstall" {
 		return runUninstall(args[1:])
@@ -85,6 +89,7 @@ func printMainUsage() {
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--timeout 10m]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
   nectar skills <install|uninstall>
+  nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>
   nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
   nectar service <install|uninstall|start|stop|restart|status|logs>
 `)
@@ -109,6 +114,14 @@ func runBot(configPath string) error {
 	lessons, err := comb.NewFileStore(cfg.Storage.DataDir)
 	if err != nil {
 		return err
+	}
+	var memories memory.Store
+	if cfg.MemoryEnabled() {
+		store, err := memory.NewFileStore(cfg.Storage.DataDir)
+		if err != nil {
+			return err
+		}
+		memories = store
 	}
 	workspaces, err := execguard.NewWorkspace(setup.workspaceDir, setup.perChatWorkspace)
 	if err != nil {
@@ -142,16 +155,22 @@ func runBot(configPath string) error {
 		core.NewQueue(),
 		workspaces,
 		lessons,
+		memories,
 		decision.Noop{},
 		logger,
 		core.RouterConfig{
-			AgentID:       cfg.Bot.Engine,
-			ModelName:     setup.model,
-			ContextWindow: setup.contextWindow,
-			EngineOptions: setup.options,
-			AdminUsers:    cfg.Bot.AdminUsers,
-			DataDir:       cfg.Storage.DataDir,
-			APISocket:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			AgentID:                cfg.Bot.Engine,
+			BotName:                cfg.Bot.Name,
+			Version:                version,
+			ModelName:              setup.model,
+			ContextWindow:          setup.contextWindow,
+			EngineOptions:          setup.options,
+			AdminUsers:             cfg.Bot.AdminUsers,
+			DataDir:                cfg.Storage.DataDir,
+			APISocket:              filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			MemoryMaxItems:         cfg.Memory.MaxItems,
+			MemoryMaxChars:         cfg.Memory.MaxChars,
+			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
 		},
 	)
 
@@ -185,18 +204,6 @@ func runBot(configPath string) error {
 			return fmt.Errorf("load scheduled tasks: %w", err)
 		}
 		router.SetScheduling(anchors, scheduler)
-		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
-			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
-			Scheduler:      scheduler,
-			Logger:         logger,
-			DefaultChannel: platformName,
-			DefaultAgent:   cfg.Bot.Engine,
-			AdminUsers:     cfg.Bot.AdminUsers,
-		})
-		if err := scheduleAPI.Start(ctx); err != nil {
-			return err
-		}
-		defer scheduleAPI.Close()
 		if err := scheduler.Start(ctx, func(runCtx context.Context, task core.ScheduledTask, anchor core.SessionAnchor) error {
 			return router.ExecuteScheduled(runCtx, platform.Message{
 				MessageID: anchor.MessageID,
@@ -215,6 +222,21 @@ func runBot(configPath string) error {
 	} else {
 		router.SetScheduling(anchors, nil)
 	}
+	if scheduler != nil || memories != nil {
+		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
+			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			Scheduler:      scheduler,
+			Memory:         memories,
+			Logger:         logger,
+			DefaultChannel: platformName,
+			DefaultAgent:   cfg.Bot.Engine,
+			AdminUsers:     cfg.Bot.AdminUsers,
+		})
+		if err := scheduleAPI.Start(ctx); err != nil {
+			return err
+		}
+		defer scheduleAPI.Close()
+	}
 
 	logger.Info("nectar starting",
 		"version", version,
@@ -224,6 +246,7 @@ func runBot(configPath string) error {
 		"data_dir", cfg.Storage.DataDir,
 		"model", setup.model,
 		"context_window", setup.contextWindow,
+		"memory_enabled", memories != nil,
 		"schedule_enabled", scheduler != nil,
 	)
 	switch platformName {

@@ -28,12 +28,14 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 		filepath.Join(home, ".agents", "skills"),
 	}
 	for _, root := range roots {
-		data, err := os.ReadFile(filepath.Join(root, ScheduleSkillName, "SKILL.md"))
-		if err != nil {
-			t.Fatalf("%s: %v", root, err)
-		}
-		if !strings.Contains(string(data), "name: nectar-schedule") {
-			t.Fatalf("%s does not contain the skill", root)
+		for _, name := range []string{ScheduleSkillName, MemorySkillName} {
+			data, err := os.ReadFile(filepath.Join(root, name, "SKILL.md"))
+			if err != nil {
+				t.Fatalf("%s/%s: %v", root, name, err)
+			}
+			if !strings.Contains(string(data), "name: "+name) {
+				t.Fatalf("%s/%s does not contain the skill", root, name)
+			}
 		}
 	}
 
@@ -45,8 +47,14 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 	if strings.Count(string(data), blockBegin) != 1 {
 		t.Fatalf("AGENTS block count = %d", strings.Count(string(data), blockBegin))
 	}
+	if strings.Count(string(data), memoryBlockBegin) != 1 {
+		t.Fatalf("memory AGENTS block count = %d", strings.Count(string(data), memoryBlockBegin))
+	}
 	if !strings.Contains(string(data), "${NECTAR_CLI:-nectar}") {
 		t.Fatal("AGENTS hint does not use NECTAR_CLI")
+	}
+	if !strings.Contains(string(data), "memory add") {
+		t.Fatal("AGENTS hint does not describe memory")
 	}
 
 	if err := os.WriteFile(agents, append([]byte("# User rules\n\n- keep me\n\n"), data...), 0o644); err != nil {
@@ -64,6 +72,9 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 	}
 	if strings.Count(string(data), blockBegin) != 1 {
 		t.Fatalf("AGENTS block duplicated: %d", strings.Count(string(data), blockBegin))
+	}
+	if strings.Count(string(data), memoryBlockBegin) != 1 {
+		t.Fatalf("memory AGENTS block duplicated: %d", strings.Count(string(data), memoryBlockBegin))
 	}
 }
 
@@ -122,8 +133,10 @@ func TestUninstallSkillAndWorkspaceHint(t *testing.T) {
 		filepath.Join(home, ".agents", "skills"),
 	}
 	for _, root := range roots {
-		if _, err := os.Stat(filepath.Join(root, ScheduleSkillName)); !os.IsNotExist(err) {
-			t.Fatalf("skill still exists under %s: %v", root, err)
+		for _, name := range []string{ScheduleSkillName, MemorySkillName} {
+			if _, err := os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
+				t.Fatalf("skill still exists under %s/%s: %v", root, name, err)
+			}
 		}
 	}
 	data, err := os.ReadFile(agents)
@@ -135,6 +148,9 @@ func TestUninstallSkillAndWorkspaceHint(t *testing.T) {
 	}
 	if strings.Contains(string(data), blockBegin) || strings.Contains(string(data), blockEnd) {
 		t.Fatal("managed schedule block was not removed")
+	}
+	if strings.Contains(string(data), memoryBlockBegin) || strings.Contains(string(data), memoryBlockEnd) {
+		t.Fatal("managed memory block was not removed")
 	}
 	info, err := os.Stat(agents)
 	if err != nil {
@@ -179,5 +195,9 @@ func TestUninstallDryRunKeepsSkill(t *testing.T) {
 	skill := filepath.Join(dataDir, "skills", ScheduleSkillName, "SKILL.md")
 	if _, err := os.Stat(skill); err != nil {
 		t.Fatalf("dry run removed skill: %v", err)
+	}
+	memorySkill := filepath.Join(dataDir, "skills", MemorySkillName, "SKILL.md")
+	if _, err := os.Stat(memorySkill); err != nil {
+		t.Fatalf("dry run removed memory skill: %v", err)
 	}
 }

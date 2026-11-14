@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Local-first memory layer with profile / project / chat scopes, explicit `/remember`, failure-lesson candidates, retrieval injection, and `/memory` commands
+- `[memory]` config for enabling memory, per-turn item/character limits, and failure auto-learning
+- `nectar memory` CLI and `nectar-memory` agent skill for natural-language memory access
+- Cross-process locking and live reload for memory files; soft-delete tombstones; locality, project id, revision, and content hash metadata
+- Group-chat writes from non-admins now become candidates; review, pin, and delete require an admin
+- Injection is deduplicated by memory hash, with kind quotas, usage tracking, failure-noise filtering, and credential redaction before persistence
+- Added the Nectar runtime identity and `/about` / `/whoami` so agents distinguish the product from the underlying engine
+- Memory writes now go through the local daemon socket, so sandboxed agents do not need direct write access to `~/.nectar/memory`
+
 ## v0.7.0 — 2026-11-14
 
 ### Added

@@ -15,6 +15,7 @@ nectar service <subcommand>           Manage the background service
 nectar update                         Update Nectar
 nectar schedule <subcommand>          Manage scheduled tasks
 nectar skills <subcommand>            Manage agent skills
+nectar memory <subcommand>            Manage local memory
 nectar uninstall                      Uninstall Nectar
 ```
 
@@ -173,6 +174,34 @@ nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry
 
 `remove` is an alias for `uninstall`.
 
+The installer writes both the `nectar-schedule` and `nectar-memory` agent
+skills and maintains their managed blocks in workspace `AGENTS.md` files.
+
+## Memory
+
+`nectar memory` reads and writes the local memory store. Agents call it as a
+tool; it is also useful for manual inspection:
+
+```bash
+nectar memory add [--kind profile|project|fact|lesson|episode] \
+  [--scope chat|project|global] [--status candidate|active] \
+  [--tags a,b] [--source agent] <text>
+nectar memory search [--scope chat|project|global|all] [--limit N] <query>
+nectar memory list [--status active|pending|archived|all] [--json]
+nectar memory get <id> [--json]
+nectar memory update <id> <new text> [--json]
+nectar memory approve|reject|pin|unpin <id>
+nectar memory forget <id> --confirm
+```
+
+- `--status candidate` is the default; candidates join retrieval only after approval. Use `--status active` when the user explicitly asks to remember something.
+- Scope defaults to `NECTAR_CHAT_ID` in an agent session, otherwise the current project.
+- Agent sessions call the daemon through `NECTAR_API_SOCKET`, so sandboxed agents do not need write access to `~/.nectar/memory`; manual CLI without a socket reads/writes the local file.
+- `global` memories can only be written, approved, pinned, or deleted by admins.
+- In group chats, non-admin writes become candidates and review/pin/delete operations require an admin.
+- Deletion requires `--confirm` so agents cannot remove memory by accident.
+- Project/home paths are normalized to `${PROJECT_ROOT}` / `${HOME}`; other absolute paths are marked device-local.
+
 ## Uninstall
 
 ```bash
@@ -194,8 +223,11 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 |---|---|
 | `/new`, `/reset` | Clear the current session; the next message starts a new thread |
 | `/status` | Show the current engine, model, and agent thread ID |
+| `/about`, `/whoami` | Show the Nectar version, platform, underlying engine, and model |
 | `/stop` | Cancel the current run |
 | `/cron`, `/schedule` | Scheduled task entry point |
+| `/memory` | Inspect, review, pin, or forget memories |
+| `/remember` | Explicitly save a memory |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 `/help`, `/commands`, and short questions such as "what commands are available" return the command card without invoking the engine.
@@ -233,6 +265,30 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 
 Scheduled tasks are enabled by default. Management commands are limited to `bot.admin_users`; when that list is empty, admin access is unrestricted. See [Scheduled tasks](schedule.md).
 
+### /memory
+
+```text
+/memory
+/memory list [active|pending|archived|all]
+/memory search <query>
+/memory show <id>
+/memory approve <id>
+/memory reject <id>
+/memory pin <id>
+/memory unpin <id>
+/memory forget <id>
+/remember [project|global] <text>
+/forget <id>
+```
+
+- `/memory` without a subcommand is equivalent to `/memory list`.
+- Failed runs are stored as `pending` candidates and are not injected until approved.
+- `/remember` writes to the current chat by default; `project` writes to the current workspace; `global` requires an admin.
+- Global memories can only be approved, pinned, or deleted by an admin.
+- In group chats, non-admin `/remember` creates a pending candidate; review and deletion require an admin.
+
+Memories are stored in `~/.nectar/memory/memory.json` for inspection and backup.
+
 ## Agent session environment
 
 Agent sessions receive:
@@ -243,6 +299,7 @@ Agent sessions receive:
 | `NECTAR_CHAT_ID` | Current chat ID |
 | `NECTAR_THREAD_ID` | Current thread ID |
 | `NECTAR_AGENT_ID` | Current engine |
+| `NECTAR_WORKING_DIR` | Current workspace |
 | `NECTAR_API_SOCKET` | Schedule API socket |
 | `NECTAR_CLI` | Absolute path to the Nectar binary |
 | `NECTAR_USER_ID` | Current user ID |

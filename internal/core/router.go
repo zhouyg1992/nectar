@@ -9,11 +9,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
+	"github.com/zhouyg1992/nectar/internal/memory"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
 	"github.com/zhouyg1992/nectar/internal/platform"
 )
@@ -27,14 +29,19 @@ const (
 )
 
 type RouterConfig struct {
-	AgentID            string
-	ModelName          string
-	ContextWindow      int
-	CardUpdateInterval time.Duration
-	EngineOptions      engine.EngineOptions
-	AdminUsers         []string
-	DataDir            string
-	APISocket          string
+	AgentID                string
+	BotName                string
+	Version                string
+	ModelName              string
+	ContextWindow          int
+	CardUpdateInterval     time.Duration
+	EngineOptions          engine.EngineOptions
+	AdminUsers             []string
+	DataDir                string
+	APISocket              string
+	MemoryMaxItems         int
+	MemoryMaxChars         int
+	DisableMemoryAutoLearn bool
 }
 
 type Router struct {
@@ -45,6 +52,8 @@ type Router struct {
 	queue      *Queue
 	workspaces *execguard.Workspace
 	lessons    comb.Store
+	memories   memory.Store
+	memorySeen sync.Map
 	decider    decision.DecisionService
 	anchors    *AnchorStore
 	scheduler  *Scheduler
@@ -60,6 +69,7 @@ func NewRouter(
 	queue *Queue,
 	workspaces *execguard.Workspace,
 	lessons comb.Store,
+	memories memory.Store,
 	decider decision.DecisionService,
 	logger *slog.Logger,
 	cfg RouterConfig,
@@ -67,8 +77,20 @@ func NewRouter(
 	if cfg.AgentID == "" {
 		cfg.AgentID = "codex"
 	}
+	if cfg.BotName == "" {
+		cfg.BotName = "Nectar"
+	}
+	if cfg.Version == "" {
+		cfg.Version = "dev"
+	}
 	if cfg.CardUpdateInterval <= 0 {
 		cfg.CardUpdateInterval = 2 * time.Second
+	}
+	if cfg.MemoryMaxItems <= 0 {
+		cfg.MemoryMaxItems = 6
+	}
+	if cfg.MemoryMaxChars <= 0 {
+		cfg.MemoryMaxChars = 1500
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -81,6 +103,7 @@ func NewRouter(
 		queue:      queue,
 		workspaces: workspaces,
 		lessons:    lessons,
+		memories:   memories,
 		decider:    decider,
 		logger:     logger,
 		cfg:        cfg,
@@ -124,6 +147,9 @@ func (r *Router) Handle(msg platform.Message) {
 		case "/status":
 			r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
 			return
+		case "/about", "/whoami":
+			r.sendCommandResult(msg, platform.CardInfo, "🍯 About "+r.cfg.BotName, r.aboutText())
+			return
 		case "/stop":
 			r.stop(key, msg)
 			return
@@ -131,6 +157,11 @@ func (r *Router) Handle(msg platform.Message) {
 
 		if isScheduleCommand(text) {
 			r.handleScheduleCommand(key, msg, text)
+			return
+		}
+
+		if isMemoryCommand(text) {
+			r.handleMemoryCommand(msg, text)
 			return
 		}
 
@@ -197,13 +228,18 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	opts := r.cfg.EngineOptions
 	opts.WorkingDir = workdir
 	opts.Env = map[string]string{
-		"NECTAR_CHANNEL":    key.Channel,
-		"NECTAR_CHAT_ID":    key.ChatID,
-		"NECTAR_CHAT_TYPE":  msg.ChatType,
-		"NECTAR_USER_ID":    msg.UserID,
-		"NECTAR_AGENT_ID":   key.AgentID,
-		"NECTAR_DATA_DIR":   r.cfg.DataDir,
-		"NECTAR_API_SOCKET": r.cfg.APISocket,
+		"NECTAR_CHANNEL":      key.Channel,
+		"NECTAR_CHAT_ID":      key.ChatID,
+		"NECTAR_CHAT_TYPE":    msg.ChatType,
+		"NECTAR_USER_ID":      msg.UserID,
+		"NECTAR_AGENT_ID":     key.AgentID,
+		"NECTAR_PRODUCT_NAME": r.cfg.BotName,
+		"NECTAR_VERSION":      r.cfg.Version,
+		"NECTAR_MODEL":        r.resolvedModel(),
+		"NECTAR_PLATFORM":     r.platform.Name(),
+		"NECTAR_DATA_DIR":     r.cfg.DataDir,
+		"NECTAR_API_SOCKET":   r.cfg.APISocket,
+		"NECTAR_WORKING_DIR":  workdir,
 	}
 	if executable, execErr := os.Executable(); execErr == nil {
 		opts.Env["NECTAR_CLI"] = executable
@@ -257,9 +293,11 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 		lessonPrompt = defaultAttachmentPrompt(attachments)
 	}
 	prompt = buildAttachmentPrompt(prompt, attachments)
+	prompt = r.withIdentity(prompt)
 	opts.Attachments = attachments
 
 	sessionID, hasSession := r.sessions.Get(key)
+	prompt = r.withMemory(ctx, msg, workdir, prompt, key, hasSession)
 	var events <-chan engine.Event
 	sessionNotice := ""
 	if hasSession {
@@ -443,8 +481,8 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 		}, answer)
 	}
 
-	if len(errTexts) > 0 {
-		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"))
+	if len(errTexts) > 0 && ctx.Err() == nil {
+		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), workdir)
 	}
 	var runErr error
 	if len(errTexts) > 0 {
@@ -518,6 +556,62 @@ func (r *Router) status(key SessionKey) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (r *Router) withIdentity(prompt string) string {
+	return r.identityBrief() + "\n\n" + prompt
+}
+
+func (r *Router) identityBrief() string {
+	name := r.cfg.BotName
+	if name == "" {
+		name = "Nectar"
+	}
+	version := r.cfg.Version
+	if version == "" {
+		version = "dev"
+	}
+	engineName := engineDisplayName(r.engine.Name())
+	modelName := r.resolvedModel()
+	return fmt.Sprintf(`## Nectar runtime
+You are %s, the assistant provided by Nectar v%s. Nectar is a self-hosted
+bridge that connects chat platforms to local coding-agent CLIs.
+
+Current platform: %s
+Underlying engine: %s
+Current model: %s
+
+When asked who you are, answer as %s and mention the underlying engine/model
+only as the execution backend. Do not claim to be Codex, Claude, OpenCode,
+Cursor, or Pi itself. Do not say you cannot access Nectar; you are running
+inside it. If asked what model powers you, answer with the underlying model.
+
+Nectar capabilities: coding tasks, persistent sessions, scheduled tasks, and
+long-term memory. Use the `+"`\"${NECTAR_CLI:-nectar}\" schedule`"+` and
+`+"`\"${NECTAR_CLI:-nectar}\" memory`"+` CLIs when appropriate.`,
+		name, version, r.platform.Name(), engineName, modelName, name)
+}
+
+func (r *Router) aboutText() string {
+	name := r.cfg.BotName
+	if name == "" {
+		name = "Nectar"
+	}
+	version := r.cfg.Version
+	if version == "" {
+		version = "dev"
+	}
+	return strings.Join([]string{
+		fmt.Sprintf("%s v%s", name, version),
+		"A self-hosted bridge between chat platforms and coding-agent CLIs.",
+		"",
+		"Platform: " + r.platform.Name(),
+		"Engine: " + engineDisplayName(r.engine.Name()),
+		"Model: " + r.resolvedModel(),
+		"",
+		"I can run coding tasks, keep sessions, manage scheduled tasks, and use long-term memory.",
+		"Use /help for commands.",
+	}, "\n")
 }
 
 func (r *Router) resolvedModel() string {
@@ -753,27 +847,68 @@ func formatTokens(n int) string {
 	}
 }
 
-func (r *Router) recordLesson(msg platform.Message, prompt, errText string) {
-	if r.lessons == nil {
+func (r *Router) recordLesson(msg platform.Message, prompt, errText, workdir string) {
+	if isTransientError(errText) {
 		return
 	}
-	lesson := comb.Lesson{
-		Condition: "When handling: " + execguard.Truncate(prompt, 200),
-		Action:    "Error: " + execguard.Truncate(errText, 1000),
-		Status:    comb.StatusPending,
-		Source:    msg.Channel + "/" + msg.ChatID,
+	if r.lessons != nil {
+		lesson := comb.Lesson{
+			Condition: "When handling: " + execguard.Truncate(prompt, 200),
+			Action:    "Error: " + execguard.Truncate(errText, 1000),
+			Status:    comb.StatusPending,
+			Source:    msg.Channel + "/" + msg.ChatID,
+		}
+		if err := r.lessons.Record(r.ctx, lesson); err != nil {
+			r.logger.Error("record lesson failed", "error", err)
+		}
 	}
-	if err := r.lessons.Record(r.ctx, lesson); err != nil {
-		r.logger.Error("record lesson failed", "error", err)
+	if r.memories == nil || r.cfg.DisableMemoryAutoLearn {
+		return
 	}
+	content, locality := memory.NormalizeContent(workdir,
+		"Task: "+execguard.Truncate(prompt, 300)+"\nFailure: "+execguard.Truncate(errText, 700))
+	_, err := r.memories.Put(r.ctx, memory.Memory{
+		Kind:       memory.KindLesson,
+		Scope:      memory.ScopeChat,
+		ScopeID:    memoryChatScope(msg),
+		Content:    content,
+		Locality:   locality,
+		Tags:       []string{"failure"},
+		Source:     msg.Channel + "/" + msg.ChatID,
+		Confidence: 0.4,
+		Status:     memory.StatusCandidate,
+	})
+	if err != nil {
+		r.logger.Error("record memory candidate failed", "error", err)
+	}
+}
+
+func isTransientError(text string) bool {
+	lower := strings.ToLower(text)
+	for _, marker := range []string{
+		"context canceled", "deadline exceeded", "timed out", "timeout",
+		"connection reset", "connection refused", "connection closed",
+		"broken pipe", "unexpected eof", "eof",
+		"429", "too many requests", "rate limit", "overloaded",
+		"temporarily unavailable", "service unavailable",
+		"401", "403", "unauthorized", "forbidden",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func helpCardBody(engineName string) string {
 	return "**Session**\n" +
 		"- `/new` / `/reset` — Start a new session\n" +
 		"- `/status` — Show engine, model, and session\n" +
+		"- `/about` — Show what Nectar is and what it is running on\n" +
 		"- `/stop` — Stop the current task\n" +
 		"- `/cron` — List or manage scheduled tasks\n" +
+		"- `/memory` — Inspect or curate memory\n" +
+		"- `/remember <text>` — Save a memory\n" +
 		"- `/help` / `/commands` — Show this command card\n\n" +
 		"**Usage**\n" +
 		"- Regular messages are sent to " + engineName + "\n" +
@@ -784,8 +919,11 @@ func helpText(engineName string) string {
 	return `Nectar commands:
 /new, /reset     Start a new session
 /status          Show engine, model, and session
+/about, /whoami  Show what Nectar is and what it is running on
 /stop            Stop the current task
 /cron            List or manage scheduled tasks
+/memory          Inspect or curate memory
+/remember        Save a memory
 /help, /commands Show this command card
 
 Other messages are sent to ` + engineName + `.`
