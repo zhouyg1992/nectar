@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/zhouyg1992/nectar/config"
+	"github.com/zhouyg1992/nectar/internal/cli"
 	"github.com/zhouyg1992/nectar/internal/core"
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
@@ -40,59 +40,10 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) > 0 && args[0] == "service" {
-		return runService(args[1:])
-	}
-	if len(args) > 0 && args[0] == "update" {
-		return runUpdate(args[1:])
-	}
-	if len(args) > 0 && args[0] == "schedule" {
-		return runSchedule(args[1:])
-	}
-	if len(args) > 0 && args[0] == "skills" {
-		return runSkills(args[1:])
-	}
-	if len(args) > 0 && args[0] == "memory" {
-		return runMemory(args[1:])
-	}
-	if len(args) > 0 && args[0] == "uninstall" {
-		return runUninstall(args[1:])
-	}
-	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
-		printMainUsage()
-		return nil
-	}
-
-	fs := flag.NewFlagSet("nectar", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "", "path to config.toml")
-	showVersion := fs.Bool("version", false, "print version and exit")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return err
-	}
-
-	if *showVersion {
-		fmt.Println("nectar", version)
-		return nil
-	}
-
-	return runBot(*configPath)
-}
-
-func printMainUsage() {
-	fmt.Print(`Usage:
-  nectar [-config PATH]
-  nectar -version
-  nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--timeout 10m]
-  nectar schedule <list|add|preview|pause|resume|run|delete|update>
-  nectar skills <install|uninstall>
-  nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>
-  nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
-  nectar service <install|uninstall|start|stop|restart|status|logs>
-`)
+	return cli.Run(args, cli.Deps{
+		Version: version,
+		RunBot:  runBot,
+	})
 }
 
 func runBot(configPath string) error {
