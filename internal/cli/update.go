@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/update"
 )
 
-func runUpdate(args []string) error {
+func runUpdate(args []string, version string) error {
 	fs := flag.NewFlagSet("nectar update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = printUpdateUsage
