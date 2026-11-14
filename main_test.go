@@ -75,3 +75,27 @@ func TestSetupPiEngine(t *testing.T) {
 		t.Fatalf("adapter name = %q", setup.adapter.Name())
 	}
 }
+
+func TestNewTelegramPlatformAdapter(t *testing.T) {
+	cfg := config.Config{
+		Bot: config.BotConfig{
+			Platform:   "telegram",
+			AdminUsers: []string{"42"},
+		},
+		Telegram: config.TelegramConfig{
+			BotToken: "placeholder",
+			Proxy:    "http://127.0.0.1:7890",
+		},
+	}
+	adapter, name, err := newPlatformAdapter(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "telegram" || adapter.Name() != "telegram" {
+		t.Fatalf("adapter = %q name = %q", adapter.Name(), name)
+	}
+	caps := adapter.Capabilities()
+	if !caps.Card || !caps.Streaming || !caps.Media || !caps.Group {
+		t.Fatalf("capabilities = %#v", caps)
+	}
+}

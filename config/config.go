@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Feishu   FeishuConfig   `toml:"feishu"`
 	DingTalk DingTalkConfig `toml:"dingtalk"`
+	Telegram TelegramConfig `toml:"telegram"`
 	Codex    CodexConfig    `toml:"codex"`
 	OpenCode OpenCodeConfig `toml:"opencode"`
 	Cursor   CursorConfig   `toml:"cursor"`
@@ -38,6 +39,13 @@ type DingTalkConfig struct {
 	RobotCode    string `toml:"robot_code"`
 	LogLevel     string `toml:"log_level"`
 	CardEnabled  *bool  `toml:"card_enabled"`
+}
+
+type TelegramConfig struct {
+	BotToken   string `toml:"bot_token"`
+	Proxy      string `toml:"proxy"`
+	APIBaseURL string `toml:"api_base_url"`
+	LogLevel   string `toml:"log_level"`
 }
 
 type CodexConfig struct {
@@ -134,6 +142,7 @@ func defaults() Config {
 	return Config{
 		Feishu:   FeishuConfig{LogLevel: "info"},
 		DingTalk: DingTalkConfig{LogLevel: "info"},
+		Telegram: TelegramConfig{LogLevel: "info"},
 		Codex: CodexConfig{
 			Path:           "codex",
 			Sandbox:        "workspace-write",
@@ -311,6 +320,15 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("DINGTALK_ROBOT_CODE"); v != "" {
 		cfg.DingTalk.RobotCode = v
+	}
+	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
+		cfg.Telegram.BotToken = v
+	}
+	if v := os.Getenv("TELEGRAM_PROXY"); v != "" {
+		cfg.Telegram.Proxy = v
+	}
+	if v := os.Getenv("TELEGRAM_API_BASE_URL"); v != "" {
+		cfg.Telegram.APIBaseURL = v
 	}
 	if v := os.Getenv("CODEX_PATH"); v != "" {
 		cfg.Codex.Path = v
@@ -514,30 +532,54 @@ func normalizePlatform(cfg *Config) error {
 	if cfg.DingTalk.LogLevel == "" {
 		cfg.DingTalk.LogLevel = "info"
 	}
+	cfg.Telegram.BotToken = strings.TrimSpace(cfg.Telegram.BotToken)
+	cfg.Telegram.Proxy = strings.TrimSpace(cfg.Telegram.Proxy)
+	cfg.Telegram.APIBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Telegram.APIBaseURL), "/")
+	cfg.Telegram.LogLevel = strings.ToLower(strings.TrimSpace(cfg.Telegram.LogLevel))
+	if cfg.Telegram.LogLevel == "" {
+		cfg.Telegram.LogLevel = "info"
+	}
 
 	platform := strings.ToLower(strings.TrimSpace(cfg.Bot.Platform))
 	dingtalkConfigured := credentialConfigured(cfg.DingTalk.ClientID) || credentialConfigured(cfg.DingTalk.ClientSecret)
 	feishuConfigured := credentialConfigured(cfg.Feishu.AppID) || credentialConfigured(cfg.Feishu.AppSecret)
+	telegramConfigured := credentialConfigured(cfg.Telegram.BotToken)
 
 	switch platform {
 	case "":
-		switch {
-		case dingtalkConfigured && feishuConfigured:
-			return errors.New("both [feishu] and [dingtalk] credentials are configured; set bot.platform to feishu or dingtalk")
-		case dingtalkConfigured:
-			platform = "dingtalk"
-		default:
-			platform = "feishu"
+		var configured []string
+		if feishuConfigured {
+			configured = append(configured, "feishu")
 		}
-	case "feishu", "dingtalk":
+		if dingtalkConfigured {
+			configured = append(configured, "dingtalk")
+		}
+		if telegramConfigured {
+			configured = append(configured, "telegram")
+		}
+		switch len(configured) {
+		case 0:
+			platform = "feishu"
+		case 1:
+			platform = configured[0]
+		default:
+			return fmt.Errorf(
+				"multiple platform credentials are configured (%s); set bot.platform to one of feishu, dingtalk, telegram",
+				strings.Join(configured, ", "),
+			)
+		}
+	case "feishu", "dingtalk", "telegram":
 	default:
-		return fmt.Errorf("unsupported bot.platform %q (supported: feishu, dingtalk)", platform)
+		return fmt.Errorf("unsupported bot.platform %q (supported: feishu, dingtalk, telegram)", platform)
 	}
 
 	if platform == "dingtalk" {
 		if !credentialConfigured(cfg.DingTalk.ClientID) || !credentialConfigured(cfg.DingTalk.ClientSecret) {
 			return errors.New("dingtalk.client_id and dingtalk.client_secret must be configured (replace placeholder values) when bot.platform = \"dingtalk\"")
 		}
+	}
+	if platform == "telegram" && !credentialConfigured(cfg.Telegram.BotToken) {
+		return errors.New("telegram.bot_token must be configured (replace placeholder values) when bot.platform = \"telegram\"")
 	}
 	cfg.Bot.Platform = platform
 	return nil

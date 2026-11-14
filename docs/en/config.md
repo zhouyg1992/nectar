@@ -10,7 +10,7 @@ The installer writes a minimal working config. No manual edits are required afte
 |---|---|---|
 | `bot.engine` | Yes | The engine selected during install |
 | `bot.platform` | Yes | The platform selected during install |
-| `[feishu]` or `[dingtalk]` credentials | Yes | Entered during install |
+| `[feishu]`, `[dingtalk]`, or `[telegram]` credentials | Yes | Entered during install |
 | Engine sections (`[codex]`, etc.) | No | Built-in defaults apply |
 | `[schedule]` | No | Enabled by default with built-in defaults |
 | `bot.admin_users` | No | Empty means admin access is unrestricted |
@@ -42,7 +42,18 @@ client_id = "dingxxx"
 client_secret = "xxx"
 ```
 
-If only one platform is configured, `bot.platform` can be omitted and Nectar detects it from the credentials. Set it explicitly when both platforms are configured.
+Telegram:
+
+```toml
+[bot]
+engine = "codex"
+platform = "telegram"
+
+[telegram]
+bot_token = "your-bot-token"
+```
+
+If only one platform is configured, `bot.platform` can be omitted and Nectar detects it from the credentials. Set it explicitly when multiple platforms are configured.
 
 ## Access control
 
@@ -54,7 +65,7 @@ allowed_chats = ["oc_xxx"]
 
 - `admin_users`: users allowed to manage `/cron` and the scheduled-task API. Empty means unrestricted.
 - `allowed_chats`: groups allowed to use the bot. Empty means unrestricted.
-- Feishu uses `open_id` / `chat_id`; DingTalk uses `staffId` / `openConversationId`.
+- Feishu uses `open_id` / `chat_id`; DingTalk uses `staffId` / `openConversationId`; Telegram uses numeric `user_id` / `chat_id`.
 
 Restart after editing:
 
@@ -68,7 +79,7 @@ nectar service restart
 [bot]
 name = "Nectar"          # default: Nectar
 engine = "codex"         # codex | opencode | cursor | claude | pi
-# platform = "feishu"    # feishu | dingtalk; optional for a single platform
+# platform = "feishu"    # feishu | dingtalk | telegram; optional for a single platform
 admin_users = []
 allowed_chats = []
 ```
@@ -202,6 +213,8 @@ export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export DINGTALK_CLIENT_ID=dingxxx
 export DINGTALK_CLIENT_SECRET=xxx
+export TELEGRAM_BOT_TOKEN=your-bot-token
+export TELEGRAM_PROXY=http://127.0.0.1:7890
 
 export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
@@ -214,7 +227,7 @@ export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace
 ```
 
-Service mode reads platform credentials from the config file and does not inherit `FEISHU_*` / `DINGTALK_*` from the shell.
+Service mode reads platform credentials from the config file and does not inherit `FEISHU_*` / `DINGTALK_*` / `TELEGRAM_*` from the shell.
 
 ## Context usage
 

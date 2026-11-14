@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 安装器会：
 
 1. 检测已安装的引擎 CLI；一个都没有时提示并退出。
-2. 让你选择引擎和平台（默认飞书 / Lark，可选钉钉）。
+2. 让你选择引擎和平台（默认飞书 / Lark，可选钉钉或 Telegram）。
 3. 要求填写所选平台的凭证。
 4. 从 GitHub Releases 下载对应版本，并尽量校验 `checksums.txt`。
 5. 安装二进制到 `~/.local/bin/nectar`。
@@ -51,12 +51,13 @@ nectar service logs -f
 --dir DIR               安装目录（默认 ~/.local/bin）
 --config PATH           配置文件路径（默认 ~/.nectar/config.toml）
 --engine NAME           codex | opencode | cursor | claude | pi
---platform NAME         feishu | dingtalk
+--platform NAME         feishu | dingtalk | telegram
 --feishu-app-id ID      飞书 app_id
 --feishu-app-secret S   飞书 app_secret
 --dingtalk-client-id ID 钉钉 client_id
 --dingtalk-client-secret S
                         钉钉 client_secret
+--telegram-bot-token T  Telegram bot token
 --reconfigure           备份并替换现有配置
 --no-service            只安装二进制，不安装后台服务
 --service               兼容参数；服务本来就是默认行为
@@ -118,6 +119,14 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
   env DINGTALK_CLIENT_ID=dingxxx DINGTALK_CLIENT_SECRET=xxx \
   sh -s -- --engine codex --platform dingtalk
+```
+
+Telegram：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
+  env TELEGRAM_BOT_TOKEN=your-bot-token \
+  sh -s -- --engine codex --platform telegram
 ```
 
 Linux 开机启动：

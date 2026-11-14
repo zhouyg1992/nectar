@@ -6,6 +6,7 @@
 - [命令参考](commands.md)
 - [飞书配置与排查](feishu.md)
 - [钉钉配置与排查](dingtalk.md)
+- [Telegram 配置与排查](telegram.md)
 - [后台服务](service.md)
 - [定时任务](schedule.md)
 - [安全边界](security.md)

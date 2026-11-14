@@ -23,18 +23,20 @@ import (
 )
 
 type fakePlatform struct {
-	mu           sync.Mutex
-	cards        bool
-	replies      []string
-	sentCards    []platform.Card
-	updates      []platform.Card
-	replyTargets []string
-	replyThreads []bool
-	threadIDs    []string
-	updateIDs    []string
-	downloads    []attachment.Resource
-	downloadDirs []string
-	downloadErr  error
+	mu              sync.Mutex
+	cards           bool
+	replies         []string
+	sentCards       []platform.Card
+	updates         []platform.Card
+	replyTargets    []string
+	replyThreads    []bool
+	threadIDs       []string
+	updateIDs       []string
+	updateChatIDs   []string
+	updateThreadIDs []string
+	downloads       []attachment.Resource
+	downloadDirs    []string
+	downloadErr     error
 }
 
 func (f *fakePlatform) Name() string { return "fake" }
@@ -64,6 +66,8 @@ func (f *fakePlatform) Update(_ context.Context, messageID string, reply platfor
 	f.replyThreads = append(f.replyThreads, reply.ReplyInThread)
 	f.threadIDs = append(f.threadIDs, reply.ThreadID)
 	f.updateIDs = append(f.updateIDs, messageID)
+	f.updateChatIDs = append(f.updateChatIDs, reply.ChatID)
+	f.updateThreadIDs = append(f.updateThreadIDs, reply.ThreadID)
 	if reply.Card != nil {
 		f.updates = append(f.updates, *reply.Card)
 	}
@@ -661,6 +665,13 @@ func TestRouterSendsThinkingCardAndUpdatesFinal(t *testing.T) {
 	}
 	if plat.usesQuotedReplies() {
 		t.Fatal("router quoted the user's message")
+	}
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	for index, chatID := range plat.updateChatIDs {
+		if chatID != "c1" || plat.updateThreadIDs[index] != "" {
+			t.Fatalf("update %d context = chat %q thread %q", index, chatID, plat.updateThreadIDs[index])
+		}
 	}
 }
 

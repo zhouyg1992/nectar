@@ -21,7 +21,7 @@
 Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果以卡片回传。会话保持连续，进度实时可见，任务可以定时执行；安装器会检测本机引擎、写入配置并启动后台服务。
 
 <p align="center">
-  <img src="docs/assets/nectar-flow.svg" alt="飞书和钉钉消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
+  <img src="docs/assets/nectar-flow.svg" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
 </p>
 
 ## 为什么是 Nectar
@@ -87,7 +87,8 @@ nectar service restart
 |---|---|---|
 | 飞书 / Lark | ✅ 已支持 | [飞书配置](docs/zh-CN/feishu.md) |
 | 钉钉 | ✅ 已支持 | [钉钉配置](docs/zh-CN/dingtalk.md) |
-| Telegram、企业微信 / 微信、Slack | 🚧 计划中 | [Roadmap](docs/zh-CN/roadmap.md) |
+| Telegram | ✅ 已支持 | [Telegram 配置](docs/zh-CN/telegram.md) |
+| 企业微信 / 微信、Slack | 🚧 计划中 | [Roadmap](docs/zh-CN/roadmap.md) |
 
 **引擎**
 
@@ -170,6 +171,7 @@ nectar uninstall --purge-data
 - [命令参考](docs/zh-CN/commands.md)
 - [飞书配置与排查](docs/zh-CN/feishu.md)
 - [钉钉配置与排查](docs/zh-CN/dingtalk.md)
+- [Telegram 配置与排查](docs/zh-CN/telegram.md)
 - [后台服务](docs/zh-CN/service.md)
 - [定时任务](docs/zh-CN/schedule.md)
 - [安全边界](docs/zh-CN/security.md)

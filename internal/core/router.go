@@ -329,7 +329,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 			Body:     body,
 			Footer:   cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}
-		if err := r.platform.Update(r.ctx, cardID, platform.Reply{Card: card}); err != nil {
+		if err := r.platform.Update(r.ctx, cardID, platform.Reply{
+			ChatID:   msg.ChatID,
+			ChatType: msg.ChatType,
+			UserID:   msg.UserID,
+			ThreadID: msg.ThreadID,
+			Card:     card,
+		}); err != nil {
 			r.logger.Debug("update progress card failed", "error", err)
 		} else {
 			lastCardUpdate = time.Now()
@@ -458,7 +464,13 @@ func initialCardBody(hasAttachments bool) string {
 
 func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) error {
 	if cardID != "" {
-		if err := r.platform.Update(r.ctx, cardID, platform.Reply{Card: card}); err == nil {
+		if err := r.platform.Update(r.ctx, cardID, platform.Reply{
+			ChatID:   msg.ChatID,
+			ChatType: msg.ChatType,
+			UserID:   msg.UserID,
+			ThreadID: msg.ThreadID,
+			Card:     card,
+		}); err == nil {
 			return nil
 		} else {
 			r.logger.Error("update final card failed", "message_id", cardID, "error", err)

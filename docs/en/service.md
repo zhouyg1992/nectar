@@ -23,8 +23,9 @@ Confirm that the selected platform's configuration contains real values:
 
 - Feishu: `app_id` / `app_secret` under `[feishu]`
 - DingTalk: `client_id` / `client_secret` under `[dingtalk]` (legacy `app_key` / `app_secret` are also supported)
+- Telegram: `bot_token` under `[telegram]`
 
-If both Feishu and DingTalk are configured, set `platform = "feishu"` or `platform = "dingtalk"` explicitly under `[bot]`. Then run:
+If multiple platforms are configured, set `platform = "feishu"`, `"dingtalk"`, or `"telegram"` explicitly under `[bot]`. Then run:
 
 ```bash
 nectar service install

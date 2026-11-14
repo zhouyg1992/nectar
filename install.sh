@@ -16,6 +16,7 @@ FEISHU_APP_ID="${FEISHU_APP_ID:-}"
 FEISHU_APP_SECRET="${FEISHU_APP_SECRET:-}"
 DINGTALK_CLIENT_ID="${DINGTALK_CLIENT_ID:-}"
 DINGTALK_CLIENT_SECRET="${DINGTALK_CLIENT_SECRET:-}"
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 CONFIG_FILE=""
 RECONFIGURE=0
 SKIP_CONFIG=0
@@ -29,7 +30,8 @@ claude|claude|Claude Code
 pi|pi|Pi'
 
 PLATFORM_DEFS='feishu|Feishu / Lark
-dingtalk|DingTalk'
+dingtalk|DingTalk
+telegram|Telegram'
 
 usage() {
 	cat <<'EOF'
@@ -43,12 +45,13 @@ Options:
   --dir DIR               install directory (default: ~/.local/bin)
   --config PATH           config path (default: ~/.nectar/config.toml)
   --engine NAME           engine: codex, opencode, cursor, claude, pi
-  --platform NAME         platform: feishu, dingtalk (default: interactive)
+  --platform NAME         platform: feishu, dingtalk, telegram (default: interactive)
   --feishu-app-id ID      Feishu app_id
   --feishu-app-secret S   Feishu app_secret
   --dingtalk-client-id ID DingTalk client_id
   --dingtalk-client-secret S
                           DingTalk client_secret
+  --telegram-bot-token T  Telegram bot token
   --reconfigure           back up and replace an existing config
   --no-service            install the binary only
   --service               accepted for compatibility; service is default
@@ -65,6 +68,7 @@ Environment:
   FEISHU_APP_SECRET       same as --feishu-app-secret
   DINGTALK_CLIENT_ID      same as --dingtalk-client-id
   DINGTALK_CLIENT_SECRET  same as --dingtalk-client-secret
+  TELEGRAM_BOT_TOKEN      same as --telegram-bot-token
 
 When run interactively, the installer detects installed engine CLIs, asks for
 the engine, platform, and credentials, writes a minimal config, and installs
@@ -147,6 +151,11 @@ while [ $# -gt 0 ]; do
 	--dingtalk-client-secret)
 		[ $# -ge 2 ] || err "--dingtalk-client-secret requires a value"
 		DINGTALK_CLIENT_SECRET="$2"
+		shift 2
+		;;
+	--telegram-bot-token)
+		[ $# -ge 2 ] || err "--telegram-bot-token requires a value"
+		TELEGRAM_BOT_TOKEN="$2"
 		shift 2
 		;;
 	--reconfigure)
@@ -432,12 +441,12 @@ select_platform() {
 		lark) PLATFORM="feishu" ;;
 		esac
 		case "$PLATFORM" in
-		feishu | dingtalk) ;;
-		*) err "unsupported platform: $PLATFORM (supported: feishu, dingtalk)" ;;
+		feishu | dingtalk | telegram) ;;
+		*) err "unsupported platform: $PLATFORM (supported: feishu, dingtalk, telegram)" ;;
 		esac
 		return 0
 	fi
-	need_tty "--platform feishu|dingtalk"
+	need_tty "--platform feishu|dingtalk|telegram"
 	PLATFORM_COUNT=0
 	printf '\nSelect platform:\n' >&2
 	OLD_IFS=$IFS
@@ -496,10 +505,22 @@ configure_dingtalk() {
 	fi
 }
 
+configure_telegram() {
+	TELEGRAM_BOT_TOKEN=$(trim_value "$TELEGRAM_BOT_TOKEN")
+	if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+		need_tty "--telegram-bot-token or TELEGRAM_BOT_TOKEN"
+		TELEGRAM_BOT_TOKEN=$(prompt_secret_value "Telegram bot_token")
+	fi
+	if is_placeholder_value "$TELEGRAM_BOT_TOKEN"; then
+		err "invalid Telegram bot_token (placeholder value)"
+	fi
+}
+
 configure_platform() {
 	case "$PLATFORM" in
 	feishu) configure_feishu ;;
 	dingtalk) configure_dingtalk ;;
+	telegram) configure_telegram ;;
 	*) err "unsupported platform: $PLATFORM" ;;
 	esac
 }
@@ -535,6 +556,9 @@ write_config() {
 		dingtalk)
 			printf 'client_id = "%s"\n' "$(toml_escape "$DINGTALK_CLIENT_ID")"
 			printf 'client_secret = "%s"\n' "$(toml_escape "$DINGTALK_CLIENT_SECRET")"
+			;;
+		telegram)
+			printf 'bot_token = "%s"\n' "$(toml_escape "$TELEGRAM_BOT_TOKEN")"
 			;;
 		esac
 	} >"$TMP_CONFIG" || {

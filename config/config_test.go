@@ -192,6 +192,49 @@ func TestDingTalkCardDisabled(t *testing.T) {
 	}
 }
 
+func TestTelegramAutoDetect(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[telegram]\nbot_token = \"test-token\"\nproxy = \"http://127.0.0.1:7890\"\napi_base_url = \"https://api.example.test/\"\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Platform != "telegram" {
+		t.Fatalf("platform = %q", cfg.Bot.Platform)
+	}
+	if cfg.Telegram.BotToken != "test-token" ||
+		cfg.Telegram.Proxy != "http://127.0.0.1:7890" ||
+		cfg.Telegram.APIBaseURL != "https://api.example.test" ||
+		cfg.Telegram.LogLevel != "info" {
+		t.Fatalf("telegram = %#v", cfg.Telegram)
+	}
+}
+
+func TestTelegramRequiresCredentials(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[bot]\nplatform = \"telegram\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected telegram credential error")
+	}
+}
+
+func TestTelegramEnvOverride(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "123456:env-token")
+	t.Setenv("NECTAR_DATA_DIR", t.TempDir())
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Platform != "telegram" || cfg.Telegram.BotToken != "123456:env-token" {
+		t.Fatalf("platform = %q telegram = %#v", cfg.Bot.Platform, cfg.Telegram)
+	}
+}
+
 func TestBothPlatformsRequireSelection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	source := "[feishu]\napp_id = \"cli_real\"\napp_secret = \"secret1\"\n\n[dingtalk]\nclient_id = \"dingreal\"\nclient_secret = \"secret2\"\n"

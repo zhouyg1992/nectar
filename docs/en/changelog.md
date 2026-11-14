@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Telegram Bot API platform adapter with long polling, direct chats, groups, forum topics, attachment downloads, streaming message edits, and automatic 4096-character chunking
+- `[telegram] bot_token` with optional `proxy` and self-hosted `api_base_url`; the installer supports `--platform telegram`
+- The Telegram bot token is removed from agent subprocess environments
+
 ## v0.6.1 — 2026-11-14
 
 ### Added

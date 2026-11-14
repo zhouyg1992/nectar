@@ -1,2 +1,2 @@
-// Package telegram is reserved for the Telegram platform adapter.
+// Package telegram implements the Telegram Bot API platform adapter.
 package telegram

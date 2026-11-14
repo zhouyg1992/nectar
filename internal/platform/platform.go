@@ -90,6 +90,9 @@ type PlatformAdapter interface {
 	Start(ctx context.Context, handler func(Message)) error
 
 	Send(ctx context.Context, reply Reply) (messageID string, err error)
+	// Update edits a previously sent message. reply carries the destination
+	// chat and thread so adapters that need them (for example Telegram) can
+	// address the edit.
 	Update(ctx context.Context, messageID string, reply Reply) error
 	// Download writes an inbound resource to dir and returns its local path.
 	// The adapter owns platform-specific naming and MIME detection.

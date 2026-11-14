@@ -26,6 +26,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/platform"
 	"github.com/zhouyg1992/nectar/internal/platform/dingtalk"
 	"github.com/zhouyg1992/nectar/internal/platform/feishu"
+	"github.com/zhouyg1992/nectar/internal/platform/telegram"
 )
 
 var version = "dev"
@@ -225,10 +226,13 @@ func runBot(configPath string) error {
 		"context_window", setup.contextWindow,
 		"schedule_enabled", scheduler != nil,
 	)
-	if platformName == "feishu" {
+	switch platformName {
+	case "feishu":
 		logger.Info("connecting to feishu; wait for 'feishu websocket connected' before sending messages")
-	} else {
+	case "dingtalk":
 		logger.Info("connecting to dingtalk; wait for 'dingtalk stream connected' before sending messages")
+	case "telegram":
+		logger.Info("connecting to telegram; wait for 'telegram: connected' before sending messages")
 	}
 	if setup.name == "codex" && setup.contextWindow == 0 {
 		logger.Warn("codex context window unknown; card footer will omit context usage (set codex.context_window to override)")
@@ -274,6 +278,18 @@ func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, er
 			return nil, "", err
 		}
 		return adapter, "dingtalk", nil
+	case "telegram":
+		adapter, err := telegram.New(telegram.Config{
+			BotToken:     cfg.Telegram.BotToken,
+			Proxy:        cfg.Telegram.Proxy,
+			APIBaseURL:   cfg.Telegram.APIBaseURL,
+			AllowedUsers: cfg.Bot.AdminUsers,
+			AllowedChats: cfg.Bot.AllowedChats,
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		return adapter, "telegram", nil
 	case "feishu", "":
 		adapter, err := feishu.New(feishu.Config{
 			AppID:        cfg.Feishu.AppID,
@@ -294,6 +310,9 @@ func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, er
 func platformLogLevel(cfg config.Config) string {
 	if cfg.Bot.Platform == "dingtalk" {
 		return cfg.DingTalk.LogLevel
+	}
+	if cfg.Bot.Platform == "telegram" {
+		return cfg.Telegram.LogLevel
 	}
 	return cfg.Feishu.LogLevel
 }

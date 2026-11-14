@@ -45,6 +45,24 @@ func TestValidateServiceConfig(t *testing.T) {
 			content: "[feishu]\napp_id = \"cli_realid\"\napp_secret = \"real-secret-value\"\n\n[dingtalk]\nclient_id = \"dingrealid\"\nclient_secret = \"real-secret-value\"\n",
 			wantErr: true,
 		},
+		{
+			name:    "telegram configured",
+			content: "[bot]\nplatform = \"telegram\"\n\n[telegram]\nbot_token = \"test-token\"\n",
+		},
+		{
+			name:    "telegram auto detected",
+			content: "[telegram]\nbot_token = \"test-token\"\n",
+		},
+		{
+			name:    "telegram placeholder",
+			content: "[bot]\nplatform = \"telegram\"\n\n[telegram]\nbot_token = \"123456:xxxxxxxxxxxxxxxx\"\n",
+			wantErr: true,
+		},
+		{
+			name:    "telegram and feishu require selection",
+			content: "[feishu]\napp_id = \"cli_realid\"\napp_secret = \"real-secret-value\"\n\n[telegram]\nbot_token = \"test-token\"\n",
+			wantErr: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

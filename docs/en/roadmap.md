@@ -69,7 +69,7 @@
 
 ### Farther out
 
-- Telegram, WeChat, Slack
+- WeChat, Slack
 - Kimi
 - Jev decision service
 - Agent Teams / Multi-Bot Relay
