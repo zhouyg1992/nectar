@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>一条消息，唤起你的编程 Agent。</strong><br>
-  在飞书 / 钉钉里直接使用 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi。
+  在飞书 / 钉钉 / Telegram 里直接使用 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi。
 </p>
 
 <p align="center">
@@ -24,9 +24,19 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果
   <img src="docs/assets/nectar-flow.svg" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
 </p>
 
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center"><a href="docs/assets/screenshots/feishu.png"><img src="docs/assets/screenshots/feishu.png" alt="在飞书里向 Nectar 提问并获取行情结果" width="260"></a><br><sub><b>飞书 / Lark</b></sub></td>
+    <td align="center"><a href="docs/assets/screenshots/dingtalk.png"><img src="docs/assets/screenshots/dingtalk.png" alt="在钉钉里用 Nectar 管理定时任务" width="260"></a><br><sub><b>钉钉</b></sub></td>
+    <td align="center"><a href="docs/assets/screenshots/telegram.png"><img src="docs/assets/screenshots/telegram.png" alt="在 Telegram 里用 Nectar 执行命令" width="260"></a><br><sub><b>Telegram</b></sub></td>
+  </tr>
+</table>
+
 ## 为什么是 Nectar
 
-- **聊天就是入口**：在飞书 / 钉钉里直接对话，单聊和群聊都支持。
+- **聊天就是入口**：在飞书 / 钉钉 / Telegram 里直接对话，单聊和群聊都支持。
 - **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`，服务重启后继续原来的 Agent 会话。
 - **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
