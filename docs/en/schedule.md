@@ -4,6 +4,8 @@ Nectar embeds an in-process scheduler. Tasks are persisted in `~/.nectar/schedul
 
 ## Configuration
 
+Every setting below is optional. Nectar enables the scheduler by default (`enabled = true`), uses the host timezone, and applies the defaults shown here.
+
 ```toml
 [schedule]
 enabled = true

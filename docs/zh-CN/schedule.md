@@ -4,6 +4,8 @@ Nectar 内置一个进程内调度器。任务持久化到 `~/.nectar/schedules.
 
 ## 配置
 
+以下配置均可选。Nectar 默认已启用定时任务（`enabled = true`）、使用本机时区，并采用下面的默认值。
+
 ```toml
 [schedule]
 enabled = true

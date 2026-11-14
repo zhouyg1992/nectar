@@ -7,9 +7,9 @@ Nectar can install itself as a background service for the current user:
 
 The service starts `nectar -config ~/.nectar/config.toml` using the absolute paths from installation time.
 
-> Background service support requires v0.1.1 or later.
+## Install the service manually
 
-## Configure first, then install the service
+The one-line installer writes the config and installs and starts the service by default, so this section is only needed for manual setup or after changing the config.
 
 Service mode reads the selected platform's (Feishu or DingTalk) credentials from `~/.nectar/config.toml` and does not inherit `FEISHU_APP_ID` / `FEISHU_APP_SECRET` or `DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET` from the shell.
 
