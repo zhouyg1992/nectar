@@ -84,7 +84,7 @@ DINGTALK_CLIENT_SECRET  同 --dingtalk-client-secret
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
-  sh -s -- --version v0.6.0
+  sh -s -- --version v0.6.1
 
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
   sh -s -- --dir /usr/local/bin
@@ -143,7 +143,7 @@ nectar update
 
 ```bash
 nectar update --check          # 只检查最新版本
-nectar update --version v0.6.0 # 指定版本或降级
+nectar update --version v0.6.1 # 指定版本或降级
 nectar update --force          # 重装当前版本
 nectar update --no-restart     # 更新二进制和 Skill，不重启服务
 nectar update --no-skills      # 跳过 Skill 刷新

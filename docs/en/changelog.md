@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.6.1 — 2026-11-14
+
+### Added
+
+- `nectar update` now shows percentage, progress bar, and downloaded/total bytes while fetching release assets
+- Added `--timeout`, `--attempts`, `--binary`, and `--no-progress` update options
+
+### Changed
+
+- Connection, TLS, response-header, metadata, and asset-download phases now use independent timeouts instead of a 60-second limit covering the complete download
+- Transient connection, TLS, and HTTP 5xx failures are retried; the GitHub API is used as a fallback when the release page is unavailable
+- Each download attempt defaults to 10 minutes, with up to 2 attempts for metadata and downloads
+
+### Fixed
+
+- Fixed release assets being interrupted by the overall request timeout on slow networks
+- A temporary newer updater can now target a specific Nectar installation with `--binary PATH`
+
 ## v0.6.0 — 2026-11-14
 
 ### Added
