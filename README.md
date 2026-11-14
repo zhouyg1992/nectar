@@ -74,7 +74,7 @@ The installer is interactive. Choose an engine and platform (Feishu / Lark by de
 
 Paste this into Codex, Claude Code, Cursor Agent, OpenCode, or Pi:
 
-> Install Nectar from https://github.com/zhouyg1992/nectar. Read AGENT_INSTALL.md in that repository and follow it. Ask me for credentials, and confirm before installing the background service.
+> Install Nectar from <https://github.com/zhouyg1992/nectar>. Read AGENT_INSTALL.md in that repository and follow it. Ask me for credentials, and confirm before installing the background service.
 
 Your agent reads the install contract, asks for the required credentials, runs the installer, and verifies the platform connection. See [AGENT_INSTALL.md](AGENT_INSTALL.md) for the full contract.
 
