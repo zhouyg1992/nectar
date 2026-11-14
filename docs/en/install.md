@@ -51,12 +51,13 @@ Direct messages work without a mention; group messages require @Bot.
 --dir DIR               install directory (default: ~/.local/bin)
 --config PATH           config path (default: ~/.nectar/config.toml)
 --engine NAME           codex | opencode | cursor | claude | pi
---platform NAME         feishu | dingtalk
+--platform NAME         feishu | dingtalk | telegram
 --feishu-app-id ID      Feishu app_id
 --feishu-app-secret S   Feishu app_secret
 --dingtalk-client-id ID DingTalk client_id
 --dingtalk-client-secret S
                         DingTalk client_secret
+--telegram-bot-token T  Telegram bot token
 --reconfigure           back up and replace an existing config
 --no-service            install the binary only
 --service               accepted for compatibility; service is the default
@@ -118,6 +119,14 @@ DingTalk:
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
   env DINGTALK_CLIENT_ID=dingxxx DINGTALK_CLIENT_SECRET=xxx \
   sh -s -- --engine codex --platform dingtalk
+```
+
+Telegram:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
+  env TELEGRAM_BOT_TOKEN=your-bot-token \
+  sh -s -- --engine codex --platform telegram
 ```
 
 Start at boot on Linux:

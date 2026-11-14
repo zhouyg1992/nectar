@@ -37,6 +37,26 @@ log_level = "info"
 # card_enabled = true
 
 # ---------------------------------------------------------------------------
+# Telegram
+# ---------------------------------------------------------------------------
+# To use Telegram:
+#   1. Create a bot with @BotFather and copy the bot token.
+#   2. Uncomment [telegram] and leave the other platform credentials empty.
+#   3. Optionally set bot.platform = "telegram" in [bot].
+#
+# Nectar uses Bot API long polling, so no public callback URL or certificate is
+# needed. In mainland China, set proxy to an HTTP/SOCKS proxy that can reach
+# api.telegram.org; background services do not inherit shell proxy variables.
+# [telegram]
+# bot_token = "your-bot-token"
+# HTTP/SOCKS proxy used for Bot API requests. Empty = environment proxy.
+# proxy = "http://127.0.0.1:7890"
+# Optional self-hosted Bot API server. Default: https://api.telegram.org.
+# api_base_url = "https://api.telegram.org"
+# Log level: debug | info | warn | error. Default: info.
+# log_level = "info"
+
+# ---------------------------------------------------------------------------
 # Codex CLI
 # ---------------------------------------------------------------------------
 [codex]
@@ -177,7 +197,7 @@ per_chat_workspace = false
 name = "Nectar"
 # Engine to use: codex | opencode | cursor | claude | pi.
 engine = "codex"
-# Platform to use: feishu | dingtalk. Empty = auto-detect from credentials.
+# Platform to use: feishu | dingtalk | telegram. Empty = auto-detect from credentials.
 # If both platforms have credentials, set this explicitly.
 # platform = "feishu"
 # Optional user allowlist.

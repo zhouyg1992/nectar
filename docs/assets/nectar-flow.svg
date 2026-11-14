@@ -3,7 +3,7 @@
      viewBox="0 0 1200 460" width="1200" height="460" role="img"
      aria-labelledby="title desc">
   <title id="title">How Nectar works</title>
-  <desc id="desc">Feishu and DingTalk messages flow through the Nectar bridge to Codex, OpenCode, Cursor Agent, Claude Code, or Pi.</desc>
+  <desc id="desc">Feishu, DingTalk, and Telegram messages flow through the Nectar bridge to Codex, OpenCode, Cursor Agent, Claude Code, or Pi.</desc>
 
   <defs>
     <linearGradient id="honey" x1="0" y1="0" x2="0" y2="1">
@@ -28,9 +28,11 @@
         font-size="17" font-weight="700" letter-spacing="1.4" fill="#9A7A3A">CODING AGENT ENGINES</text>
 
   <!-- Platform to Nectar -->
-  <path id="flow-feishu" d="M300 133 C 370 133, 405 230, 470 230"
+  <path id="flow-feishu" d="M300 112 C 370 112, 405 230, 470 230"
         fill="none" stroke="#E4B24C" stroke-width="2.5" stroke-linecap="round" opacity="0.82"/>
-  <path id="flow-dingtalk" d="M300 227 C 370 227, 405 230, 470 230"
+  <path id="flow-dingtalk" d="M300 190 C 370 190, 405 230, 470 230"
+        fill="none" stroke="#E4B24C" stroke-width="2.5" stroke-linecap="round" opacity="0.82"/>
+  <path id="flow-telegram" d="M300 268 C 370 268, 405 230, 470 230"
         fill="none" stroke="#E4B24C" stroke-width="2.5" stroke-linecap="round" opacity="0.82"/>
 
   <!-- Nectar to engines -->
@@ -47,19 +49,23 @@
 
   <!-- Platform cards -->
   <g font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="21">
-    <rect x="40" y="96" width="260" height="74" rx="16" fill="#FFFFFF" stroke="#EFDCB3" stroke-width="1.5"/>
-    <circle cx="62" cy="133" r="5" fill="#3370FF"/>
-    <text x="80" y="141" font-weight="650" fill="#3A2A12">Feishu / Lark</text>
+    <rect x="40" y="80" width="260" height="64" rx="16" fill="#FFFFFF" stroke="#EFDCB3" stroke-width="1.5"/>
+    <circle cx="62" cy="112" r="5" fill="#3370FF"/>
+    <text x="80" y="120" font-weight="650" fill="#3A2A12">Feishu / Lark</text>
 
-    <rect x="40" y="190" width="260" height="74" rx="16" fill="#FFFFFF" stroke="#EFDCB3" stroke-width="1.5"/>
-    <circle cx="62" cy="227" r="5" fill="#FF7A00"/>
-    <text x="80" y="235" font-weight="650" fill="#3A2A12">DingTalk</text>
+    <rect x="40" y="158" width="260" height="64" rx="16" fill="#FFFFFF" stroke="#EFDCB3" stroke-width="1.5"/>
+    <circle cx="62" cy="190" r="5" fill="#FF7A00"/>
+    <text x="80" y="198" font-weight="650" fill="#3A2A12">DingTalk</text>
+
+    <rect x="40" y="236" width="260" height="64" rx="16" fill="#FFFFFF" stroke="#EFDCB3" stroke-width="1.5"/>
+    <circle cx="62" cy="268" r="5" fill="#229ED9"/>
+    <text x="80" y="276" font-weight="650" fill="#3A2A12">Telegram</text>
   </g>
 
   <text x="170" y="326" text-anchor="middle" font-size="13" fill="#9A7A3A"
         font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">More platforms coming:</text>
   <text x="170" y="346" text-anchor="middle" font-size="13" fill="#B09A68"
-        font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">Telegram · WeCom / WeChat · Slack · …</text>
+        font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">WeCom / WeChat · Slack · …</text>
 
   <!-- Engine cards -->
   <g font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="21">
@@ -100,36 +106,29 @@
   <text x="600" y="311" text-anchor="middle" font-size="13" fill="#7A5A18"
         font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">one bridge, any agent</text>
 
-  <!-- Bees travelling along the connections -->
+  <!-- One bee per side, cycling through every connection on that side. -->
   <g>
     <use href="#bee" xlink:href="#bee"/>
-    <animateMotion dur="7s" repeatCount="indefinite"
-                   keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear">
-      <mpath href="#flow-feishu" xlink:href="#flow-feishu"/>
-    </animateMotion>
+    <animateMotion dur="30s" repeatCount="indefinite"
+                   path="M300 112 C 370 112, 405 230, 470 230
+                         C 405 230, 370 112, 300 112
+                         M300 190 C 370 190, 405 230, 470 230
+                         C 405 230, 370 190, 300 190
+                         M300 268 C 370 268, 405 230, 470 230
+                         C 405 230, 370 268, 300 268"/>
   </g>
   <g>
     <use href="#bee" xlink:href="#bee"/>
-    <set attributeName="visibility" to="hidden" begin="0s" end="1.1s"/>
-    <animateMotion dur="8.5s" begin="1.1s" repeatCount="indefinite"
-                   keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear">
-      <mpath href="#flow-dingtalk" xlink:href="#flow-dingtalk"/>
-    </animateMotion>
-  </g>
-  <g>
-    <use href="#bee" xlink:href="#bee"/>
-    <animateMotion dur="6.5s" begin="0.6s" repeatCount="indefinite"
-                   keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear">
-      <mpath href="#flow-codex" xlink:href="#flow-codex"/>
-    </animateMotion>
-    <set attributeName="visibility" to="hidden" begin="0s" end="0.6s"/>
-  </g>
-  <g>
-    <use href="#bee" xlink:href="#bee"/>
-    <set attributeName="visibility" to="hidden" begin="0s" end="1.8s"/>
-    <animateMotion dur="7.8s" begin="1.8s" repeatCount="indefinite"
-                   keyPoints="0;1;0" keyTimes="0;0.5;1" calcMode="linear">
-      <mpath href="#flow-pi" xlink:href="#flow-pi"/>
-    </animateMotion>
+    <animateMotion dur="40s" repeatCount="indefinite"
+                   path="M730 230 C 800 230, 825 113, 900 113
+                         C 825 113, 800 230, 730 230
+                         M730 230 C 800 230, 825 179, 900 179
+                         C 825 179, 800 230, 730 230
+                         M730 230 C 800 230, 825 245, 900 245
+                         C 825 245, 800 230, 730 230
+                         M730 230 C 800 230, 825 311, 900 311
+                         C 825 311, 800 230, 730 230
+                         M730 230 C 800 230, 825 377, 900 377
+                         C 825 377, 800 230, 730 230"/>
   </g>
 </svg>

@@ -110,7 +110,10 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 	cmd.Dir = workdir
 	cmd.Stdin = strings.NewReader(prompt)
 	// The agent should not inherit the bot's Feishu credential.
-	cmd.Env = engine.EnvWith(withoutEnv(os.Environ(), "FEISHU_APP_SECRET"), opts.Env)
+	env := withoutEnv(os.Environ(), "FEISHU_APP_SECRET")
+	env = withoutEnv(env, "TELEGRAM_BOT_TOKEN")
+	env = withoutEnv(env, "TELEGRAM_PROXY")
+	cmd.Env = engine.EnvWith(env, opts.Env)
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil

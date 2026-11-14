@@ -23,8 +23,9 @@ Nectar 可以把自身安装为当前用户的后台服务：
 
 - 飞书：`[feishu]` 下的 `app_id` / `app_secret`
 - 钉钉：`[dingtalk]` 下的 `client_id` / `client_secret`（也兼容旧字段 `app_key` / `app_secret`）
+- Telegram：`[telegram]` 下的 `bot_token`
 
-如果同时配置了飞书和钉钉，需要在 `[bot]` 里显式设置 `platform = "feishu"` 或 `platform = "dingtalk"`。然后：
+如果同时配置了多个平台，需要在 `[bot]` 里显式设置 `platform = "feishu"`、`"dingtalk"` 或 `"telegram"`。然后：
 
 ```bash
 nectar service install

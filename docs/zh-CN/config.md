@@ -10,7 +10,7 @@
 |---|---|---|
 | `bot.engine` | 是 | 安装时选择的引擎 |
 | `bot.platform` | 是 | 安装时选择的平台 |
-| `[feishu]` 或 `[dingtalk]` 凭证 | 是 | 安装时填写 |
+| `[feishu]`、`[dingtalk]` 或 `[telegram]` 凭证 | 是 | 安装时填写 |
 | 引擎参数（`[codex]` 等） | 否 | 使用内置默认值 |
 | `[schedule]` | 否 | 默认开启，使用内置默认值 |
 | `bot.admin_users` | 否 | 为空时不限制管理员 |
@@ -42,7 +42,18 @@ client_id = "dingxxx"
 client_secret = "xxx"
 ```
 
-如果只配置了一个平台，`bot.platform` 可以省略，Nectar 会根据凭证自动判断；两个平台都配置时必须显式设置。
+Telegram：
+
+```toml
+[bot]
+engine = "codex"
+platform = "telegram"
+
+[telegram]
+bot_token = "your-bot-token"
+```
+
+如果只配置了一个平台，`bot.platform` 可以省略，Nectar 会根据凭证自动判断；多个平台都配置时必须显式设置。
 
 ## 安全配置
 
@@ -54,7 +65,7 @@ allowed_chats = ["oc_xxx"]
 
 - `admin_users`：允许管理 `/cron` 和定时任务 API 的用户。为空时不做限制。
 - `allowed_chats`：允许使用 bot 的群聊。为空时不限制群聊。
-- 飞书使用 `open_id` / `chat_id`；钉钉使用 `staffId` / `openConversationId`。
+- 飞书使用 `open_id` / `chat_id`；钉钉使用 `staffId` / `openConversationId`；Telegram 使用数字 `user_id` / `chat_id`。
 
 配置后重启服务：
 
@@ -68,7 +79,7 @@ nectar service restart
 [bot]
 name = "Nectar"          # 默认 Nectar
 engine = "codex"         # codex | opencode | cursor | claude | pi
-# platform = "feishu"    # feishu | dingtalk；单平台可省略
+# platform = "feishu"    # feishu | dingtalk | telegram；单平台可省略
 admin_users = []
 allowed_chats = []
 ```
@@ -202,6 +213,8 @@ export FEISHU_APP_ID=cli_xxx
 export FEISHU_APP_SECRET=xxx
 export DINGTALK_CLIENT_ID=dingxxx
 export DINGTALK_CLIENT_SECRET=xxx
+export TELEGRAM_BOT_TOKEN=your-bot-token
+export TELEGRAM_PROXY=http://127.0.0.1:7890
 
 export CODEX_PATH=codex
 export OPENCODE_PATH=opencode
@@ -214,7 +227,7 @@ export NECTAR_DATA_DIR=~/.nectar
 export NECTAR_WORKING_DIR=~/.nectar/workspace
 ```
 
-服务模式从配置文件读取平台凭证，不继承 shell 里的 `FEISHU_*` / `DINGTALK_*` 变量。
+服务模式从配置文件读取平台凭证，不继承 shell 里的 `FEISHU_*` / `DINGTALK_*` / `TELEGRAM_*` 变量。
 
 ## 上下文占比
 

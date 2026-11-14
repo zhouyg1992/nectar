@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Your coding agent, one message away.</strong><br>
-  Use Codex, Claude Code, Cursor Agent, OpenCode, or Pi from Feishu / Lark or DingTalk.
+  Use Codex, Claude Code, Cursor Agent, OpenCode, or Pi from Feishu / Lark, DingTalk, or Telegram.
 </p>
 
 <p align="center">
@@ -21,12 +21,12 @@
 Nectar sends chat messages to a coding agent on your machine and streams the process and result back as a card. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. The installer detects installed engines, writes the config, and starts the background service.
 
 <p align="center">
-  <img src="docs/assets/nectar-flow.svg" alt="Feishu and DingTalk messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
+  <img src="docs/assets/nectar-flow.svg" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
 </p>
 
 ## Why Nectar
 
-- **Chat is the interface**: talk to your agent from Feishu / Lark or DingTalk, in direct messages or group chats.
+- **Chat is the interface**: talk to your agent from Feishu / Lark, DingTalk, or Telegram, in direct messages or group chats.
 - **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`, so the service resumes the same agent session after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
@@ -87,7 +87,8 @@ nectar service restart
 |---|---|---|
 | Feishu / Lark | ✅ Supported | [Feishu setup](docs/en/feishu.md) |
 | DingTalk | ✅ Supported | [DingTalk setup](docs/en/dingtalk.md) |
-| Telegram, WeCom / WeChat, Slack | 🚧 Planned | [Roadmap](docs/en/roadmap.md) |
+| Telegram | ✅ Supported | [Telegram setup](docs/en/telegram.md) |
+| WeCom / WeChat, Slack | 🚧 Planned | [Roadmap](docs/en/roadmap.md) |
 
 **Engines**
 
@@ -170,6 +171,7 @@ See [Install and upgrade](docs/en/install.md) for all update and uninstall flags
 - [Command reference](docs/en/commands.md)
 - [Feishu setup and troubleshooting](docs/en/feishu.md)
 - [DingTalk setup and troubleshooting](docs/en/dingtalk.md)
+- [Telegram setup and troubleshooting](docs/en/telegram.md)
 - [Background service](docs/en/service.md)
 - [Scheduled tasks](docs/en/schedule.md)
 - [Security boundaries](docs/en/security.md)

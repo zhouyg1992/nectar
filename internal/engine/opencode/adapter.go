@@ -368,6 +368,8 @@ func withoutEnv(env []string, key string) []string {
 
 func engineEnv(workdir string, extra map[string]string) []string {
 	env := withoutEnv(os.Environ(), "FEISHU_APP_SECRET")
+	env = withoutEnv(env, "TELEGRAM_BOT_TOKEN")
+	env = withoutEnv(env, "TELEGRAM_PROXY")
 	env = withoutEnv(env, "PWD")
 	env = withoutEnv(env, "OLDPWD")
 	return engine.EnvWith(append(env, "PWD="+workdir, "OLDPWD="+workdir), extra)

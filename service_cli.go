@@ -107,7 +107,8 @@ func resolveServiceBinary(path string) (string, error) {
 }
 
 // Service mode reads credentials from the config file because the service
-// environment does not inherit the shell's FEISHU_* / DINGTALK_* variables.
+// environment does not inherit the shell's FEISHU_* / DINGTALK_* / TELEGRAM_*
+// variables.
 func validateServiceConfig(path string) error {
 	var raw struct {
 		Bot struct {
@@ -123,6 +124,9 @@ func validateServiceConfig(path string) error {
 			AppKey       string `toml:"app_key"`
 			AppSecret    string `toml:"app_secret"`
 		} `toml:"dingtalk"`
+		Telegram struct {
+			BotToken string `toml:"bot_token"`
+		} `toml:"telegram"`
 	}
 	if _, err := toml.DecodeFile(path, &raw); err != nil {
 		return fmt.Errorf("load service config %s: %w", path, err)
@@ -133,20 +137,32 @@ func validateServiceConfig(path string) error {
 	feishuSecret := strings.TrimSpace(raw.Feishu.AppSecret)
 	dingTalkID := strings.TrimSpace(firstNonEmpty(raw.DingTalk.ClientID, raw.DingTalk.AppKey))
 	dingTalkSecret := strings.TrimSpace(firstNonEmpty(raw.DingTalk.ClientSecret, raw.DingTalk.AppSecret))
+	telegramToken := strings.TrimSpace(raw.Telegram.BotToken)
 	feishuConfigured := !isPlaceholderAppID(feishuAppID) || !isPlaceholderSecret(feishuSecret)
 	dingTalkConfigured := !isPlaceholderDingTalkClientID(dingTalkID) || !isPlaceholderDingTalkSecret(dingTalkSecret)
+	telegramConfigured := !isPlaceholderTelegramToken(telegramToken)
 
 	if platform == "" {
-		if feishuConfigured && dingTalkConfigured {
-			return fmt.Errorf(
-				"both [feishu] and [dingtalk] credentials are configured in %s; set bot.platform to feishu or dingtalk",
-				path,
-			)
+		var configured []string
+		if feishuConfigured {
+			configured = append(configured, "feishu")
 		}
 		if dingTalkConfigured {
-			platform = "dingtalk"
-		} else {
+			configured = append(configured, "dingtalk")
+		}
+		if telegramConfigured {
+			configured = append(configured, "telegram")
+		}
+		switch len(configured) {
+		case 0:
 			platform = "feishu"
+		case 1:
+			platform = configured[0]
+		default:
+			return fmt.Errorf(
+				"multiple platform credentials are configured in %s (%s); set bot.platform to one of feishu, dingtalk, telegram",
+				path, strings.Join(configured, ", "),
+			)
 		}
 	}
 
@@ -165,8 +181,15 @@ func validateServiceConfig(path string) error {
 				path,
 			)
 		}
+	case "telegram":
+		if isPlaceholderTelegramToken(telegramToken) {
+			return fmt.Errorf(
+				"telegram bot_token is not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
+				path,
+			)
+		}
 	default:
-		return fmt.Errorf("unsupported bot.platform %q in %s (supported: feishu, dingtalk)", platform, path)
+		return fmt.Errorf("unsupported bot.platform %q in %s (supported: feishu, dingtalk, telegram)", platform, path)
 	}
 	return nil
 }
@@ -196,6 +219,12 @@ func isPlaceholderDingTalkClientID(value string) bool {
 func isPlaceholderDingTalkSecret(value string) bool {
 	value = strings.TrimSpace(value)
 	return isPlaceholderSecret(value) || strings.Contains(value, "xxxxxxxx")
+}
+
+func isPlaceholderTelegramToken(value string) bool {
+	value = strings.TrimSpace(value)
+	return value == "" || value == "xxx" || strings.Contains(value, "xxxxxxxx") ||
+		(len(value) >= 8 && strings.Trim(value, "x") == "")
 }
 
 func printServiceUsage() {

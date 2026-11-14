@@ -69,7 +69,7 @@
 
 ### 更远
 
-- Telegram、微信、Slack
+- 微信、Slack
 - Kimi
 - Jev 决策服务
 - Agent Teams / Multi-Bot Relay
