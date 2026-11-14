@@ -152,6 +152,12 @@ type fakeEngine struct {
 	resumeErr  error
 }
 
+type blockingEngine struct {
+	started sync.Once
+	startCh chan struct{}
+	release chan struct{}
+}
+
 func (f *fakeEngine) Name() string { return "fake" }
 
 func (f *fakeEngine) Start(_ context.Context, prompt string, opts engine.EngineOptions) (<-chan engine.Event, error) {
@@ -209,8 +215,36 @@ func (f *fakeEngine) lastRequest() (string, engine.EngineOptions) {
 	return f.lastPrompt, f.lastOpts
 }
 
+func (b *blockingEngine) Name() string { return "blocking" }
+
+func (b *blockingEngine) Start(context.Context, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	ch := make(chan engine.Event)
+	go func() {
+		ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: "blocking-session"}
+		b.started.Do(func() { close(b.startCh) })
+		<-b.release
+		ch <- engine.Event{Type: engine.EventMessage, Text: "finished"}
+		ch <- engine.Event{Type: engine.EventDone}
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (b *blockingEngine) Resume(context.Context, string, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	return b.Start(context.Background(), "", engine.EngineOptions{})
+}
+
+func (b *blockingEngine) Cancel(context.Context, string) error { return nil }
+
 type scriptedEngine struct {
 	events []engine.Event
+}
+
+type contextEngine struct {
+	started   sync.Once
+	cancelled sync.Once
+	startCh   chan struct{}
+	cancelCh  chan struct{}
 }
 
 type fakeTypingPlatform struct {
@@ -244,6 +278,26 @@ func (s *scriptedEngine) stream() <-chan engine.Event {
 	close(ch)
 	return ch
 }
+
+func (e *contextEngine) Name() string { return "context" }
+
+func (e *contextEngine) Start(ctx context.Context, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	ch := make(chan engine.Event, 1)
+	ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: "context-session"}
+	e.started.Do(func() { close(e.startCh) })
+	go func() {
+		<-ctx.Done()
+		e.cancelled.Do(func() { close(e.cancelCh) })
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (e *contextEngine) Resume(ctx context.Context, _ string, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	return e.Start(ctx, "", engine.EngineOptions{})
+}
+
+func (e *contextEngine) Cancel(context.Context, string) error { return nil }
 
 func newTestRouter(t *testing.T, eng engine.EngineAdapter, plat platform.PlatformAdapter) (*Router, *comb.FileStore) {
 	t.Helper()
@@ -354,6 +408,80 @@ func TestRouterStartsThenResumes(t *testing.T) {
 	starts, resumes, _ = eng.counts()
 	if starts != 2 || resumes != 1 {
 		t.Fatalf("after /new starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterExecuteScheduledWaitsForAgentCompletion(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &blockingEngine{
+		startCh: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+	done := make(chan error, 1)
+	go func() {
+		done <- router.ExecuteScheduled(context.Background(), platform.Message{
+			Channel: "feishu",
+			ChatID:  "c1",
+			Text:    "scheduled work",
+			Origin:  "schedule",
+		})
+	}()
+
+	<-eng.startCh
+	select {
+	case err := <-done:
+		t.Fatalf("ExecuteScheduled returned before completion: %v", err)
+	default:
+	}
+	close(eng.release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ExecuteScheduled did not wait for completion")
+	}
+}
+
+func TestRouterExecuteScheduledCancelsEngineOnContextDone(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &contextEngine{
+		startCh:  make(chan struct{}),
+		cancelCh: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- router.ExecuteScheduled(ctx, platform.Message{
+			Channel: "feishu",
+			ChatID:  "c1",
+			Text:    "scheduled work",
+			Origin:  "schedule",
+		})
+	}()
+
+	select {
+	case <-eng.startCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("agent did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("ExecuteScheduled error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ExecuteScheduled did not return after cancellation")
+	}
+	select {
+	case <-eng.cancelCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("engine context was not cancelled")
 	}
 }
 
@@ -1030,5 +1158,31 @@ func TestIsHelpRequest(t *testing.T) {
 		if isHelpRequest(text) {
 			t.Fatalf("unexpected help intent: %q", text)
 		}
+	}
+}
+
+func TestRouterInjectsNectarSessionEnv(t *testing.T) {
+	eng := &fakeEngine{}
+	plat := &fakePlatform{}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.DataDir = "/tmp/nectar-data"
+	router.cfg.APISocket = "/tmp/nectar-data/run/api.sock"
+
+	router.Handle(platform.Message{
+		Channel:  "feishu",
+		ChatID:   "chat-1",
+		ChatType: "group",
+		UserID:   "user-1",
+		ThreadID: "thread-1",
+		Text:     "hello",
+	})
+	waitForReplies(t, plat, 1)
+	_, opts := eng.lastRequest()
+	if opts.Env["NECTAR_CHAT_ID"] != "chat-1" ||
+		opts.Env["NECTAR_THREAD_ID"] != "thread-1" ||
+		opts.Env["NECTAR_USER_ID"] != "user-1" ||
+		opts.Env["NECTAR_API_SOCKET"] != "/tmp/nectar-data/run/api.sock" ||
+		opts.Env["NECTAR_CLI"] == "" {
+		t.Fatalf("env = %#v", opts.Env)
 	}
 }

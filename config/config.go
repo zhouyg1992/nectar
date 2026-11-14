@@ -21,6 +21,7 @@ type Config struct {
 	Pi       PiConfig       `toml:"pi"`
 	Bot      BotConfig      `toml:"bot"`
 	Storage  StorageConfig  `toml:"storage"`
+	Schedule ScheduleConfig `toml:"schedule"`
 }
 
 type FeishuConfig struct {
@@ -118,6 +119,16 @@ type StorageConfig struct {
 	DataDir string `toml:"data_dir"`
 }
 
+type ScheduleConfig struct {
+	Enabled       *bool  `toml:"enabled"`
+	Timezone      string `toml:"timezone"`
+	StartupGrace  string `toml:"startup_grace"`
+	HistoryLimit  int    `toml:"history_limit"`
+	MaxConcurrent int    `toml:"max_concurrent"`
+	Jitter        string `toml:"jitter"`
+	Timeout       string `toml:"timeout"`
+}
+
 func defaults() Config {
 	home := homeDir()
 	return Config{
@@ -162,6 +173,13 @@ func defaults() Config {
 		},
 		Bot:     BotConfig{Name: "Nectar"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
+		Schedule: ScheduleConfig{
+			StartupGrace:  "5m",
+			HistoryLimit:  100,
+			MaxConcurrent: 4,
+			Jitter:        "0s",
+			Timeout:       "30m",
+		},
 	}
 }
 
@@ -212,6 +230,55 @@ func (c Config) ClaudeTimeout() (time.Duration, error) {
 
 func (c Config) PiTimeout() (time.Duration, error) {
 	return parseTimeout("pi.timeout", c.Pi.Timeout)
+}
+
+func (c Config) ScheduleEnabled() bool {
+	return c.Schedule.Enabled == nil || *c.Schedule.Enabled
+}
+
+func (c Config) ScheduleGrace() (time.Duration, error) {
+	value := strings.TrimSpace(c.Schedule.StartupGrace)
+	if value == "" {
+		return 5 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid schedule.startup_grace %q: %w", value, err)
+	}
+	if d < 0 {
+		return 0, errors.New("schedule.startup_grace must not be negative")
+	}
+	return d, nil
+}
+
+func (c Config) ScheduleJitter() (time.Duration, error) {
+	value := strings.TrimSpace(c.Schedule.Jitter)
+	if value == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid schedule.jitter %q: %w", value, err)
+	}
+	if d < 0 {
+		return 0, errors.New("schedule.jitter must not be negative")
+	}
+	return d, nil
+}
+
+func (c Config) ScheduleTimeout() (time.Duration, error) {
+	value := strings.TrimSpace(c.Schedule.Timeout)
+	if value == "" {
+		return 30 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid schedule.timeout %q: %w", value, err)
+	}
+	if d < 0 {
+		return 0, errors.New("schedule.timeout must not be negative")
+	}
+	return d, nil
 }
 
 func parseTimeout(name, value string) (time.Duration, error) {
@@ -357,6 +424,30 @@ func normalize(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
+	}
+	cfg.Schedule.Timezone = strings.TrimSpace(cfg.Schedule.Timezone)
+	if cfg.Schedule.Timezone == "" {
+		cfg.Schedule.Timezone = "Local"
+	}
+	if !strings.EqualFold(cfg.Schedule.Timezone, "Local") {
+		if _, err := time.LoadLocation(cfg.Schedule.Timezone); err != nil {
+			return fmt.Errorf("invalid schedule.timezone %q: %w", cfg.Schedule.Timezone, err)
+		}
+	}
+	if _, err := cfg.ScheduleGrace(); err != nil {
+		return err
+	}
+	if _, err := cfg.ScheduleJitter(); err != nil {
+		return err
+	}
+	if _, err := cfg.ScheduleTimeout(); err != nil {
+		return err
+	}
+	if cfg.Schedule.HistoryLimit < 0 {
+		return errors.New("schedule.history_limit must not be negative")
+	}
+	if cfg.Schedule.MaxConcurrent < 0 {
+		return errors.New("schedule.max_concurrent must not be negative")
 	}
 	if err := normalizePlatform(cfg); err != nil {
 		return err

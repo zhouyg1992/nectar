@@ -61,7 +61,7 @@ nectar service uninstall
 
 ## 更新
 
-`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制，并重启已安装的后台服务；不会修改 `~/.nectar/config.toml` 和数据。
+`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制、用新二进制刷新 Agent skill，并重启已安装的后台服务；不会修改 `~/.nectar/config.toml` 和数据。
 
 ```bash
 nectar update
@@ -91,11 +91,16 @@ nectar update --no-restart
 
 LaunchAgent 在**用户登录后**启动。如果 Mac 重启后没有人登录，Nectar 不会运行。要真正 7×24，建议放在常开的 Linux 服务器、NAS 或 Mac mini 上。
 
-卸载只删除服务文件，不会删除配置、数据和日志：
+`nectar service uninstall` 只删除服务文件，不会删除二进制、Skill、配置、数据和日志。
+完整卸载请使用：
 
 ```bash
-nectar service uninstall
+nectar uninstall
+nectar uninstall --purge-data
 ```
+
+第一条会删除服务、二进制、Agent Skill 和工作区托管片段，但保留配置、任务数据与备份；
+第二条会同时清除配置、数据和备份。只想移除 Agent Skill 时使用 `nectar skills uninstall`。
 
 ## Linux
 

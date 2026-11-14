@@ -68,6 +68,7 @@ The installer is interactive. It:
 - detects installed engine CLIs (`codex`, `opencode`, `agent` / `cursor-agent`, `claude`, `pi`) and exits if none are found
 - lets you choose an engine and platform (Feishu / Lark by default, DingTalk optional)
 - writes a minimal `~/.nectar/config.toml`
+- installs the `nectar-schedule` skill for Codex / Claude / shared Agents roots and adds a managed `AGENTS.md` hint to the workspace
 - installs and starts the background service by default
 
 If `~/.nectar/config.toml` already exists, it is kept by default.
@@ -107,19 +108,22 @@ To update an existing install, keep the current config and data, and restart the
 nectar update
 ```
 
-Use `nectar update --check` to check the latest release without installing it. `--version vX.Y.Z` pins or downgrades, `--force` reinstalls the current version, and `--no-restart` updates the binary without touching the service.
+Use `nectar update --check` to check the latest release without installing it. `--version vX.Y.Z` pins or downgrades, `--force` reinstalls the current version, `--no-restart` updates the binary and agent skill without touching the service, and `--no-skills` skips the skill refresh.
 
 Session mappings and the last context usage are persisted in `~/.nectar/sessions.json`, so restarting the service during an update resumes the same engine thread. If an old engine session can no longer be resumed, Nectar warns in the final card and starts a new session.
 
 To uninstall:
 
 ```bash
-nectar service uninstall
-rm -f ~/.local/bin/nectar
-rm -rf ~/.nectar   # optional: removes config, data, workspaces, and lessons
+nectar uninstall                    # service, binary, skills, and managed AGENTS.md blocks
+nectar uninstall --purge-data       # also removes config, task data, workspaces, and backups
+nectar skills uninstall             # remove only the agent skill
 ```
 
-Adjust the paths if you used `--dir` or `--config`.
+`nectar uninstall` keeps config and task data by default. Use `--keep-binary` to keep
+the executable, `--no-skills` to leave agent skills untouched, and `--dry-run` to
+preview cleanup. If you used `--dir` or `--config`, pass `--binary` or `--config`
+with the same paths.
 
 > Background service support requires v0.1.1 or later.
 
@@ -337,6 +341,7 @@ Service mode reads the selected platform's credentials from the config file, not
 | `/new`, `/reset` | Start a new agent thread |
 | `/status` | Show the current engine, model, and agent thread ID |
 | `/stop` | Cancel the current run |
+| `/cron` | List, create, pause, resume, run, cancel, or delete scheduled tasks |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 ## Docs
@@ -344,6 +349,7 @@ Service mode reads the selected platform's credentials from the config file, not
 - [English docs](docs/en/README.md)
 - [Chinese docs](docs/zh-CN/README.md)
 - [Service management](docs/en/service.md)
+- [Scheduled tasks](docs/en/schedule.md)
 - [Security](docs/en/security.md)
 - [Roadmap](docs/en/roadmap.md)
 - [Changelog](docs/en/changelog.md)

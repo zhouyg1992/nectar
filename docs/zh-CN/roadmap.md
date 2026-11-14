@@ -40,7 +40,6 @@
 - 逐 token 流式输出
 - 会话持久化
 - 教训注入与审核卡片
-- 定时任务
 - 云同步
 - 飞书 / 钉钉之外的平台，以及 Codex/OpenCode/Cursor/Claude Code/Pi 之外的引擎
 
@@ -48,7 +47,7 @@
 
 ### v1.1
 
-- 定时任务
+- 定时任务（已实现，见 [schedule.md](schedule.md)）
 - 教训日志检索
 - 更细的流式输出
 

@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/zhouyg1992/nectar/internal/attachment"
@@ -56,6 +58,37 @@ type EngineOptions struct {
 	Timeout        time.Duration
 	MaxOutputBytes int
 	Attachments    []attachment.Local
+	Env            map[string]string
+}
+
+// EnvWith merges extra into base, replacing existing values and keeping the
+// result deterministic. All engine adapters use it so per-turn NECTAR_*
+// context reaches the agent process without mutating the daemon's environment.
+func EnvWith(base []string, extra map[string]string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	keys := make([]string, 0, len(extra))
+	for key := range extra {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	out := make([]string, 0, len(base)+len(keys))
+	for _, item := range base {
+		key := item
+		if idx := strings.Index(item, "="); idx >= 0 {
+			key = item[:idx]
+		}
+		if _, replaced := extra[key]; replaced {
+			continue
+		}
+		out = append(out, item)
+	}
+	for _, key := range keys {
+		out = append(out, key+"="+extra[key])
+	}
+	return out
 }
 
 // EngineAdapter is implemented once per coding agent CLI.

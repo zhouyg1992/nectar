@@ -126,7 +126,7 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 	args := a.buildArgs(sessionID, prompt, opts)
 	cmd := exec.CommandContext(runCtx, a.cfg.Executable, args...)
 	cmd.Dir = workdir
-	cmd.Env = engineEnv(workdir)
+	cmd.Env = engineEnv(workdir, opts.Env)
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
@@ -302,11 +302,11 @@ func withoutEnv(env []string, key string) []string {
 	return out
 }
 
-func engineEnv(workdir string) []string {
+func engineEnv(workdir string, extra map[string]string) []string {
 	env := withoutEnv(os.Environ(), "FEISHU_APP_SECRET")
 	env = withoutEnv(env, "PWD")
 	env = withoutEnv(env, "OLDPWD")
-	return append(env, "PWD="+workdir, "OLDPWD="+workdir)
+	return engine.EnvWith(append(env, "PWD="+workdir, "OLDPWD="+workdir), extra)
 }
 
 type limitedWriter struct {

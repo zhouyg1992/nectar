@@ -41,6 +41,109 @@ func TestLoadRejectsInvalidTimeout(t *testing.T) {
 	}
 }
 
+func TestScheduleDefaults(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ScheduleEnabled() {
+		t.Fatal("schedule should be enabled by default")
+	}
+	if cfg.Schedule.Timezone != "Local" {
+		t.Fatalf("timezone = %q", cfg.Schedule.Timezone)
+	}
+	grace, err := cfg.ScheduleGrace()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grace != 5*time.Minute {
+		t.Fatalf("grace = %s", grace)
+	}
+	if cfg.Schedule.HistoryLimit != 100 {
+		t.Fatalf("history limit = %d", cfg.Schedule.HistoryLimit)
+	}
+	if cfg.Schedule.MaxConcurrent != 4 {
+		t.Fatalf("max concurrent = %d", cfg.Schedule.MaxConcurrent)
+	}
+	jitter, err := cfg.ScheduleJitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jitter != 0 {
+		t.Fatalf("jitter = %s", jitter)
+	}
+	timeout, err := cfg.ScheduleTimeout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if timeout != 30*time.Minute {
+		t.Fatalf("timeout = %s", timeout)
+	}
+}
+
+func TestScheduleRejectsNegativeHistoryLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[schedule]\nhistory_limit = -1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected negative history_limit error")
+	}
+}
+
+func TestScheduleRejectsInvalidTimezone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[schedule]\ntimezone = \"Mars/Olympus\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid timezone error")
+	}
+}
+
+func TestScheduleRejectsInvalidRuntimeLimits(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "negative max concurrent", body: "[schedule]\nmax_concurrent = -1\n"},
+		{name: "negative jitter", body: "[schedule]\njitter = \"-1s\"\n"},
+		{name: "invalid jitter", body: "[schedule]\njitter = \"soon\"\n"},
+		{name: "negative timeout", body: "[schedule]\ntimeout = \"-1s\"\n"},
+		{name: "invalid timeout", body: "[schedule]\ntimeout = \"soon\"\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tt.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func TestScheduleAllowsZeroRuntimeLimits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[schedule]\nmax_concurrent = 0\ntimeout = \"0s\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	timeout, err := cfg.ScheduleTimeout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if timeout != 0 {
+		t.Fatalf("timeout = %s, want 0", timeout)
+	}
+}
+
 func TestDingTalkAutoDetect(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	source := "[dingtalk]\nclient_id = \"dingreal\"\nclient_secret = \"secret\"\n"

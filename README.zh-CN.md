@@ -69,6 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 - 检测当前电脑已安装的引擎 CLI（`codex`、`opencode`、`agent` / `cursor-agent`、`claude`、`pi`），一个都没有时提示并退出
 - 让你选择引擎和平台（默认飞书 / Lark，可选钉钉）
 - 写入一份最小化的 `~/.nectar/config.toml`
+- 安装 `nectar-schedule` skill 到 Codex / Claude / Agents 的全局 skill 目录，并向工作区 `AGENTS.md` 写入托管片段
 - 默认安装并启动后台服务
 
 如果 `~/.nectar/config.toml` 已存在，默认保留现有配置。
@@ -106,19 +107,21 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 nectar update
 ```
 
-`nectar update --check` 只检查最新版本，不安装；`--version vX.Y.Z` 可指定版本或降级，`--force` 可重装当前版本，`--no-restart` 只替换二进制、不重启服务。
+`nectar update --check` 只检查最新版本，不安装；`--version vX.Y.Z` 可指定版本或降级，`--force` 可重装当前版本，`--no-restart` 更新二进制和 Agent skill 但不重启服务，`--no-skills` 跳过 skill 刷新。
 
 会话映射和最近一次上下文用量会持久化到 `~/.nectar/sessions.json`，所以更新重启后会继续 resume 原来的引擎会话。如果旧 session 已失效，Nectar 会在最终卡片里提示并自动启动新会话。
 
 卸载：
 
 ```bash
-nectar service uninstall
-rm -f ~/.local/bin/nectar
-rm -rf ~/.nectar   # 可选：删除配置、数据、工作区和教训记录
+nectar uninstall                    # 删除服务、二进制、Skill 和 AGENTS.md 托管片段
+nectar uninstall --purge-data       # 同时删除配置、任务数据、工作区和备份
+nectar skills uninstall             # 只卸载 Agent Skill
 ```
 
-如果安装时用了 `--dir` 或 `--config`，请替换成对应路径。
+`nectar uninstall` 默认保留配置和任务数据；`--keep-binary` 可保留二进制，
+`--no-skills` 可跳过 Agent Skill 清理，`--dry-run` 可先预览清理项。如果安装时用了
+`--dir` 或 `--config`，请通过 `--binary`、`--config` 指定对应路径。
 
 > 后台服务支持需要 v0.1.1 及以上版本。
 
@@ -351,6 +354,7 @@ nectar service install
 | `/new`、`/reset` | 清空当前会话，下一条消息启动新的 agent thread |
 | `/status` | 查看当前引擎、模型和 agent thread ID |
 | `/stop` | 中断当前任务 |
+| `/cron` | 查看、创建、暂停、恢复、立即执行、取消或删除定时任务 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
 ## 文档
@@ -358,6 +362,7 @@ nectar service install
 - [飞书配置与排查](docs/zh-CN/feishu.md)
 - [钉钉配置与排查](docs/zh-CN/dingtalk.md)
 - [后台服务](docs/zh-CN/service.md)
+- [定时任务](docs/zh-CN/schedule.md)
 - [安全边界](docs/zh-CN/security.md)
 - [路线图与待实现](docs/zh-CN/roadmap.md)
 - [Changelog](docs/zh-CN/changelog.md)

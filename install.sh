@@ -8,6 +8,8 @@ TMP_DIR=""
 SERVICE=1
 LINGER=0
 START=1
+SKILLS=1
+SKILL_NAME="nectar-schedule"
 ENGINE=""
 PLATFORM=""
 FEISHU_APP_ID="${FEISHU_APP_ID:-}"
@@ -50,6 +52,7 @@ Options:
   --reconfigure           back up and replace an existing config
   --no-service            install the binary only
   --service               accepted for compatibility; service is default
+  --no-skills             skip installing the Nectar schedule skill
   --linger                enable systemd user linger (Linux)
   --no-start              install the service without starting it now
   -h, --help              show this help
@@ -156,6 +159,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--service)
 		SERVICE=1
+		shift
+		;;
+	--no-skills)
+		SKILLS=0
 		shift
 		;;
 	--linger)
@@ -689,7 +696,7 @@ log "  🌼 Nectar ${VERSION} (${OS}/${ARCH})"
 download "$BASE_URL/$ASSET" "$TMP_DIR/$ASSET" 1 || err "download failed: $BASE_URL/$ASSET"
 verify_checksum "$BASE_URL/checksums.txt" "$TMP_DIR/$ASSET" "$ASSET" "$TMP_DIR"
 
-step 4 "Install binary and write config"
+step 4 "Install binary, config, and agent skill"
 mkdir -p "$TMP_DIR/pkg"
 tar -xzf "$TMP_DIR/$ASSET" -C "$TMP_DIR/pkg" || err "failed to extract $ASSET"
 
@@ -715,6 +722,13 @@ if [ "$SKIP_CONFIG" -eq 0 ]; then
 	log "created $CONFIG_FILE"
 else
 	log "kept existing $CONFIG_FILE"
+fi
+
+if [ "$SKILLS" -eq 1 ]; then
+	"$BIN_DIR/$BIN_NAME" skills install --config "$CONFIG_FILE" ||
+		err "failed to install the agent skill; rerun with --no-skills to skip it"
+else
+	log "skipped agent skill installation"
 fi
 
 if [ "$SERVICE" -eq 1 ]; then
@@ -758,13 +772,7 @@ log "  $BIN_NAME update"
 
 log ""
 log "Uninstall:"
-if [ "$SERVICE_TOUCHED" -eq 1 ]; then
-	log "  $BIN_NAME service uninstall"
-fi
-log "  rm -f \"$BIN_DIR/$BIN_NAME\""
-case "$CONFIG_FILE" in
-"$HOME/.nectar/"*) ;;
-*) log "  rm -f \"$CONFIG_FILE\"" ;;
-esac
-log "  rm -rf \"$HOME/.nectar\"   # optional: config, data, workspaces, lessons"
+log "  \"$BIN_DIR/$BIN_NAME\" uninstall --config \"$CONFIG_FILE\" --binary \"$BIN_DIR/$BIN_NAME\""
+log "  \"$BIN_DIR/$BIN_NAME\" uninstall --purge-data  # optional: also remove config, data, and backups"
+log "  \"$BIN_DIR/$BIN_NAME\" skills uninstall       # only remove the Agent skill"
 log "docs: https://github.com/${REPO}#readme"

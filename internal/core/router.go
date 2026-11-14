@@ -3,8 +3,10 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +32,9 @@ type RouterConfig struct {
 	ContextWindow      int
 	CardUpdateInterval time.Duration
 	EngineOptions      engine.EngineOptions
+	AdminUsers         []string
+	DataDir            string
+	APISocket          string
 }
 
 type Router struct {
@@ -41,6 +46,8 @@ type Router struct {
 	workspaces *execguard.Workspace
 	lessons    comb.Store
 	decider    decision.DecisionService
+	anchors    *AnchorStore
+	scheduler  *Scheduler
 	logger     *slog.Logger
 	cfg        RouterConfig
 }
@@ -80,6 +87,11 @@ func NewRouter(
 	}
 }
 
+func (r *Router) SetScheduling(anchors *AnchorStore, scheduler *Scheduler) {
+	r.anchors = anchors
+	r.scheduler = scheduler
+}
+
 func (r *Router) Handle(msg platform.Message) {
 	key := SessionKey{
 		Channel:  msg.Channel,
@@ -87,26 +99,45 @@ func (r *Router) Handle(msg platform.Message) {
 		ThreadID: msg.ThreadID,
 		AgentID:  r.cfg.AgentID,
 	}
+	if r.anchors != nil && msg.Origin != "schedule" {
+		if err := r.anchors.Set(key, SessionAnchor{
+			MessageID: msg.MessageID,
+			Channel:   msg.Channel,
+			ChatID:    msg.ChatID,
+			ThreadID:  msg.ThreadID,
+			ChatType:  msg.ChatType,
+			UserID:    msg.UserID,
+		}); err != nil {
+			r.logger.Warn("could not persist delivery anchor", "error", err)
+		}
+	}
 	text := strings.TrimSpace(msg.Text)
 
-	switch text {
-	case "/new", "/reset":
-		if err := r.sessions.Delete(key); err != nil {
-			r.logger.Warn("could not persist session reset", "error", err)
+	if msg.Origin != "schedule" {
+		switch text {
+		case "/new", "/reset":
+			if err := r.sessions.Delete(key); err != nil {
+				r.logger.Warn("could not persist session reset", "error", err)
+			}
+			r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
+			return
+		case "/status":
+			r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
+			return
+		case "/stop":
+			r.stop(key, msg)
+			return
 		}
-		r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
-		return
-	case "/status":
-		r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
-		return
-	case "/stop":
-		r.stop(key, msg)
-		return
-	}
 
-	if isHelpRequest(text) {
-		r.sendHelp(msg)
-		return
+		if isScheduleCommand(text) {
+			r.handleScheduleCommand(key, msg, text)
+			return
+		}
+
+		if isHelpRequest(text) {
+			r.sendHelp(msg)
+			return
+		}
 	}
 
 	if text == "" && len(msg.Attachments) == 0 {
@@ -117,19 +148,69 @@ func (r *Router) Handle(msg platform.Message) {
 	// Platform callbacks must return fast (Feishu retries after ~3s), so the
 	// actual agent run is queued and serialized per session key.
 	r.queue.Do(key.String(), func() {
-		r.execute(key, msg, text)
+		r.execute(r.ctx, key, msg, text)
 	})
 }
 
-func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
+// ExecuteScheduled runs a scheduler-owned prompt through the same per-session
+// queue as chat messages and waits until that turn finishes. The scheduler uses
+// the returned error to report the actual agent result instead of merely
+// whether the prompt was enqueued.
+func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) error {
+	msg.Origin = "schedule"
+	text := strings.TrimSpace(msg.Text)
+	if text == "" && len(msg.Attachments) == 0 {
+		return errors.New("scheduled prompt is empty")
+	}
+	key := SessionKey{
+		Channel:  msg.Channel,
+		ChatID:   msg.ChatID,
+		ThreadID: msg.ThreadID,
+		AgentID:  r.cfg.AgentID,
+	}
+	done := make(chan error, 1)
+	r.queue.Do(key.String(), func() {
+		if err := ctx.Err(); err != nil {
+			done <- err
+			return
+		}
+		done <- r.execute(ctx, key, msg, text)
+	})
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Message, prompt string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	workdir, err := r.workspaces.ForChat(msg.ChatID)
 	if err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ Failed to create workspace: "+err.Error())
-		return
+		return err
 	}
 
 	opts := r.cfg.EngineOptions
 	opts.WorkingDir = workdir
+	opts.Env = map[string]string{
+		"NECTAR_CHANNEL":    key.Channel,
+		"NECTAR_CHAT_ID":    key.ChatID,
+		"NECTAR_CHAT_TYPE":  msg.ChatType,
+		"NECTAR_USER_ID":    msg.UserID,
+		"NECTAR_AGENT_ID":   key.AgentID,
+		"NECTAR_DATA_DIR":   r.cfg.DataDir,
+		"NECTAR_API_SOCKET": r.cfg.APISocket,
+	}
+	if executable, execErr := os.Executable(); execErr == nil {
+		opts.Env["NECTAR_CLI"] = executable
+	}
+	if key.ThreadID != "" {
+		opts.Env["NECTAR_THREAD_ID"] = key.ThreadID
+	}
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
 
@@ -162,13 +243,13 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	attachments, cleanupAttachments, err := r.prepareAttachments(msg, workdir)
 	if err != nil {
 		answer := "❌ Failed to download attachments: " + err.Error()
-		r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return
+		return errors.Join(err, finishErr)
 	}
 	defer cleanupAttachments()
 	lessonPrompt := prompt
@@ -182,30 +263,40 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	var events <-chan engine.Event
 	sessionNotice := ""
 	if hasSession {
-		events, err = r.engine.Resume(r.ctx, sessionID, prompt, opts)
+		events, err = r.engine.Resume(ctx, sessionID, prompt, opts)
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				answer := "❌ Run stopped: " + ctxErr.Error()
+				finishErr := r.finish(msg, cardID, &platform.Card{
+					Status: platform.CardError,
+					Title:  cardTitleFailed,
+					Body:   answer,
+					Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
+				}, answer)
+				return errors.Join(ctxErr, finishErr)
+			}
 			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
 			r.logger.Warn("resume failed; starting a new session", "session", sessionID, "error", err)
 			if deleteErr := r.sessions.Delete(key); deleteErr != nil {
 				r.logger.Warn("could not remove stale session", "error", deleteErr)
 			}
-			events, err = r.engine.Start(r.ctx, prompt, opts)
+			events, err = r.engine.Start(ctx, prompt, opts)
 		}
 	} else {
-		events, err = r.engine.Start(r.ctx, prompt, opts)
+		events, err = r.engine.Start(ctx, prompt, opts)
 	}
 	if err != nil {
 		answer := "❌ Couldn't wake the agent: " + err.Error()
 		if sessionNotice != "" {
 			answer = sessionNotice + "\n\n" + answer
 		}
-		r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return
+		return errors.Join(err, finishErr)
 	}
 
 	var stream strings.Builder
@@ -289,6 +380,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 			}
 		}
 	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		errTexts = append(errTexts, ctxErr.Error())
+	}
 	if err := r.sessions.SetUsage(key, usage, contextWindow); err != nil {
 		r.logger.Warn("could not persist session usage", "error", err)
 	}
@@ -326,15 +420,16 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 
 	elapsed := time.Since(startedAt)
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
+	var finishErr error
 	if failed {
-		r.finish(msg, cardID, &platform.Card{
+		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
 		}, answer)
 	} else {
-		r.finish(msg, cardID, &platform.Card{
+		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardComplete,
 			Title:  cardTitleComplete,
 			Body:   answer,
@@ -345,6 +440,13 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) {
 	if len(errTexts) > 0 {
 		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"))
 	}
+	var runErr error
+	if len(errTexts) > 0 {
+		runErr = fmt.Errorf("agent error: %s", execguard.Truncate(strings.Join(errTexts, "\n"), 4<<10))
+	} else if failed {
+		runErr = fmt.Errorf("agent tool error: %s", execguard.Truncate(strings.Join(toolErrors, "\n"), 4<<10))
+	}
+	return errors.Join(runErr, finishErr)
 }
 
 func initialCardBody(hasAttachments bool) string {
@@ -354,22 +456,22 @@ func initialCardBody(hasAttachments bool) string {
 	return "Hold on, warming up the hive…"
 }
 
-func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) {
+func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) error {
 	if cardID != "" {
 		if err := r.platform.Update(r.ctx, cardID, platform.Reply{Card: card}); err == nil {
-			return
+			return nil
 		} else {
 			r.logger.Error("update final card failed", "message_id", cardID, "error", err)
 			fallback := replyTarget(msg)
 			fallback.Card = card
 			if _, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
-				return
+				return nil
 			} else {
 				r.logger.Error("send final card failed", "chat", msg.ChatID, "error", sendErr)
 			}
 		}
 	}
-	r.reply(msg, fallbackText)
+	return r.reply(msg, fallbackText)
 }
 
 func (r *Router) stop(key SessionKey, msg platform.Message) {
@@ -417,13 +519,14 @@ func (r *Router) resolvedModel() string {
 	return model
 }
 
-func (r *Router) reply(msg platform.Message, text string) {
+func (r *Router) reply(msg platform.Message, text string) error {
 	reply := replyTarget(msg)
 	reply.Text = text
 	_, err := r.platform.Send(r.ctx, reply)
 	if err != nil {
 		r.logger.Error("send reply failed", "chat", msg.ChatID, "error", err)
 	}
+	return err
 }
 
 func (r *Router) sendHelp(msg platform.Message) {
@@ -454,6 +557,8 @@ func (r *Router) sendCardOrText(msg platform.Message, card *platform.Card, fallb
 func replyTarget(msg platform.Message) platform.Reply {
 	reply := platform.Reply{
 		ChatID:       msg.ChatID,
+		ChatType:     msg.ChatType,
+		UserID:       msg.UserID,
 		ReplyContext: msg.ReplyContext,
 	}
 	if msg.ThreadID != "" {
@@ -654,6 +759,7 @@ const helpCardBody = "**Session**\n" +
 	"- `/new` / `/reset` — Start a new session\n" +
 	"- `/status` — Show engine, model, and session\n" +
 	"- `/stop` — Stop the current task\n" +
+	"- `/cron` — List or manage scheduled tasks\n" +
 	"- `/help` / `/commands` — Show this command card\n\n" +
 	"**Usage**\n" +
 	"- Regular messages are sent to Codex\n" +
@@ -663,6 +769,7 @@ const helpText = `Nectar commands:
 /new, /reset     Start a new session
 /status          Show engine, model, and session
 /stop            Stop the current task
+/cron            List or manage scheduled tasks
 /help, /commands Show this command card
 
 Other messages are sent to Codex.`
