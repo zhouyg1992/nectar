@@ -18,6 +18,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
+	"github.com/zhouyg1992/nectar/internal/memory"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
 	"github.com/zhouyg1992/nectar/internal/platform"
 )
@@ -311,11 +312,21 @@ func (e *contextEngine) Cancel(context.Context, string) error { return nil }
 
 func newTestRouter(t *testing.T, eng engine.EngineAdapter, plat platform.PlatformAdapter) (*Router, *comb.FileStore) {
 	t.Helper()
+	router, lessons, _ := newTestRouterWithMemory(t, eng, plat)
+	return router, lessons
+}
+
+func newTestRouterWithMemory(t *testing.T, eng engine.EngineAdapter, plat platform.PlatformAdapter) (*Router, *comb.FileStore, *memory.FileStore) {
+	t.Helper()
 	ws, err := execguard.NewWorkspace(t.TempDir(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	lessons, err := comb.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	memories, err := memory.NewFileStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,11 +339,12 @@ func newTestRouter(t *testing.T, eng engine.EngineAdapter, plat platform.Platfor
 		NewQueue(),
 		ws,
 		lessons,
+		memories,
 		decision.Noop{},
 		logger,
 		RouterConfig{AgentID: "codex"},
 	)
-	return router, lessons
+	return router, lessons, memories
 }
 
 func waitForReplies(t *testing.T, plat *fakePlatform, want int) {
@@ -418,6 +430,55 @@ func TestRouterStartsThenResumes(t *testing.T) {
 	starts, resumes, _ = eng.counts()
 	if starts != 2 || resumes != 1 {
 		t.Fatalf("after /new starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterInjectsNectarIdentity(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "who are you?",
+	})
+	waitForReplies(t, plat, 1)
+
+	prompt, opts := eng.lastRequest()
+	for _, want := range []string{
+		"## Nectar runtime",
+		"You are Nectar",
+		"Underlying engine: fake",
+		"execution backend",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt = %q, want %q", prompt, want)
+		}
+	}
+	if opts.Env["NECTAR_PRODUCT_NAME"] != "Nectar" || opts.Env["NECTAR_AGENT_ID"] != "codex" {
+		t.Fatalf("identity env = %#v", opts.Env)
+	}
+	if opts.Env["NECTAR_MODEL"] != "fake" {
+		t.Fatalf("model env = %q", opts.Env["NECTAR_MODEL"])
+	}
+}
+
+func TestRouterAboutCommand(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/about",
+	})
+	waitForReplies(t, plat, 1)
+	reply := plat.lastReply()
+	for _, want := range []string{"Nectar vdev", "Platform: fake", "Engine: fake", "Model: fake"} {
+		if !strings.Contains(reply, want) {
+			t.Fatalf("about reply = %q, want %q", reply, want)
+		}
+	}
+	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
+		t.Fatalf("/about should not call the engine: starts=%d resumes=%d", starts, resumes)
 	}
 }
 

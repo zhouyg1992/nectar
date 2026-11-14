@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### 新增
+
+- 本地优先的 memory 层：profile / project / chat 作用域、显式 `/remember`、失败教训候选审核、检索注入和 `/memory` 管理命令
+- `[memory]` 配置：开关、每轮注入条数/字符上限、失败自动学习
+- `nectar memory` CLI 和 `nectar-memory` Agent Skill，支持 Agent 用任意语言自然语言读写记忆
+- memory 文件增加跨进程锁和实时重读；软删除保留 tombstone；新增 locality、project id、revision 和 content hash
+- 群聊中的非管理员记忆写入改为 candidate；审核、固定和删除需要管理员
+- 注入按 memory hash 去重，增加类型配额、使用计数和失败噪声过滤；敏感信息在落盘前脱敏
+- 注入 Nectar runtime 身份，新增 `/about` / `/whoami`，Agent 能区分 Nectar 产品身份与底层引擎
+- memory 写入接入本地 daemon socket，沙箱内 Agent 无需直接写 `~/.nectar/memory`
+
 ## v0.7.0 — 2026-11-14
 
 ### 新增

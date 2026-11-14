@@ -40,6 +40,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`, so the service resumes the same agent session when it is still valid after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
+- **Memory travels with you**: local-first profile / project / chat memory with review, retrieval, and an agent CLI.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 
 ## Quick start
@@ -149,6 +150,7 @@ nectar service uninstall              Uninstall the service
 nectar update                         Update to the latest release
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
 nectar skills install|uninstall       Manage agent skills
+nectar memory add|search|list|get|approve|reject|pin|unpin|forget
 nectar uninstall                      Uninstall Nectar
 ```
 

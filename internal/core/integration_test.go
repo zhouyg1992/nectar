@@ -22,7 +22,8 @@ case "$*" in
   *resume*) prefix=resumed ;;
   *) prefix=started ;;
 esac
-read line
+prompt=$(cat)
+line=$(printf '%s\n' "$prompt" | tail -n 1)
 printf '{"type":"thread.started","thread_id":"t-fake"}\n'
 printf '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"%s %s"}}\n' "$prefix" "$line"
 printf '{"type":"turn.completed"}\n'

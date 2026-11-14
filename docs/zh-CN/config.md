@@ -187,6 +187,22 @@ data_dir = "~/.nectar"
 
 `data_dir` 下会保存会话、定时任务、工作区、附件和 Skill 备份等运行数据。
 
+## 记忆
+
+```toml
+[memory]
+enabled = true                # false 时关闭记忆存储、命令和注入
+max_items = 6                 # 每轮最多注入多少条记忆
+max_chars = 1500              # 每轮记忆上下文的最大字符数
+auto_learn_failures = true    # 失败任务记录为 pending 候选，审核后才注入
+```
+
+记忆保存在 `~/.nectar/memory/memory.json`。`/remember` 写入的记忆默认立即生效；失败教训先进入 `candidate`，通过 `/memory approve <id>` 后才进入 `active` 并参与检索。
+
+Agent 通过 `nectar memory` CLI 读写记忆；`nectar skills install` 会同时安装 `nectar-memory` Skill 和 `AGENTS.md` 托管说明，让 Agent 能在任意语言下按自然语言意图调用。
+
+记忆会记录 `locality`（portable / templated / device）、稳定的 `project_id`、revision 和 content hash。项目/主目录路径会转为 `${PROJECT_ROOT}` / `${HOME}`；其他绝对路径标记为 device，便于后续同步时避免跨机器失效。
+
 ## 定时任务
 
 定时任务默认开启，不需要在配置里添加 `[schedule]`。以下是可选覆盖项：

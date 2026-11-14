@@ -15,6 +15,7 @@ nectar service <subcommand>           管理后台服务
 nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
 nectar skills <subcommand>            管理 Agent Skill
+nectar memory <subcommand>            管理本地记忆
 nectar uninstall                      卸载 Nectar
 ```
 
@@ -173,6 +174,32 @@ nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry
 
 `remove` 是 `uninstall` 的别名。
 
+安装器会同时安装 `nectar-schedule` 和 `nectar-memory` 两个 Agent Skill，并在工作区 `AGENTS.md` 中维护对应的托管块。
+
+## 记忆
+
+`nectar memory` 直接读写本地 memory store，由 Agent 在 tool call 中调用，也可以手动排查：
+
+```bash
+nectar memory add [--kind profile|project|fact|lesson|episode] \
+  [--scope chat|project|global] [--status candidate|active] \
+  [--tags a,b] [--source agent] <text>
+nectar memory search [--scope chat|project|global|all] [--limit N] <query>
+nectar memory list [--status active|pending|archived|all] [--json]
+nectar memory get <id> [--json]
+nectar memory update <id> <new text> [--json]
+nectar memory approve|reject|pin|unpin <id>
+nectar memory forget <id> --confirm
+```
+
+- 默认 `--status candidate`，审核后才注入；用户在聊天中明确要求记住时可传 `--status active`。
+- `--scope` 默认使用 `NECTAR_CHAT_ID` 对应的聊天；不在 Agent 会话中时默认当前项目。
+- Agent 会话会自动通过 `NECTAR_API_SOCKET` 调用 daemon，避免沙箱直接写 `~/.nectar/memory`；手动 CLI 未设置 socket 时直接读写本地文件。
+- `global` 记忆仅管理员可写、审核、固定和删除。
+- 群聊中非管理员的写入会变为 `candidate`，审核、固定和删除也需要管理员。
+- 删除必须显式传 `--confirm`，避免 Agent 误删。
+- 项目/主目录路径会自动转换为 `${PROJECT_ROOT}` / `${HOME}` 模板；其他绝对路径标记为设备本地记忆。
+
 ## 卸载
 
 ```bash
@@ -194,8 +221,11 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 |---|---|
 | `/new`、`/reset` | 清空当前会话，下一条消息启动新 thread |
 | `/status` | 查看当前引擎、模型和 Agent thread ID |
+| `/about`、`/whoami` | 查看 Nectar 版本、平台、底层引擎和模型 |
 | `/stop` | 中断当前任务 |
 | `/cron`、`/schedule` | 定时任务入口 |
+| `/memory` | 查看、审核、固定或删除记忆 |
+| `/remember` | 显式保存一条记忆 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
 `/help`、`/commands`，以及“有哪些命令”这类短问句会直接返回命令卡片，不调用引擎。
@@ -233,6 +263,30 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 
 定时任务默认开启。管理命令仅限 `bot.admin_users`；该列表为空时不限制管理员。详见 [定时任务](schedule.md)。
 
+### /memory
+
+```text
+/memory
+/memory list [active|pending|archived|all]
+/memory search <query>
+/memory show <id>
+/memory approve <id>
+/memory reject <id>
+/memory pin <id>
+/memory unpin <id>
+/memory forget <id>
+/remember [project|global] <text>
+/forget <id>
+```
+
+- `/memory` 不带子命令时等价于 `/memory list`。
+- 失败任务会写入 `pending` 候选，审核通过前不会注入。
+- `/remember` 默认写入当前会话；`project` 写入当前工作区；`global` 仅管理员可写。
+- `global` 记忆的审核、固定和删除也只允许管理员操作。
+- 群聊中非管理员 `/remember` 只创建 `pending` 候选，审核/删除需要管理员。
+
+记忆保存在 `~/.nectar/memory/memory.json`，便于查看、备份和后续同步。
+
 ## Agent 会话环境变量
 
 Agent 会话中会注入：
@@ -243,6 +297,7 @@ Agent 会话中会注入：
 | `NECTAR_CHAT_ID` | 当前会话 ID |
 | `NECTAR_THREAD_ID` | 当前话题 ID |
 | `NECTAR_AGENT_ID` | 当前引擎 |
+| `NECTAR_WORKING_DIR` | 当前工作区 |
 | `NECTAR_API_SOCKET` | schedule API socket |
 | `NECTAR_CLI` | nectar 二进制绝对路径 |
 | `NECTAR_USER_ID` | 当前用户 ID |

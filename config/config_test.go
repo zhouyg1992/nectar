@@ -81,6 +81,35 @@ func TestScheduleDefaults(t *testing.T) {
 	}
 }
 
+func TestMemoryDefaultsAndOverrides(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.MemoryEnabled() || !cfg.MemoryAutoLearnFailures() {
+		t.Fatalf("memory defaults = %#v", cfg.Memory)
+	}
+	if cfg.Memory.MaxItems != 6 || cfg.Memory.MaxChars != 1500 {
+		t.Fatalf("memory limits = %#v", cfg.Memory)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[memory]\nenabled = false\nauto_learn_failures = false\nmax_items = 3\nmax_chars = 600\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MemoryEnabled() || cfg.MemoryAutoLearnFailures() {
+		t.Fatalf("memory overrides = %#v", cfg.Memory)
+	}
+	if cfg.Memory.MaxItems != 3 || cfg.Memory.MaxChars != 600 {
+		t.Fatalf("memory limits = %#v", cfg.Memory)
+	}
+}
+
 func TestScheduleRejectsNegativeHistoryLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[schedule]\nhistory_limit = -1\n"), 0o600); err != nil {

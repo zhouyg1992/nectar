@@ -22,6 +22,7 @@ type Config struct {
 	Pi       PiConfig       `toml:"pi"`
 	Bot      BotConfig      `toml:"bot"`
 	Storage  StorageConfig  `toml:"storage"`
+	Memory   MemoryConfig   `toml:"memory"`
 	Schedule ScheduleConfig `toml:"schedule"`
 }
 
@@ -127,6 +128,13 @@ type StorageConfig struct {
 	DataDir string `toml:"data_dir"`
 }
 
+type MemoryConfig struct {
+	Enabled           *bool `toml:"enabled"`
+	MaxItems          int   `toml:"max_items"`
+	MaxChars          int   `toml:"max_chars"`
+	AutoLearnFailures *bool `toml:"auto_learn_failures"`
+}
+
 type ScheduleConfig struct {
 	Enabled       *bool  `toml:"enabled"`
 	Timezone      string `toml:"timezone"`
@@ -182,6 +190,10 @@ func defaults() Config {
 		},
 		Bot:     BotConfig{Name: "Nectar"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
+		Memory: MemoryConfig{
+			MaxItems: 6,
+			MaxChars: 1500,
+		},
 		Schedule: ScheduleConfig{
 			StartupGrace:  "5m",
 			HistoryLimit:  100,
@@ -243,6 +255,14 @@ func (c Config) PiTimeout() (time.Duration, error) {
 
 func (c Config) ScheduleEnabled() bool {
 	return c.Schedule.Enabled == nil || *c.Schedule.Enabled
+}
+
+func (c Config) MemoryEnabled() bool {
+	return c.Memory.Enabled == nil || *c.Memory.Enabled
+}
+
+func (c Config) MemoryAutoLearnFailures() bool {
+	return c.Memory.AutoLearnFailures == nil || *c.Memory.AutoLearnFailures
 }
 
 func (c Config) ScheduleGrace() (time.Duration, error) {
@@ -382,6 +402,12 @@ func normalize(cfg *Config) error {
 	}
 	if cfg.Storage.DataDir == "" {
 		return errors.New("storage.data_dir is required")
+	}
+	if cfg.Memory.MaxItems <= 0 {
+		cfg.Memory.MaxItems = 6
+	}
+	if cfg.Memory.MaxChars <= 0 {
+		cfg.Memory.MaxChars = 1500
 	}
 	if cfg.Codex.WorkingDir == "" {
 		return errors.New("codex.working_dir is required")

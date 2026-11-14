@@ -119,6 +119,7 @@ func printSkillsUsage() {
   nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry-run] [--quiet]
 
 Installs or removes the Nectar agent skill for Codex, Claude, and shared Agents
-roots. Workspace cleanup removes only the managed schedule block from AGENTS.md.
+roots. Workspace cleanup removes only the managed schedule and memory blocks
+from AGENTS.md.
 `)
 }

@@ -10,25 +10,30 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zhouyg1992/nectar/internal/memory"
 )
 
 type ScheduleAPIOptions struct {
 	SocketPath     string
 	Scheduler      *Scheduler
+	Memory         memory.Store
 	Logger         *slog.Logger
 	DefaultChannel string
 	DefaultAgent   string
 	AdminUsers     []string
 }
 
-// ScheduleAPI exposes the scheduler to the local CLI over a Unix socket. The
-// socket is chmod 0600 and lives under the data directory, so filesystem
-// permissions are the authentication boundary.
+// ScheduleAPI exposes the scheduler and memory store to local CLIs over a Unix
+// socket. The socket is chmod 0600 and lives under the data directory, so
+// filesystem permissions are the authentication boundary.
 type ScheduleAPI struct {
 	socketPath     string
 	scheduler      *Scheduler
+	memory         memory.Store
 	logger         *slog.Logger
 	defaultChannel string
 	defaultAgent   string
@@ -45,6 +50,7 @@ func NewScheduleAPI(opts ScheduleAPIOptions) *ScheduleAPI {
 	return &ScheduleAPI{
 		socketPath:     opts.SocketPath,
 		scheduler:      opts.Scheduler,
+		memory:         opts.Memory,
 		logger:         logger,
 		defaultChannel: opts.DefaultChannel,
 		defaultAgent:   opts.DefaultAgent,
@@ -53,8 +59,8 @@ func NewScheduleAPI(opts ScheduleAPIOptions) *ScheduleAPI {
 }
 
 func (a *ScheduleAPI) Start(ctx context.Context) error {
-	if a.scheduler == nil {
-		return errors.New("schedule api: scheduler is nil")
+	if a.scheduler == nil && a.memory == nil {
+		return errors.New("local api: scheduler and memory are nil")
 	}
 	if strings.TrimSpace(a.socketPath) == "" {
 		return errors.New("schedule api: socket path is empty")
@@ -117,10 +123,16 @@ func (a *ScheduleAPI) Handler() http.Handler {
 	mux.HandleFunc("/schedule", a.handleCollection)
 	mux.HandleFunc("/schedule/preview", a.handlePreview)
 	mux.HandleFunc("/schedule/", a.handleItem)
+	mux.HandleFunc("/memory", a.handleMemoryCollection)
+	mux.HandleFunc("/memory/", a.handleMemoryItem)
 	return mux
 }
 
 func (a *ScheduleAPI) handleCollection(w http.ResponseWriter, r *http.Request) {
+	if a.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("scheduler is disabled"))
+		return
+	}
 	if !a.authorize(w, r) {
 		return
 	}
@@ -151,6 +163,10 @@ func (a *ScheduleAPI) handleCollection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ScheduleAPI) handlePreview(w http.ResponseWriter, r *http.Request) {
+	if a.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("scheduler is disabled"))
+		return
+	}
 	if !a.authorize(w, r) {
 		return
 	}
@@ -173,6 +189,10 @@ func (a *ScheduleAPI) handlePreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ScheduleAPI) handleItem(w http.ResponseWriter, r *http.Request) {
+	if a.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("scheduler is disabled"))
+		return
+	}
 	if !a.authorize(w, r) {
 		return
 	}
@@ -224,6 +244,187 @@ func (a *ScheduleAPI) handleItem(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, errors.New("method or action not allowed"))
 	}
+}
+
+func (a *ScheduleAPI) handleMemoryCollection(w http.ResponseWriter, r *http.Request) {
+	if a.memory == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("memory is disabled"))
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		query := r.URL.Query()
+		status := memory.Status(strings.TrimSpace(query.Get("status")))
+		if status == "all" {
+			status = ""
+		}
+		scope := memory.Scope(strings.TrimSpace(query.Get("scope")))
+		if scope == "all" {
+			scope = ""
+		}
+		scopeIDs := splitCSV(query.Get("scope_ids"))
+		limit := 0
+		if value := strings.TrimSpace(query.Get("limit")); value != "" {
+			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+				limit = parsed
+			}
+		}
+		var (
+			items []memory.Memory
+			err   error
+		)
+		if q := strings.TrimSpace(query.Get("q")); q != "" {
+			items, err = a.memory.Search(r.Context(), memory.SearchOptions{
+				Query: q, Scope: scope, ScopeIDs: scopeIDs, Limit: limit,
+			})
+		} else {
+			items, err = a.memory.List(r.Context(), memory.ListOptions{
+				Status: status, Scope: scope, ScopeIDs: scopeIDs,
+			})
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"memories": items})
+	case http.MethodPost:
+		var item memory.Memory
+		if err := decodeJSON(w, r, &item); err != nil {
+			return
+		}
+		if err := a.prepareMemoryWrite(r, &item, true); err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
+		created, err := a.memory.Put(r.Context(), item)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+	}
+}
+
+func (a *ScheduleAPI) handleMemoryItem(w http.ResponseWriter, r *http.Request) {
+	if a.memory == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("memory is disabled"))
+		return
+	}
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/memory/"), "/")
+	if id == "" {
+		writeError(w, http.StatusNotFound, errors.New("memory id is required"))
+		return
+	}
+	item, ok, err := a.memory.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("memory %s not found", id))
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, item)
+	case http.MethodPatch:
+		if err := a.prepareMemoryWrite(r, &item, false); err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
+		var patch struct {
+			Status  *string `json:"status,omitempty"`
+			Pinned  *bool   `json:"pinned,omitempty"`
+			Content *string `json:"content,omitempty"`
+		}
+		if err := decodeJSON(w, r, &patch); err != nil {
+			return
+		}
+		if patch.Content != nil {
+			if _, err := a.memory.UpdateContent(r.Context(), id, *patch.Content); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		if patch.Status != nil {
+			if err := a.memory.SetStatus(r.Context(), id, memory.Status(strings.TrimSpace(*patch.Status))); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		if patch.Pinned != nil {
+			if err := a.memory.SetPinned(r.Context(), id, *patch.Pinned); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		updated, ok, err := a.memory.Get(r.Context(), id)
+		if err != nil || !ok {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("reload memory: %w", err))
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	case http.MethodDelete:
+		if r.URL.Query().Get("confirm") != "1" && r.URL.Query().Get("confirm") != "true" {
+			writeError(w, http.StatusBadRequest, errors.New("memory delete requires confirm=1"))
+			return
+		}
+		if err := a.prepareMemoryWrite(r, &item, false); err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
+		if err := a.memory.Delete(r.Context(), id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
+	default:
+		w.Header().Set("Allow", "GET, PATCH, DELETE")
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+	}
+}
+
+func (a *ScheduleAPI) prepareMemoryWrite(r *http.Request, item *memory.Memory, creating bool) error {
+	userID := strings.TrimSpace(r.Header.Get("X-Nectar-User-ID"))
+	admin := a.memoryAdmin(userID)
+	if item.Scope == memory.ScopeGlobal && !admin {
+		return errors.New("global memory requires an admin user")
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Nectar-Chat-Type")), "group") && !admin {
+		if creating {
+			if item.Status == memory.StatusActive {
+				item.Status = memory.StatusCandidate
+			}
+			return nil
+		}
+		return errors.New("group memory changes require an admin user")
+	}
+	return nil
+}
+
+func (a *ScheduleAPI) memoryAdmin(userID string) bool {
+	if strings.TrimSpace(userID) == "" || len(a.adminUsers) == 0 {
+		return true
+	}
+	for _, admin := range a.adminUsers {
+		if strings.TrimSpace(admin) == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func splitCSV(value string) []string {
+	var out []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func (a *ScheduleAPI) authorize(w http.ResponseWriter, r *http.Request) bool {
