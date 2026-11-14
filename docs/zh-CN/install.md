@@ -139,7 +139,7 @@ export PATH="$HOME/.local/bin:$PATH"
 nectar update
 ```
 
-`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制、用新二进制刷新 Agent Skill，并重启已安装的后台服务。它不会修改 `~/.nectar/config.toml` 和数据。
+`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制、用新二进制刷新 Agent Skill，并重启已安装的后台服务。它不会修改 `~/.nectar/config.toml` 和数据。下载阶段会显示进度条；连接、TLS 或 5xx 临时故障会自动重试。
 
 ```bash
 nectar update --check          # 只检查最新版本
@@ -147,6 +147,9 @@ nectar update --version v0.6.0 # 指定版本或降级
 nectar update --force          # 重装当前版本
 nectar update --no-restart     # 更新二进制和 Skill，不重启服务
 nectar update --no-skills      # 跳过 Skill 刷新
+nectar update --timeout 15m    # 每次下载最多等待 15 分钟
+nectar update --attempts 3     # 网络失败时最多尝试 3 次
+nectar update --no-progress    # 适合脚本，关闭进度条
 ```
 
 会话映射和最近一次上下文用量保存在 `~/.nectar/sessions.json`。重启后会继续 resume 原引擎会话；旧会话失效时，Nectar 会在最终卡片提示并启动新会话。

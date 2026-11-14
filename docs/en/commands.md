@@ -61,7 +61,8 @@ nectar service restart
 ## Update
 
 ```bash
-nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills] [--config PATH]
+nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills]
+  [--config PATH] [--binary PATH] [--timeout 10m] [--attempts 2] [--no-progress]
 ```
 
 | Flag | Description |
@@ -72,6 +73,10 @@ nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills
 | `--no-restart` | Update the binary and skills without restarting the service |
 | `--no-skills` | Skip the agent skill refresh |
 | `--config PATH` | Config path used to detect the installed service |
+| `--binary PATH` | Binary path to update; defaults to the current executable |
+| `--timeout 10m` | Timeout for each download attempt, default 10 minutes |
+| `--attempts 2` | Maximum metadata and download attempts |
+| `--no-progress` | Disable the download progress bar |
 
 Examples:
 
@@ -80,7 +85,10 @@ nectar update
 nectar update --check
 nectar update --version v0.6.0
 nectar update --no-restart
+nectar update --timeout 15m --attempts 3
 ```
+
+Asset downloads show a percentage progress bar. Transient redirect, TLS, and connection failures are retried automatically.
 
 ## Scheduled tasks
 
