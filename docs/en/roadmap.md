@@ -1,5 +1,12 @@
 # Roadmap
 
+## v0.8.0 complete
+
+- Local-first memory layer with profile / project / chat scopes, explicit `/remember`, and `/memory` management
+- Reviewable failure-lesson candidates, hash-deduplicated retrieval injection, kind quotas, and credential redaction before persistence
+- `nectar memory` CLI, the `nectar-memory` agent skill, and sandboxed memory writes through the daemon socket
+- Nectar runtime identity injection with `/about` / `/whoami`
+
 ## v0.7.0 complete
 
 - Telegram Bot API platform adapter: long polling, direct and group chats, forum topics, attachment downloads, streaming message edits, and automatic 4096-character chunking

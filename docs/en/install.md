@@ -87,7 +87,7 @@ Pin a version or choose an install directory:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
-  sh -s -- --version v0.7.0
+  sh -s -- --version v0.8.0
 
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
   sh -s -- --dir /usr/local/bin
@@ -154,7 +154,7 @@ nectar update
 
 ```bash
 nectar update --check          # check without installing
-nectar update --version v0.7.0 # pin or downgrade
+nectar update --version v0.8.0 # pin or downgrade
 nectar update --force          # reinstall the current version
 nectar update --no-restart     # update binary and skills without restarting
 nectar update --no-skills      # skip the skill refresh

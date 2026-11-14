@@ -1,5 +1,12 @@
 # 路线图与待实现
 
+## v0.8.0 已完成
+
+- 本地优先的 memory 层：profile / project / chat 作用域，显式 `/remember` 与 `/memory` 管理
+- 失败教训候选审核、按 hash 去重的检索注入、类型配额与敏感信息落盘前脱敏
+- `nectar memory` CLI、`nectar-memory` Agent Skill，以及通过 daemon socket 完成的沙箱内记忆写入
+- Nectar runtime 身份注入与 `/about` / `/whoami`
+
 ## v0.7.0 已完成
 
 - Telegram Bot API 平台适配器：长轮询、单聊/群聊、论坛话题、附件下载、流式消息编辑与 4096 字符自动分片

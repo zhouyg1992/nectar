@@ -84,7 +84,7 @@ Examples:
 ```bash
 nectar update
 nectar update --check
-nectar update --version v0.7.0
+nectar update --version v0.8.0
 nectar update --no-restart
 nectar update --timeout 15m --attempts 3
 ```
