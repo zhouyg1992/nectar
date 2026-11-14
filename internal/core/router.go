@@ -530,7 +530,8 @@ func (r *Router) reply(msg platform.Message, text string) error {
 }
 
 func (r *Router) sendHelp(msg platform.Message) {
-	r.sendCardOrText(msg, helpCard(), helpText)
+	engineName := engineDisplayName(r.engine.Name())
+	r.sendCardOrText(msg, helpCard(engineName), helpText(engineName))
 }
 
 func (r *Router) sendCommandResult(msg platform.Message, status platform.CardStatus, title, body string) {
@@ -569,12 +570,12 @@ func replyTarget(msg platform.Message) platform.Reply {
 	return reply
 }
 
-func helpCard() *platform.Card {
+func helpCard(engineName string) *platform.Card {
 	return &platform.Card{
 		Status: platform.CardInfo,
 		Title:  "🍯 Nectar Commands",
-		Body:   helpCardBody,
-		Footer: "Send any other message to run Codex.",
+		Body:   helpCardBody(engineName),
+		Footer: "Send any other message to run " + engineName + ".",
 	}
 }
 
@@ -755,21 +756,44 @@ func (r *Router) recordLesson(msg platform.Message, prompt, errText string) {
 	}
 }
 
-const helpCardBody = "**Session**\n" +
-	"- `/new` / `/reset` — Start a new session\n" +
-	"- `/status` — Show engine, model, and session\n" +
-	"- `/stop` — Stop the current task\n" +
-	"- `/cron` — List or manage scheduled tasks\n" +
-	"- `/help` / `/commands` — Show this command card\n\n" +
-	"**Usage**\n" +
-	"- Regular messages are sent to Codex\n" +
-	"- Group chats require @Bot"
+func helpCardBody(engineName string) string {
+	return "**Session**\n" +
+		"- `/new` / `/reset` — Start a new session\n" +
+		"- `/status` — Show engine, model, and session\n" +
+		"- `/stop` — Stop the current task\n" +
+		"- `/cron` — List or manage scheduled tasks\n" +
+		"- `/help` / `/commands` — Show this command card\n\n" +
+		"**Usage**\n" +
+		"- Regular messages are sent to " + engineName + "\n" +
+		"- Group chats require @Bot"
+}
 
-const helpText = `Nectar commands:
+func helpText(engineName string) string {
+	return `Nectar commands:
 /new, /reset     Start a new session
 /status          Show engine, model, and session
 /stop            Stop the current task
 /cron            List or manage scheduled tasks
 /help, /commands Show this command card
 
-Other messages are sent to Codex.`
+Other messages are sent to ` + engineName + `.`
+}
+
+func engineDisplayName(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "codex":
+		return "Codex"
+	case "opencode":
+		return "OpenCode"
+	case "cursor":
+		return "Cursor Agent"
+	case "claude":
+		return "Claude Code"
+	case "pi":
+		return "Pi"
+	case "":
+		return "the configured agent"
+	default:
+		return strings.TrimSpace(name)
+	}
+}
