@@ -24,6 +24,16 @@ Nectar sends chat messages to a coding agent on your machine and streams the pro
   <img src="docs/assets/nectar-flow.svg" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
 </p>
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><a href="docs/assets/screenshots/feishu.png"><img src="docs/assets/screenshots/feishu.png" alt="Nectar answering a question in Feishu" width="260"></a><br><sub><b>Feishu / Lark</b></sub></td>
+    <td align="center"><a href="docs/assets/screenshots/dingtalk.png"><img src="docs/assets/screenshots/dingtalk.png" alt="Nectar managing scheduled tasks in DingTalk" width="260"></a><br><sub><b>DingTalk</b></sub></td>
+    <td align="center"><a href="docs/assets/screenshots/telegram.png"><img src="docs/assets/screenshots/telegram.png" alt="Nectar running commands in Telegram" width="260"></a><br><sub><b>Telegram</b></sub></td>
+  </tr>
+</table>
+
 ## Why Nectar
 
 - **Chat is the interface**: talk to your agent from Feishu / Lark, DingTalk, or Telegram, in direct messages or group chats.
