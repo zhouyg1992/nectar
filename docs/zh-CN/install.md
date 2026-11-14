@@ -1,5 +1,7 @@
 # 安装与升级
 
+如果你是需要代替用户安装 Nectar 的 AI Agent，请按 [AGENT_INSTALL.md](../../AGENT_INSTALL.md) 执行。
+
 ## 前置条件
 
 - macOS 或 Linux，amd64 / arm64
