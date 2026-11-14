@@ -109,7 +109,7 @@
   <!-- One bee per side, cycling through every connection on that side. -->
   <g>
     <use href="#bee" xlink:href="#bee"/>
-    <animateMotion dur="36s" repeatCount="indefinite"
+    <animateMotion dur="30s" repeatCount="indefinite"
                    path="M300 112 C 370 112, 405 230, 470 230
                          C 405 230, 370 112, 300 112
                          M300 190 C 370 190, 405 230, 470 230
