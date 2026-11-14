@@ -1,5 +1,11 @@
 # 路线图与待实现
 
+## v0.7.0 已完成
+
+- Telegram Bot API 平台适配器：长轮询、单聊/群聊、论坛话题、附件下载、流式消息编辑与 4096 字符自动分片
+- `[telegram]` 配置支持可选代理和自建 API 地址，安装器支持 `--platform telegram`
+- Telegram bot token 不再传递给 Agent 子进程
+
 ## v0.6.0 已完成
 
 - 定时任务：Cron、固定间隔、一次性任务、持久化、启动补偿与执行预览
@@ -48,7 +54,7 @@
 - 逐 token 流式输出
 - 教训注入与审核卡片
 - 云同步
-- 飞书 / 钉钉之外的平台，以及 Codex/OpenCode/Cursor/Claude Code/Pi 之外的引擎
+- 飞书 / 钉钉 / Telegram 之外的平台，以及 Codex/OpenCode/Cursor/Claude Code/Pi 之外的引擎
 
 ## 后续
 

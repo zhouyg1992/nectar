@@ -1,12 +1,20 @@
 # Changelog
 
-## Unreleased
+## v0.7.0 — 2026-11-14
 
 ### 新增
 
 - 新增 Telegram Bot API 平台适配器：长轮询、单聊/群聊、论坛话题、附件下载、流式消息编辑和 4096 字符自动分片
 - 支持 `[telegram] bot_token`，可选 `proxy` 和自建 `api_base_url`；安装器支持 `--platform telegram`
 - Telegram bot token 会从 Agent 子进程环境中移除
+
+### 变更
+
+- README 增加飞书、钉钉和 Telegram 的界面预览
+
+### 修复
+
+- `/help` 卡片现在显示当前实际使用的引擎名称
 
 ## v0.6.1 — 2026-11-14
 

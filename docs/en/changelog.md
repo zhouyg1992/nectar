@@ -1,12 +1,20 @@
 # Changelog
 
-## Unreleased
+## v0.7.0 — 2026-11-14
 
 ### Added
 
 - Telegram Bot API platform adapter with long polling, direct chats, groups, forum topics, attachment downloads, streaming message edits, and automatic 4096-character chunking
 - `[telegram] bot_token` with optional `proxy` and self-hosted `api_base_url`; the installer supports `--platform telegram`
 - The Telegram bot token is removed from agent subprocess environments
+
+### Changed
+
+- README now includes Feishu, DingTalk, and Telegram interface previews
+
+### Fixed
+
+- The `/help` card now shows the engine name currently in use
 
 ## v0.6.1 — 2026-11-14
 

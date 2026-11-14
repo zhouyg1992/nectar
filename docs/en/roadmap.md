@@ -1,5 +1,11 @@
 # Roadmap
 
+## v0.7.0 complete
+
+- Telegram Bot API platform adapter: long polling, direct and group chats, forum topics, attachment downloads, streaming message edits, and automatic 4096-character chunking
+- `[telegram]` configuration with an optional proxy and self-hosted API base URL; the installer supports `--platform telegram`
+- Telegram bot tokens are no longer exposed to agent subprocesses
+
 ## v0.6.0 complete
 
 - Scheduled tasks: cron, fixed intervals, one-shot runs, persistence, startup catch-up, and execution previews
@@ -48,7 +54,7 @@
 - Token-by-token streaming output
 - Lesson injection and review cards
 - Cloud sync
-- Platforms beyond Feishu / DingTalk, and engines beyond Codex/OpenCode/Cursor/Claude Code/Pi
+- Platforms beyond Feishu / DingTalk / Telegram, and engines beyond Codex/OpenCode/Cursor/Claude Code/Pi
 
 ## Later
 
