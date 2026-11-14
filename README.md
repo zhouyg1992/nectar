@@ -56,7 +56,17 @@ Install and log in to **one** of: **Codex, Claude Code, Cursor Agent, OpenCode, 
 
 Choose one of two paths.
 
-**Option A — install manually**
+**Option A — let your coding agent install it (recommended)**
+
+Recommended if your agent can run terminal commands on this machine.
+
+Paste this into Codex, Claude Code, Cursor Agent, OpenCode, or Pi:
+
+> Install Nectar from <https://github.com/zhouyg1992/nectar>. Read AGENT_INSTALL.md in that repository and follow it. Ask me for credentials, and confirm before installing the background service.
+
+Your agent reads the install contract, asks for the required credentials, runs the installer, and verifies the platform connection. See [AGENT_INSTALL.md](AGENT_INSTALL.md) for the full contract.
+
+**Option B — install manually**
 
 Before running it, create the platform app and get its credentials: [Feishu](docs/en/feishu.md) · [DingTalk](docs/en/dingtalk.md) · [Telegram](docs/en/telegram.md).
 
@@ -69,14 +79,6 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 The installer is interactive. Choose an engine and platform (Feishu / Lark by default), then enter the credentials. It writes `~/.nectar/config.toml`, installs the background service, and starts it.
 
 > The installer starts the background service by default. You do not need to run `nectar` manually.
-
-**Option B — let your coding agent install it**
-
-Paste this into Codex, Claude Code, Cursor Agent, OpenCode, or Pi:
-
-> Install Nectar from <https://github.com/zhouyg1992/nectar>. Read AGENT_INSTALL.md in that repository and follow it. Ask me for credentials, and confirm before installing the background service.
-
-Your agent reads the install contract, asks for the required credentials, runs the installer, and verifies the platform connection. See [AGENT_INSTALL.md](AGENT_INSTALL.md) for the full contract.
 
 ### 3. Verify
 

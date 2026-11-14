@@ -56,7 +56,17 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 
 任选一种方式即可。
 
-**方式 A —— 手动安装**
+**方式 A —— 让编程 Agent 安装（推荐）**
+
+如果你的 Agent 可以在这台机器上执行终端命令，推荐使用这种方式。
+
+把下面这段话发给你正在使用的 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi：
+
+> 帮我安装这个 bot：<https://github.com/zhouyg1992/nectar>。请阅读仓库根目录的 AGENT_INSTALL.md 并按其步骤执行；需要凭证时先问我，安装后台服务前也先确认。
+
+Agent 会读取安装契约、向你索取所需凭证、执行安装，并验证平台连接。完整步骤见 [AGENT_INSTALL.md](AGENT_INSTALL.md)。
+
+**方式 B —— 手动安装**
 
 运行前请先创建平台应用并获取凭证：[飞书](docs/zh-CN/feishu.md) · [钉钉](docs/zh-CN/dingtalk.md) · [Telegram](docs/zh-CN/telegram.md)。
 
@@ -69,14 +79,6 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 安装器是交互式的：选择引擎和平台（默认飞书 / Lark），填写对应凭证；随后写入 `~/.nectar/config.toml`，安装并启动后台服务。
 
 > 安装脚本默认会启动后台服务，不需要再手动运行 `nectar`。
-
-**方式 B —— 让编程 Agent 安装**
-
-把下面这段话发给你正在使用的 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi：
-
-> 帮我安装这个 bot：<https://github.com/zhouyg1992/nectar>。请阅读仓库根目录的 AGENT_INSTALL.md 并按其步骤执行；需要凭证时先问我，安装后台服务前也先确认。
-
-Agent 会读取安装契约、向你索取所需凭证、执行安装，并验证平台连接。完整步骤见 [AGENT_INSTALL.md](AGENT_INSTALL.md)。
 
 ### 3. 验证
 
