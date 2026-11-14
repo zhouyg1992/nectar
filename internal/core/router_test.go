@@ -143,6 +143,7 @@ func (f *fakePlatform) usesQuotedReplies() bool {
 
 type fakeEngine struct {
 	mu         sync.Mutex
+	name       string
 	starts     int
 	resumes    int
 	lastResume string
@@ -158,7 +159,12 @@ type blockingEngine struct {
 	release chan struct{}
 }
 
-func (f *fakeEngine) Name() string { return "fake" }
+func (f *fakeEngine) Name() string {
+	if f.name != "" {
+		return f.name
+	}
+	return "fake"
+}
 
 func (f *fakeEngine) Start(_ context.Context, prompt string, opts engine.EngineOptions) (<-chan engine.Event, error) {
 	f.mu.Lock()
@@ -776,6 +782,42 @@ func TestRouterHelpCardBypassesEngine(t *testing.T) {
 	}
 }
 
+func TestRouterHelpCardUsesEngineDisplayName(t *testing.T) {
+	cases := []struct {
+		engine string
+		want   string
+	}{
+		{engine: "codex", want: "Codex"},
+		{engine: "opencode", want: "OpenCode"},
+		{engine: "cursor", want: "Cursor Agent"},
+		{engine: "claude", want: "Claude Code"},
+		{engine: "pi", want: "Pi"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.engine, func(t *testing.T) {
+			plat := &fakePlatform{cards: true}
+			eng := &fakeEngine{name: tc.engine}
+			router, _ := newTestRouter(t, eng, plat)
+
+			router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/help"})
+			waitForCardSends(t, plat, 1)
+
+			plat.mu.Lock()
+			card := plat.sentCards[0]
+			plat.mu.Unlock()
+			if !strings.Contains(card.Body, "Regular messages are sent to "+tc.want) {
+				t.Fatalf("help card body = %q, want engine %q", card.Body, tc.want)
+			}
+			if card.Footer != "Send any other message to run "+tc.want+"." {
+				t.Fatalf("help card footer = %q", card.Footer)
+			}
+			if tc.engine != "codex" && strings.Contains(card.Body+card.Footer, "Codex") {
+				t.Fatalf("help card still mentions Codex: body=%q footer=%q", card.Body, card.Footer)
+			}
+		})
+	}
+}
+
 func TestRouterNaturalLanguageHelpBypassesEngine(t *testing.T) {
 	for _, text := range []string{
 		"nectar 有哪些命令",
@@ -797,15 +839,35 @@ func TestRouterNaturalLanguageHelpBypassesEngine(t *testing.T) {
 
 func TestRouterHelpFallsBackToText(t *testing.T) {
 	plat := &fakePlatform{}
-	eng := &fakeEngine{}
+	eng := &fakeEngine{name: "claude"}
 	router, _ := newTestRouter(t, eng, plat)
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/help"})
 	waitForReplies(t, plat, 1)
-	if got := plat.lastReply(); !strings.Contains(got, "/new") {
+	if got := plat.lastReply(); !strings.Contains(got, "/new") || !strings.Contains(got, "Claude Code") {
 		t.Fatalf("help text = %q", got)
+	}
+	if got := plat.lastReply(); strings.Contains(got, "Codex") {
+		t.Fatalf("help text still mentions Codex: %q", got)
 	}
 	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
 		t.Fatalf("help invoked engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestEngineDisplayName(t *testing.T) {
+	cases := map[string]string{
+		"codex":    "Codex",
+		"opencode": "OpenCode",
+		"cursor":   "Cursor Agent",
+		"claude":   "Claude Code",
+		"pi":       "Pi",
+		"custom":   "custom",
+		"":         "the configured agent",
+	}
+	for input, want := range cases {
+		if got := engineDisplayName(input); got != want {
+			t.Fatalf("engineDisplayName(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
