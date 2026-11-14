@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果以卡片回传。会话保持连续，进度实时可见，任务可以定时执行；安装器会检测本机引擎、写入配置并启动后台服务。
+Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果以实时消息或卡片回传。会话保持连续，进度实时可见，任务可以定时执行；安装器会检测本机引擎、写入配置并启动后台服务。
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
@@ -28,7 +28,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果
 
 <table>
   <tr>
-    <td align="center"><a href="docs/assets/screenshots/feishu.png"><img src="docs/assets/screenshots/feishu.png" alt="在飞书里向 Nectar 提问并获取行情结果" width="260"></a><br><sub><b>飞书 / Lark</b></sub></td>
+    <td align="center"><a href="docs/assets/screenshots/feishu.png"><img src="docs/assets/screenshots/feishu.png" alt="在飞书里向 Nectar 提问并获取结果" width="260"></a><br><sub><b>飞书 / Lark</b></sub></td>
     <td align="center"><a href="docs/assets/screenshots/dingtalk.png"><img src="docs/assets/screenshots/dingtalk.png" alt="在钉钉里用 Nectar 管理定时任务" width="260"></a><br><sub><b>钉钉</b></sub></td>
     <td align="center"><a href="docs/assets/screenshots/telegram.png"><img src="docs/assets/screenshots/telegram.png" alt="在 Telegram 里用 Nectar 执行命令" width="260"></a><br><sub><b>Telegram</b></sub></td>
   </tr>
@@ -37,12 +37,14 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果
 ## 为什么是 Nectar
 
 - **聊天就是入口**：在飞书 / 钉钉 / Telegram 里直接对话，单聊和群聊都支持。
-- **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`，服务重启后继续原来的 Agent 会话。
+- **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`，服务重启后，如果原会话仍然有效，就继续使用它。
 - **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
 - **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
 
 ## 快速开始
+
+环境要求：macOS 或 Linux（Windows 用 WSL）、`curl` 或 `wget`、`tar`，以及一个已安装并登录的引擎。
 
 ### 1. 准备一个编程 Agent
 
@@ -52,15 +54,31 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果
 
 ### 2. 安装
 
+任选一种方式即可。
+
+**方式 A —— 让编程 Agent 安装（推荐）**
+
+如果你的 Agent 可以在这台机器上执行终端命令，推荐使用这种方式。
+
+把下面这段话发给你正在使用的 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi：
+
+> 帮我安装这个 bot：<https://github.com/zhouyg1992/nectar>。请阅读仓库根目录的 AGENT_INSTALL.md 并按其步骤执行；需要凭证时先问我，安装后台服务前也先确认。
+
+Agent 会读取安装契约、向你索取所需凭证、执行安装，并验证平台连接。完整步骤见 [AGENT_INSTALL.md](AGENT_INSTALL.md)。
+
+**方式 B —— 手动安装**
+
+运行前请先创建平台应用并获取凭证：[飞书](docs/zh-CN/feishu.md) · [钉钉](docs/zh-CN/dingtalk.md) · [Telegram](docs/zh-CN/telegram.md)。
+
 macOS / Linux（amd64 / arm64）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh
 ```
 
-安装器是交互式的：选择引擎和平台（默认飞书 / Lark），填写对应凭证，写入 `~/.nectar/config.toml`，然后安装并启动后台服务。
+安装器是交互式的：选择引擎和平台（默认飞书 / Lark），填写对应凭证；随后写入 `~/.nectar/config.toml`，安装并启动后台服务。
 
-> 安装脚本默认已经启动后台服务，不需要再手动运行 `nectar`。
+> 安装脚本默认会启动后台服务，不需要再手动运行 `nectar`。
 
 ### 3. 验证
 
@@ -68,6 +86,8 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 nectar service status
 nectar service logs -f
 ```
+
+如果提示找不到 `nectar`，请运行 `~/.local/bin/nectar ...`，或把 `~/.local/bin` 加入 `PATH`。
 
 在聊天里先发送 `/help`。单聊直接发消息，群聊需要 @Bot。
 
@@ -87,7 +107,7 @@ allowed_chats = ["oc_xxx"]
 nectar service restart
 ```
 
-> `admin_users` 为空时不会限制管理员权限，任何人都能管理 `/cron`；`allowed_chats` 为空时不会限制群聊。完整配置见 [配置参考](docs/zh-CN/config.md)。
+上面的 ID 是飞书示例：钉钉使用 `staffId` / `openConversationId`，Telegram 使用数字 user ID 和 chat ID（负数群 ID 需要加引号）。`admin_users` 为空时，任何人都能管理定时任务；`allowed_chats` 为空时，不限制群聊。完整配置见 [配置参考](docs/zh-CN/config.md) 和 [安全边界](docs/zh-CN/security.md)。
 
 ## 支持矩阵
 
@@ -98,7 +118,7 @@ nectar service restart
 | 飞书 / Lark | ✅ 已支持 | [飞书配置](docs/zh-CN/feishu.md) |
 | 钉钉 | ✅ 已支持 | [钉钉配置](docs/zh-CN/dingtalk.md) |
 | Telegram | ✅ 已支持 | [Telegram 配置](docs/zh-CN/telegram.md) |
-| 企业微信 / 微信、Slack | 🚧 计划中 | [Roadmap](docs/zh-CN/roadmap.md) |
+| 微信、Slack | 🚧 计划中 | [Roadmap](docs/zh-CN/roadmap.md) |
 
 **引擎**
 
@@ -109,7 +129,7 @@ nectar service restart
 | Cursor Agent CLI | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Pi | ✅ 已支持 | `--mode json` / `--session` |
-| Kimi Code | 🚧 计划中 | 见 [Roadmap](docs/zh-CN/roadmap.md) |
+| Kimi | 🚧 计划中 | 见 [Roadmap](docs/zh-CN/roadmap.md) |
 
 ## 命令
 
@@ -152,16 +172,10 @@ nectar uninstall                      卸载 Nectar
 /cron every <duration> <prompt>
 /cron in <duration> <prompt>
 /cron at <RFC3339-time> <prompt>
-/cron pause <id>
-/cron resume <id>
-/cron run <id>
-/cron cancel <id>
-/cron delete <id>
-/cron update <id> ...
-/cron help
+/cron pause|resume|run|cancel|delete|update <id>
 ```
 
-定时任务默认开启，无需在配置里添加 `[schedule]`。管理命令仅限 `bot.admin_users`；该列表为空时不限制管理员。
+详见[定时任务](docs/zh-CN/schedule.md)，或在聊天里发送 `/cron help`。定时任务默认开启，无需在配置里添加 `[schedule]`。管理命令仅限 `bot.admin_users`；该列表为空时不限制管理员。参见[安全加固](#可选安全加固)。
 
 ## 维护
 
@@ -191,4 +205,4 @@ nectar uninstall --purge-data
 
 ## License
 
-MIT © 2026 zhou.yongguo. See [LICENSE](LICENSE).
+MIT © 2026 zhou.yongguo，详见 [LICENSE](LICENSE)。

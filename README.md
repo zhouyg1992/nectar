@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar sends chat messages to a coding agent on your machine and streams the process and result back as a card. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. The installer detects installed engines, writes the config, and starts the background service.
+Nectar sends chat messages to a coding agent on your machine and streams progress and results back as live messages or cards. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. The installer detects installed engines, writes the config, and starts the background service.
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
@@ -37,12 +37,14 @@ Nectar sends chat messages to a coding agent on your machine and streams the pro
 ## Why Nectar
 
 - **Chat is the interface**: talk to your agent from Feishu / Lark, DingTalk, or Telegram, in direct messages or group chats.
-- **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`, so the service resumes the same agent session after a restart.
+- **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`, so the service resumes the same agent session when it is still valid after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 
 ## Quick start
+
+Requirements: macOS or Linux (Windows via WSL), `curl` or `wget`, `tar`, and one installed and logged-in engine.
 
 ### 1. Prepare one coding agent
 
@@ -52,13 +54,29 @@ Install and log in to **one** of: **Codex, Claude Code, Cursor Agent, OpenCode, 
 
 ### 2. Install
 
+Choose one of two paths.
+
+**Option A — let your coding agent install it (recommended)**
+
+Recommended if your agent can run terminal commands on this machine.
+
+Paste this into Codex, Claude Code, Cursor Agent, OpenCode, or Pi:
+
+> Install Nectar from <https://github.com/zhouyg1992/nectar>. Read AGENT_INSTALL.md in that repository and follow it. Ask me for credentials, and confirm before installing the background service.
+
+Your agent reads the install contract, asks for the required credentials, runs the installer, and verifies the platform connection. See [AGENT_INSTALL.md](AGENT_INSTALL.md) for the full contract.
+
+**Option B — install manually**
+
+Before running it, create the platform app and get its credentials: [Feishu](docs/en/feishu.md) · [DingTalk](docs/en/dingtalk.md) · [Telegram](docs/en/telegram.md).
+
 macOS / Linux (amd64 / arm64):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh | sh
 ```
 
-The installer is interactive: choose an engine and platform (Feishu / Lark by default), enter the credentials, write `~/.nectar/config.toml`, then install and start the background service.
+The installer is interactive. Choose an engine and platform (Feishu / Lark by default), then enter the credentials. It writes `~/.nectar/config.toml`, installs the background service, and starts it.
 
 > The installer starts the background service by default. You do not need to run `nectar` manually.
 
@@ -68,6 +86,8 @@ The installer is interactive: choose an engine and platform (Feishu / Lark by de
 nectar service status
 nectar service logs -f
 ```
+
+If `nectar` is not found, run `~/.local/bin/nectar ...` or add `~/.local/bin` to `PATH`.
 
 Send `/help` in chat first. Direct messages work without a mention; group messages require @Bot.
 
@@ -87,7 +107,7 @@ Then restart the service:
 nectar service restart
 ```
 
-> An empty `admin_users` does not limit admin access, so anyone can manage `/cron`. An empty `allowed_chats` does not limit group chats. See the [configuration reference](docs/en/config.md).
+The IDs above are Feishu examples: DingTalk uses `staffId` / `openConversationId`, and Telegram uses numeric user and chat IDs (quote negative group IDs). An empty `admin_users` leaves scheduled-task management open to anyone; an empty `allowed_chats` leaves group chats unrestricted. See the [configuration reference](docs/en/config.md) and [security boundaries](docs/en/security.md).
 
 ## Support matrix
 
@@ -98,7 +118,7 @@ nectar service restart
 | Feishu / Lark | ✅ Supported | [Feishu setup](docs/en/feishu.md) |
 | DingTalk | ✅ Supported | [DingTalk setup](docs/en/dingtalk.md) |
 | Telegram | ✅ Supported | [Telegram setup](docs/en/telegram.md) |
-| WeCom / WeChat, Slack | 🚧 Planned | [Roadmap](docs/en/roadmap.md) |
+| WeChat, Slack | 🚧 Planned | [Roadmap](docs/en/roadmap.md) |
 
 **Engines**
 
@@ -109,7 +129,7 @@ nectar service restart
 | Cursor Agent CLI | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Pi | ✅ Supported | `--mode json` / `--session` |
-| Kimi Code | 🚧 Planned | See [Roadmap](docs/en/roadmap.md) |
+| Kimi | 🚧 Planned | See [Roadmap](docs/en/roadmap.md) |
 
 ## Commands
 
@@ -152,16 +172,10 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 /cron every <duration> <prompt>
 /cron in <duration> <prompt>
 /cron at <RFC3339-time> <prompt>
-/cron pause <id>
-/cron resume <id>
-/cron run <id>
-/cron cancel <id>
-/cron delete <id>
-/cron update <id> ...
-/cron help
+/cron pause|resume|run|cancel|delete|update <id>
 ```
 
-Scheduled tasks are enabled by default; no `[schedule]` section is required. Management commands are limited to `bot.admin_users`; when that list is empty, admin access is not restricted.
+See [scheduled tasks](docs/en/schedule.md) for details, or send `/cron help` in chat. Scheduled tasks are enabled by default; no `[schedule]` section is required. Only users in `bot.admin_users` can manage them; an empty list removes that restriction. See [hardening access](#optional-harden-access).
 
 ## Maintenance
 

@@ -1,5 +1,7 @@
 # Install and Upgrade
 
+If you are an AI agent installing Nectar on a user's behalf, follow [AGENT_INSTALL.md](../AGENT_INSTALL.md) instead.
+
 ## Requirements
 
 - macOS or Linux, amd64 / arm64
