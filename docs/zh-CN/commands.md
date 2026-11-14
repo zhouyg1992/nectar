@@ -83,7 +83,7 @@ nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills
 ```bash
 nectar update
 nectar update --check
-nectar update --version v0.6.0
+nectar update --version v0.6.1
 nectar update --no-restart
 nectar update --timeout 15m --attempts 3
 ```
