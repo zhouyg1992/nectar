@@ -1,5 +1,9 @@
 # Nectar Docs (English)
 
+- [Engine setup and login checks](engines.md)
+- [Configuration reference](config.md)
+- [Install and upgrade](install.md)
+- [Command reference](commands.md)
 - [Feishu setup and troubleshooting](feishu.md)
 - [DingTalk setup and troubleshooting](dingtalk.md)
 - [Background service](service.md)

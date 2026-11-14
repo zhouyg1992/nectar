@@ -1,5 +1,9 @@
 # Nectar 文档
 
+- [各引擎安装与登录验证](engines.md)
+- [配置参考](config.md)
+- [安装与升级](install.md)
+- [命令参考](commands.md)
 - [飞书配置与排查](feishu.md)
 - [钉钉配置与排查](dingtalk.md)
 - [后台服务](service.md)

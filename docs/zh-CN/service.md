@@ -7,9 +7,9 @@ Nectar 可以把自身安装为当前用户的后台服务：
 
 服务会使用安装时的绝对路径启动 `nectar -config ~/.nectar/config.toml`。
 
-> 后台服务支持需要 v0.1.1 及以上版本。
+## 手动安装服务
 
-## 先配置，再安装服务
+一键安装脚本默认会写入配置并安装、启动后台服务，通常不需要本节。只有手动安装服务，或修改配置后需要重新安装/重启时，才需要按下面的步骤操作。
 
 服务模式从 `~/.nectar/config.toml` 读取所选平台（飞书或钉钉）的凭证，不继承 shell 里的 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`、`DINGTALK_CLIENT_ID` / `DINGTALK_CLIENT_SECRET`。
 
