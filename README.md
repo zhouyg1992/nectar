@@ -21,7 +21,7 @@
 Nectar sends chat messages to a coding agent on your machine and streams the process and result back as a card. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. The installer detects installed engines, writes the config, and starts the background service.
 
 <p align="center">
-  <img src="docs/assets/nectar-flow.svg" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
+  <img src="docs/assets/nectar-flow.svg?v=20261114" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
 </p>
 
 ## Screenshots

@@ -21,7 +21,7 @@
 Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程与结果以卡片回传。会话保持连续，进度实时可见，任务可以定时执行；安装器会检测本机引擎、写入配置并启动后台服务。
 
 <p align="center">
-  <img src="docs/assets/nectar-flow.svg" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
+  <img src="docs/assets/nectar-flow.svg?v=20261114" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
 </p>
 
 ## 界面预览
