@@ -1,5 +1,13 @@
 # Roadmap
 
+## v0.6.0 complete
+
+- Scheduled tasks: cron, fixed intervals, one-shot runs, persistence, startup catch-up, and execution previews
+- Scheduling controls: concurrency limits, jitter, timeouts, cancellation, history retention, and running state
+- Installation, upgrade, and removal of the `nectar-schedule` agent skill
+- Complete `nectar uninstall` flow
+- Reworked README and install, configuration, command, engine, and service documentation
+
 ## v0.5.0 complete
 
 - DingTalk Stream-mode long connection, A2UI streaming cards, and image/file attachments
@@ -38,7 +46,6 @@
 ## Explicitly out of scope for v1
 
 - Token-by-token streaming output
-- Session persistence
 - Lesson injection and review cards
 - Cloud sync
 - Platforms beyond Feishu / DingTalk, and engines beyond Codex/OpenCode/Cursor/Claude Code/Pi
@@ -47,7 +54,6 @@
 
 ### v1.1
 
-- Scheduled tasks (implemented, see [schedule.md](schedule.md))
 - Lesson log search
 - Finer-grained streaming output
 

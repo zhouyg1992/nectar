@@ -78,7 +78,7 @@ nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills
 ```bash
 nectar update
 nectar update --check
-nectar update --version v0.5.3
+nectar update --version v0.6.0
 nectar update --no-restart
 ```
 
