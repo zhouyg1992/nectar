@@ -31,6 +31,10 @@ works when each tool call gets a fresh shell.
 Standard five-field cron uses `minute hour day month weekday`. Use `--every`
 for intervals cron cannot express, such as 90 minutes or two weeks.
 
+Add `--timeout <duration>` when a run should have a shorter or longer deadline
+than the global default. `--timeout 0s` disables the scheduler deadline for
+that task; the engine's own timeout still applies.
+
 ## Workflow
 
 1. Extract the time expression, the actual task, and the target chat.
@@ -57,7 +61,11 @@ for intervals cron cannot express, such as 90 minutes or two weeks.
      --prompt "检查 CI 状态并汇报失败项" --timezone Asia/Shanghai
    ```
 
-6. Reply with the task ID, a human-readable schedule, and the next run.
+   Add `--timeout 15m` (or another duration) when the job needs a per-run
+   deadline.
+
+6. Reply with the task ID, a human-readable schedule, the next run, and the
+   timeout if one was set.
 
 ## Management
 
@@ -66,8 +74,9 @@ for intervals cron cannot express, such as 90 minutes or two weeks.
 "${NECTAR_CLI:-nectar}" schedule pause <id>
 "${NECTAR_CLI:-nectar}" schedule resume <id>
 "${NECTAR_CLI:-nectar}" schedule run <id>
+"${NECTAR_CLI:-nectar}" schedule cancel <id>
 "${NECTAR_CLI:-nectar}" schedule delete <id>
-"${NECTAR_CLI:-nectar}" schedule update <id> --prompt "..." --cron "0 10 * * 1-5"
+"${NECTAR_CLI:-nectar}" schedule update <id> --prompt "..." --cron "0 10 * * 1-5" --timeout 15m
 ```
 
 - To find a task, list first and match on description, prompt, or cron. If more
@@ -75,6 +84,8 @@ for intervals cron cannot express, such as 90 minutes or two weeks.
 - Never invent an ID.
 - Confirm before deleting unless the user already gave the exact ID and said to
   delete it.
+- `cancel` stops the current run but keeps the task; recurring tasks continue
+  on schedule. Use `delete` to stop future runs.
 - `delete` stops future runs but does not interrupt an in-flight run.
 
 ## Constraints and failure handling
@@ -83,6 +94,11 @@ for intervals cron cannot express, such as 90 minutes or two weeks.
 - Recurring tasks do not replay missed occurrences. One-shot tasks interrupted
   by a restart may run once more inside `startup_grace` (at-least-once).
 - Tasks reuse the chat session. Long report-style jobs can block the chat.
+- The scheduler limits simultaneous runs (global `max_concurrent`) and can add
+  jitter to recurring runs; a due task may therefore start slightly late or
+  wait for a slot.
+- A run that exceeds its timeout is cancelled and recorded as `run timed out
+  after ...`; this is not a reason to recreate the task.
 - If the CLI returns “not a schedule admin”, tell the user an admin must make
   the change. Do not try to bypass it.
 - If the CLI returns “daemon unavailable”, tell the user the Nectar service is

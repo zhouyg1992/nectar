@@ -361,10 +361,11 @@ When the user asks for a reminder or a scheduled/repeating task, use the local
 - Calendar schedule: `+"`\"${NECTAR_CLI:-nectar}\" schedule add --cron \"0 9 * * 1-5\" --prompt \"...\"`"+`
 - Fixed interval: `+"`--every 90m`"+` or `+"`--every 14d`"+`
 - One-shot: `+"`--in 30m`"+` or `+"`--at 2026-11-14T15:00:00+08:00`"+`
+- Per-run deadline: `+"`--timeout 15m`"+`; `+"`--timeout 0s`"+` disables the scheduler deadline.
 - Preview first: `+"`${NECTAR_CLI:-nectar} schedule preview ...`"+`; show next runs.
 - Make the prompt self-contained; scheduled runs do not reliably inherit this chat.
 - Ask when the time, weekday, or timezone is ambiguous.
-- Manage with `+"`\"${NECTAR_CLI:-nectar}\" schedule list|pause|resume|run|update|delete`"+`.
+- Manage with `+"`\"${NECTAR_CLI:-nectar}\" schedule list|pause|resume|run|cancel|update|delete`"+`.
 %s
 `, blockBegin, display, blockEnd)
 }

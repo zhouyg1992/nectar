@@ -161,12 +161,23 @@ func runBot(configPath string) error {
 		if err != nil {
 			return err
 		}
+		jitter, err := cfg.ScheduleJitter()
+		if err != nil {
+			return err
+		}
+		timeout, err := cfg.ScheduleTimeout()
+		if err != nil {
+			return err
+		}
 		scheduler, err = core.NewScheduler(core.SchedulerOptions{
 			StorePath:       filepath.Join(cfg.Storage.DataDir, "schedules.json"),
 			Anchors:         anchors,
 			DefaultTimezone: cfg.Schedule.Timezone,
 			StartupGrace:    grace,
 			HistoryLimit:    cfg.Schedule.HistoryLimit,
+			MaxConcurrent:   cfg.Schedule.MaxConcurrent,
+			Jitter:          jitter,
+			DefaultTimeout:  timeout,
 			Logger:          logger,
 		})
 		if err != nil {
@@ -185,8 +196,8 @@ func runBot(configPath string) error {
 			return err
 		}
 		defer scheduleAPI.Close()
-		if err := scheduler.Start(ctx, func(task core.ScheduledTask, anchor core.SessionAnchor) error {
-			return router.ExecuteScheduled(ctx, platform.Message{
+		if err := scheduler.Start(ctx, func(runCtx context.Context, task core.ScheduledTask, anchor core.SessionAnchor) error {
+			return router.ExecuteScheduled(runCtx, platform.Message{
 				MessageID: anchor.MessageID,
 				Channel:   anchor.Channel,
 				ChatID:    anchor.ChatID,

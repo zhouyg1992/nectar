@@ -148,7 +148,7 @@ func (r *Router) Handle(msg platform.Message) {
 	// Platform callbacks must return fast (Feishu retries after ~3s), so the
 	// actual agent run is queued and serialized per session key.
 	r.queue.Do(key.String(), func() {
-		r.execute(key, msg, text)
+		r.execute(r.ctx, key, msg, text)
 	})
 }
 
@@ -170,7 +170,11 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) err
 	}
 	done := make(chan error, 1)
 	r.queue.Do(key.String(), func() {
-		done <- r.execute(key, msg, text)
+		if err := ctx.Err(); err != nil {
+			done <- err
+			return
+		}
+		done <- r.execute(ctx, key, msg, text)
 	})
 	select {
 	case err := <-done:
@@ -180,7 +184,10 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) err
 	}
 }
 
-func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) error {
+func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Message, prompt string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	workdir, err := r.workspaces.ForChat(msg.ChatID)
 	if err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ Failed to create workspace: "+err.Error())
@@ -256,17 +263,27 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) er
 	var events <-chan engine.Event
 	sessionNotice := ""
 	if hasSession {
-		events, err = r.engine.Resume(r.ctx, sessionID, prompt, opts)
+		events, err = r.engine.Resume(ctx, sessionID, prompt, opts)
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				answer := "❌ Run stopped: " + ctxErr.Error()
+				finishErr := r.finish(msg, cardID, &platform.Card{
+					Status: platform.CardError,
+					Title:  cardTitleFailed,
+					Body:   answer,
+					Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
+				}, answer)
+				return errors.Join(ctxErr, finishErr)
+			}
 			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
 			r.logger.Warn("resume failed; starting a new session", "session", sessionID, "error", err)
 			if deleteErr := r.sessions.Delete(key); deleteErr != nil {
 				r.logger.Warn("could not remove stale session", "error", deleteErr)
 			}
-			events, err = r.engine.Start(r.ctx, prompt, opts)
+			events, err = r.engine.Start(ctx, prompt, opts)
 		}
 	} else {
-		events, err = r.engine.Start(r.ctx, prompt, opts)
+		events, err = r.engine.Start(ctx, prompt, opts)
 	}
 	if err != nil {
 		answer := "❌ Couldn't wake the agent: " + err.Error()
@@ -362,6 +379,9 @@ func (r *Router) execute(key SessionKey, msg platform.Message, prompt string) er
 				contextWindow = value
 			}
 		}
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		errTexts = append(errTexts, ctxErr.Error())
 	}
 	if err := r.sessions.SetUsage(key, usage, contextWindow); err != nil {
 		r.logger.Warn("could not persist session usage", "error", err)

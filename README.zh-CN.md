@@ -354,7 +354,7 @@ nectar service install
 | `/new`、`/reset` | 清空当前会话，下一条消息启动新的 agent thread |
 | `/status` | 查看当前引擎、模型和 agent thread ID |
 | `/stop` | 中断当前任务 |
-| `/cron` | 查看、创建、暂停、恢复或删除定时任务 |
+| `/cron` | 查看、创建、暂停、恢复、立即执行、取消或删除定时任务 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
 ## 文档

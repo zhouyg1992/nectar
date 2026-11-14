@@ -168,7 +168,7 @@ func TestSchedulerFiresOnceAndCompletes(t *testing.T) {
 	clock := func() time.Time { return now }
 	scheduler, _, key := newTestScheduler(t, clock, true)
 	fired := make(chan ScheduledTask, 1)
-	scheduler.trigger = func(task ScheduledTask, anchor SessionAnchor) error {
+	scheduler.trigger = func(ctx context.Context, task ScheduledTask, anchor SessionAnchor) error {
 		if anchor.ChatID != key.ChatID {
 			t.Errorf("anchor chat = %s", anchor.ChatID)
 		}
@@ -228,7 +228,7 @@ func TestSchedulerWaitsForRunCompletionAndRejectsUpdate(t *testing.T) {
 	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	scheduler.trigger = func(ScheduledTask, SessionAnchor) error {
+	scheduler.trigger = func(context.Context, ScheduledTask, SessionAnchor) error {
 		close(started)
 		<-release
 		return nil
@@ -266,7 +266,7 @@ func TestSchedulerWaitsForRunCompletionAndRejectsUpdate(t *testing.T) {
 func TestSchedulerRunNowKeepsOneShotPlan(t *testing.T) {
 	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
 	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
-	scheduler.trigger = func(ScheduledTask, SessionAnchor) error { return nil }
+	scheduler.trigger = func(context.Context, ScheduledTask, SessionAnchor) error { return nil }
 	task, err := scheduler.Add(scheduleRequestFor(key, "in", "reminder"), "user-1")
 	if err != nil {
 		t.Fatal(err)
@@ -425,8 +425,8 @@ func TestSchedulerUsesRouterRunResult(t *testing.T) {
 	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
 	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
 	router, _ := newTestRouter(t, &fakeEngine{fail: true}, &fakePlatform{})
-	scheduler.trigger = func(task ScheduledTask, anchor SessionAnchor) error {
-		return router.ExecuteScheduled(context.Background(), platform.Message{
+	scheduler.trigger = func(ctx context.Context, task ScheduledTask, anchor SessionAnchor) error {
+		return router.ExecuteScheduled(ctx, platform.Message{
 			Channel:  anchor.Channel,
 			ChatID:   anchor.ChatID,
 			ChatType: anchor.ChatType,
@@ -448,6 +448,260 @@ func TestSchedulerUsesRouterRunResult(t *testing.T) {
 	}
 	if !strings.Contains(current.LastError, "boom") {
 		t.Fatalf("last error = %q", current.LastError)
+	}
+}
+
+func newTestSchedulerWithOptions(t *testing.T, now func() time.Time, withAnchor bool, mutate func(*SchedulerOptions)) (*Scheduler, *AnchorStore, SessionKey) {
+	t.Helper()
+	dir := t.TempDir()
+	anchors, err := NewAnchorStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := SessionKey{Channel: "feishu", ChatID: "chat-1", AgentID: "codex"}
+	if withAnchor {
+		if err := anchors.Set(key, SessionAnchor{
+			Channel:  "feishu",
+			ChatID:   "chat-1",
+			ChatType: "group",
+			UserID:   "user-1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opts := SchedulerOptions{
+		StorePath:       filepath.Join(dir, "schedules.json"),
+		Anchors:         anchors,
+		DefaultTimezone: "UTC",
+		Now:             now,
+	}
+	if mutate != nil {
+		mutate(&opts)
+	}
+	scheduler, err := NewScheduler(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scheduler, anchors, key
+}
+
+func TestSchedulerLimitsConcurrentRuns(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestSchedulerWithOptions(t, func() time.Time { return now }, true, func(opts *SchedulerOptions) {
+		opts.MaxConcurrent = 1
+	})
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	scheduler.trigger = func(ctx context.Context, task ScheduledTask, _ SessionAnchor) error {
+		started <- task.ID
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	first, err := scheduler.Add(scheduleRequestFor(key, "in", "first"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := scheduler.Add(scheduleRequestFor(key, "in", "second"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(3 * time.Hour)
+	scheduler.fireDue(now)
+
+	var firstID string
+	select {
+	case firstID = <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first task did not start")
+	}
+	select {
+	case got := <-started:
+		t.Fatalf("second task %s started while %s was still running", got, firstID)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	release <- struct{}{}
+	select {
+	case got := <-started:
+		if got == firstID {
+			t.Fatalf("first task started twice")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second task did not start after the first finished")
+	}
+	release <- struct{}{}
+
+	waitForSchedulerRun(t, scheduler, first.ID, 1)
+	waitForSchedulerRun(t, scheduler, second.ID, 1)
+}
+
+func TestSchedulerRunTimeout(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestSchedulerWithOptions(t, func() time.Time { return now }, true, func(opts *SchedulerOptions) {
+		opts.DefaultTimeout = 50 * time.Millisecond
+	})
+	scheduler.trigger = func(ctx context.Context, _ ScheduledTask, _ SessionAnchor) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	task, err := scheduler.Add(scheduleRequestFor(key, "in", "slow"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(3 * time.Hour)
+	scheduler.fireDue(now)
+
+	current := waitForSchedulerRun(t, scheduler, task.ID, 1)
+	if current.Status != ScheduleFailed {
+		t.Fatalf("status = %s, want failed", current.Status)
+	}
+	if !strings.Contains(current.LastError, "timed out after 50ms") {
+		t.Fatalf("last error = %q", current.LastError)
+	}
+}
+
+func TestSchedulerTaskTimeoutOverridesDefault(t *testing.T) {
+	tests := []struct {
+		name           string
+		defaultTimeout time.Duration
+		taskTimeout    string
+		triggerWait    time.Duration
+		wantError      string
+	}{
+		{name: "task timeout wins", defaultTimeout: time.Hour, taskTimeout: "40ms", wantError: "timed out after 40ms"},
+		{name: "zero disables scheduler timeout", defaultTimeout: 20 * time.Millisecond, taskTimeout: "0s", triggerWait: 60 * time.Millisecond},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+			scheduler, _, key := newTestSchedulerWithOptions(t, func() time.Time { return now }, true, func(opts *SchedulerOptions) {
+				opts.DefaultTimeout = tt.defaultTimeout
+			})
+			scheduler.trigger = func(ctx context.Context, _ ScheduledTask, _ SessionAnchor) error {
+				if tt.triggerWait > 0 {
+					select {
+					case <-time.After(tt.triggerWait):
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+				<-ctx.Done()
+				return ctx.Err()
+			}
+
+			req := scheduleRequestFor(key, "in", "task timeout")
+			req.Timeout = tt.taskTimeout
+			task, err := scheduler.Add(req, "user-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			now = now.Add(3 * time.Hour)
+			scheduler.fireDue(now)
+
+			current := waitForSchedulerRun(t, scheduler, task.ID, 1)
+			if tt.wantError != "" {
+				if current.Status != ScheduleFailed {
+					t.Fatalf("status = %s, want failed", current.Status)
+				}
+				if !strings.Contains(current.LastError, tt.wantError) {
+					t.Fatalf("last error = %q, want %q", current.LastError, tt.wantError)
+				}
+				return
+			}
+			if current.Status != ScheduleCompleted {
+				t.Fatalf("status = %s, last error = %q", current.Status, current.LastError)
+			}
+		})
+	}
+}
+
+func TestSchedulerCancelReportsRunningState(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestSchedulerWithOptions(t, func() time.Time { return now }, true, func(opts *SchedulerOptions) {
+		opts.DefaultTimeout = time.Hour
+	})
+	started := make(chan struct{})
+	scheduler.trigger = func(ctx context.Context, _ ScheduledTask, _ SessionAnchor) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	task, err := scheduler.Add(scheduleRequestFor(key, "cron", "long report"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(24 * time.Hour)
+	scheduler.fireDue(now)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("task did not start")
+	}
+
+	running, _ := scheduler.Get(task.ID)
+	if !running.Running {
+		t.Fatal("running state was not exposed")
+	}
+	if err := scheduler.Cancel(task.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	current := waitForSchedulerRun(t, scheduler, task.ID, 1)
+	if current.Running {
+		t.Fatal("task still reports running after cancel")
+	}
+	if current.Status != ScheduleActive {
+		t.Fatalf("status = %s, want active", current.Status)
+	}
+	if !strings.Contains(current.LastError, "cancelled") {
+		t.Fatalf("last error = %q", current.LastError)
+	}
+	if err := scheduler.Cancel(task.ID); err == nil {
+		t.Fatal("expected cancel on an idle task to fail")
+	}
+}
+
+func TestSchedulerJitterCanBeCancelledBeforeRun(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestSchedulerWithOptions(t, func() time.Time { return now }, true, func(opts *SchedulerOptions) {
+		opts.Jitter = 24 * time.Hour
+	})
+	called := make(chan struct{}, 1)
+	scheduler.trigger = func(context.Context, ScheduledTask, SessionAnchor) error {
+		called <- struct{}{}
+		return nil
+	}
+
+	task, err := scheduler.Add(scheduleRequestFor(key, "cron", "jittered"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(24 * time.Hour)
+	scheduler.fireDue(now)
+	select {
+	case <-called:
+		t.Fatal("task ignored jitter")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := scheduler.Cancel(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	current := waitForSchedulerRun(t, scheduler, task.ID, 1)
+	if !strings.Contains(current.LastError, "cancelled") {
+		t.Fatalf("last error = %q", current.LastError)
+	}
+	select {
+	case <-called:
+		t.Fatal("cancelled task still reached the trigger")
+	default:
 	}
 }
 

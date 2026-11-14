@@ -24,6 +24,7 @@ type scheduleCLIRequest struct {
 	In          string `json:"in,omitempty"`
 	Prompt      string `json:"prompt,omitempty"`
 	Description string `json:"description,omitempty"`
+	Timeout     string `json:"timeout,omitempty"`
 	Timezone    string `json:"timezone,omitempty"`
 	Channel     string `json:"channel,omitempty"`
 	ChatID      string `json:"chat_id,omitempty"`
@@ -39,7 +40,9 @@ type scheduleCLITask struct {
 	Timezone    string    `json:"timezone,omitempty"`
 	Prompt      string    `json:"prompt"`
 	Description string    `json:"description,omitempty"`
+	Timeout     string    `json:"timeout,omitempty"`
 	Status      string    `json:"status"`
+	Running     bool      `json:"running,omitempty"`
 	NextRun     time.Time `json:"next_run,omitempty"`
 	LastRun     time.Time `json:"last_run,omitempty"`
 	LastError   string    `json:"last_error,omitempty"`
@@ -74,7 +77,7 @@ func runSchedule(args []string) error {
 		err = scheduleCLIAdd(args, false)
 	case "preview":
 		err = scheduleCLIAdd(args, true)
-	case "pause", "resume", "run", "delete", "del", "rm":
+	case "pause", "resume", "run", "cancel", "stop", "delete", "del", "rm":
 		err = scheduleCLIAction(command, args)
 	case "update":
 		err = scheduleCLIUpdate(args)
@@ -132,6 +135,7 @@ func scheduleCLIAdd(args []string, preview bool) error {
 	in := fs.String("in", "", "one-shot delay, e.g. 30m")
 	prompt := fs.String("prompt", "", "task prompt")
 	desc := fs.String("desc", "", "short description")
+	timeout := fs.String("timeout", "", "per-run timeout, e.g. 30m; 0s disables it")
 	timezone := fs.String("timezone", "", "IANA timezone")
 	channel := fs.String("channel", "", "target channel")
 	chat := fs.String("chat", "", "target chat id")
@@ -150,6 +154,7 @@ func scheduleCLIAdd(args []string, preview bool) error {
 		In:          *in,
 		Prompt:      *prompt,
 		Description: *desc,
+		Timeout:     *timeout,
 		Timezone:    *timezone,
 		Channel:     firstNonEmpty(*channel, os.Getenv("NECTAR_CHANNEL")),
 		ChatID:      firstNonEmpty(*chat, os.Getenv("NECTAR_CHAT_ID")),
@@ -227,6 +232,8 @@ func scheduleCLIAction(command string, args []string) error {
 	method := http.MethodPost
 	path := "/schedule/" + id + "/" + command
 	switch command {
+	case "stop":
+		path = "/schedule/" + id + "/cancel"
 	case "delete", "del", "rm":
 		method = http.MethodDelete
 		path = "/schedule/" + id
@@ -248,6 +255,7 @@ func scheduleCLIUpdate(args []string) error {
 	fs.SetOutput(os.Stderr)
 	prompt := fs.String("prompt", "", "new prompt")
 	desc := fs.String("desc", "", "new description")
+	timeout := fs.String("timeout", "", "new per-run timeout")
 	cron := fs.String("cron", "", "new cron expression")
 	every := fs.String("every", "", "new interval")
 	at := fs.String("at", "", "new one-shot time")
@@ -268,6 +276,7 @@ func scheduleCLIUpdate(args []string) error {
 	req := scheduleCLIRequest{
 		Prompt:      *prompt,
 		Description: *desc,
+		Timeout:     *timeout,
 		Cron:        *cron,
 		Every:       *every,
 		At:          *at,
@@ -409,8 +418,11 @@ func formatCLITask(task scheduleCLITask) string {
 		window = task.Mode
 	}
 	lines := []string{
-		fmt.Sprintf("%s  %s  %s", task.ID, task.Status, window),
+		fmt.Sprintf("%s  %s  %s", task.ID, scheduleCLIStatus(task), window),
 		"  " + task.Prompt,
+	}
+	if task.Timeout != "" {
+		lines = append(lines, "  timeout: "+task.Timeout)
 	}
 	if !task.NextRun.IsZero() {
 		lines = append(lines, "  next: "+task.NextRun.In(scheduleCLILocation(task.Timezone)).Format("2006-01-02 15:04 MST"))
@@ -438,10 +450,18 @@ func printScheduleUsage() {
   nectar schedule add --in 30m --prompt "..."
   nectar schedule add --at "2026-11-14T15:00:00+08:00" --prompt "..."
   nectar schedule preview --cron "0 9 * * 1-5"
-  nectar schedule pause|resume|run|delete <id>
-  nectar schedule update <id> [--prompt TEXT] [--cron EXPR] [--every DUR] [--at TIME] [--timezone TZ]
+  nectar schedule pause|resume|run|cancel|delete <id>
+  nectar schedule update <id> [--prompt TEXT] [--cron EXPR] [--every DUR] [--at TIME] [--timezone TZ] [--timeout DUR]
+  nectar schedule add ... [--timeout 30m]
 
 Target defaults come from NECTAR_CHANNEL, NECTAR_CHAT_ID, NECTAR_THREAD_ID and
 NECTAR_AGENT_ID, which nectar injects into agent sessions.
 `)
+}
+
+func scheduleCLIStatus(task scheduleCLITask) string {
+	if task.Running {
+		return "running"
+	}
+	return task.Status
 }

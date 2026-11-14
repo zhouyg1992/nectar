@@ -38,6 +38,7 @@ type ScheduledTask struct {
 	Timezone         string         `json:"timezone,omitempty"`
 	Prompt           string         `json:"prompt"`
 	Description      string         `json:"description,omitempty"`
+	Timeout          string         `json:"timeout,omitempty"`
 	Key              SessionKey     `json:"session_key"`
 	Status           ScheduleStatus `json:"status"`
 	ExecuteAt        time.Time      `json:"execute_at,omitempty"`
@@ -50,6 +51,8 @@ type ScheduledTask struct {
 	CreatedBy        string         `json:"created_by,omitempty"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
+	// Running is transient and never persisted.
+	Running bool `json:"running,omitempty"`
 }
 
 // ScheduleRequest is the platform-neutral input used by the socket API and
@@ -62,6 +65,7 @@ type ScheduleRequest struct {
 	In          string `json:"in,omitempty"`
 	Prompt      string `json:"prompt"`
 	Description string `json:"description,omitempty"`
+	Timeout     string `json:"timeout,omitempty"`
 	Timezone    string `json:"timezone,omitempty"`
 	Channel     string `json:"channel,omitempty"`
 	ChatID      string `json:"chat_id,omitempty"`
@@ -79,6 +83,7 @@ type SchedulePatch struct {
 	Every       string `json:"every,omitempty"`
 	At          string `json:"at,omitempty"`
 	In          string `json:"in,omitempty"`
+	Timeout     string `json:"timeout,omitempty"`
 	Timezone    string `json:"timezone,omitempty"`
 }
 
@@ -119,6 +124,21 @@ func parseScheduleTime(value string, loc *time.Location) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid time %q (use RFC3339 or YYYY-MM-DDTHH:MM)", value)
 	}
 	return parsed, nil
+}
+
+func parseScheduleTimeout(value string) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "0" {
+		return 0, nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid timeout %q: %w", value, err)
+	}
+	if duration < 0 {
+		return 0, fmt.Errorf("timeout must not be negative")
+	}
+	return duration, nil
 }
 
 func buildScheduledTask(req ScheduleRequest, now time.Time, defaultTimezone, createdBy string) (*ScheduledTask, error) {
@@ -175,6 +195,7 @@ func buildScheduledTask(req ScheduleRequest, now time.Time, defaultTimezone, cre
 		Timezone:    timezone,
 		Prompt:      prompt,
 		Description: strings.TrimSpace(req.Description),
+		Timeout:     strings.TrimSpace(req.Timeout),
 		Key: SessionKey{
 			Channel:  strings.TrimSpace(req.Channel),
 			ChatID:   strings.TrimSpace(req.ChatID),
@@ -185,6 +206,9 @@ func buildScheduledTask(req ScheduleRequest, now time.Time, defaultTimezone, cre
 		CreatedBy: createdBy,
 		CreatedAt: now,
 		UpdatedAt: now,
+	}
+	if _, err := parseScheduleTimeout(task.Timeout); err != nil {
+		return nil, err
 	}
 
 	switch mode {
@@ -282,6 +306,12 @@ func applySchedulePatch(task *ScheduledTask, patch SchedulePatch, now time.Time)
 	}
 	if value := strings.TrimSpace(patch.Description); value != "" {
 		task.Description = value
+	}
+	if value := strings.TrimSpace(patch.Timeout); value != "" {
+		if _, err := parseScheduleTimeout(value); err != nil {
+			return err
+		}
+		task.Timeout = value
 	}
 	reschedule := false
 	if value := strings.TrimSpace(patch.Timezone); value != "" {

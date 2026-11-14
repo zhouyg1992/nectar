@@ -47,12 +47,15 @@ func TestScheduleCLIRoundTrip(t *testing.T) {
 	t.Setenv("NECTAR_CHAT_ID", "chat-1")
 	t.Setenv("NECTAR_AGENT_ID", "codex")
 
-	if err := scheduleCLIAdd([]string{"--cron", "0 9 * * *", "--prompt", "daily report", "--timezone", "UTC"}, false); err != nil {
+	if err := scheduleCLIAdd([]string{"--cron", "0 9 * * *", "--prompt", "daily report", "--timezone", "UTC", "--timeout", "15m"}, false); err != nil {
 		t.Fatal(err)
 	}
 	tasks := scheduler.List(false)
 	if len(tasks) != 1 || tasks[0].Prompt != "daily report" {
 		t.Fatalf("tasks = %#v", tasks)
+	}
+	if tasks[0].Timeout != "15m" {
+		t.Fatalf("timeout = %q", tasks[0].Timeout)
 	}
 	if err := scheduleCLIList([]string{"--json"}); err != nil {
 		t.Fatal(err)

@@ -341,7 +341,7 @@ Service mode reads the selected platform's credentials from the config file, not
 | `/new`, `/reset` | Start a new agent thread |
 | `/status` | Show the current engine, model, and agent thread ID |
 | `/stop` | Cancel the current run |
-| `/cron` | List, create, pause, resume, or delete scheduled tasks |
+| `/cron` | List, create, pause, resume, run, cancel, or delete scheduled tasks |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 ## Docs

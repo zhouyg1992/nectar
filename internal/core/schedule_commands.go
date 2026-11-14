@@ -108,7 +108,7 @@ func (r *Router) handleScheduleCommand(key SessionKey, msg platform.Message, tex
 			ThreadID: key.ThreadID,
 			AgentID:  key.AgentID,
 		})
-	case "pause", "resume", "run", "delete", "del", "rm":
+	case "pause", "resume", "run", "cancel", "stop", "delete", "del", "rm":
 		if len(args) < 1 {
 			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /cron "+sub+" <id>")
 			return
@@ -122,6 +122,8 @@ func (r *Router) handleScheduleCommand(key SessionKey, msg platform.Message, tex
 			err = r.scheduler.Resume(id)
 		case "run":
 			err = r.scheduler.RunNow(id)
+		case "cancel", "stop":
+			err = r.scheduler.Cancel(id)
 		default:
 			err = r.scheduler.Delete(id)
 		}
@@ -153,6 +155,12 @@ func (r *Router) handleScheduleUpdate(msg platform.Message, args []string) {
 			return
 		}
 		patch.Timezone = args[2]
+	case "timeout":
+		if len(args) < 3 {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /cron update <id> timeout <duration|0s>")
+			return
+		}
+		patch.Timeout = args[2]
 	case "cron":
 		if len(args) < 7 {
 			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /cron update <id> cron <min> <hour> <day> <month> <weekday> [prompt]")
@@ -217,6 +225,9 @@ func (r *Router) isAdmin(userID string) bool {
 
 func formatScheduleTask(task ScheduledTask) string {
 	status := string(task.Status)
+	if task.Running {
+		status = "running"
+	}
 	if task.Status == SchedulePaused && task.Mode == ScheduleOnce && task.RemainingSeconds > 0 {
 		status += fmt.Sprintf(" (%s remaining)", time.Duration(task.RemainingSeconds)*time.Second)
 	}
@@ -226,6 +237,9 @@ func formatScheduleTask(task ScheduledTask) string {
 	}
 	if !task.NextRun.IsZero() {
 		lines = append(lines, "Next: "+formatScheduleTime(task.NextRun, task.Timezone))
+	}
+	if task.Timeout != "" {
+		lines = append(lines, "Timeout: "+task.Timeout)
 	}
 	if !task.LastRun.IsZero() {
 		lines = append(lines, "Last: "+formatScheduleTime(task.LastRun, task.Timezone))
@@ -266,5 +280,5 @@ const scheduleHelpText = "**Schedule**\n" +
 	"- `/cron every <duration> <prompt>` — Fixed interval\n" +
 	"- `/cron in <duration> <prompt>` — One-shot delay\n" +
 	"- `/cron at <RFC3339> <prompt>` — One-shot time\n" +
-	"- `/cron pause|resume|run|delete <id>` — Manage a task\n" +
-	"- `/cron update <id> prompt|cron|every|at|timezone ...` — Update a task"
+	"- `/cron pause|resume|run|cancel|delete <id>` — Manage a task\n" +
+	"- `/cron update <id> prompt|cron|every|at|timezone|timeout ...` — Update a task"

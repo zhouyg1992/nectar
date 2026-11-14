@@ -2,9 +2,12 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -13,7 +16,7 @@ const (
 	schedulerMaxSleep = 30 * time.Second
 )
 
-type ScheduleTrigger func(task ScheduledTask, anchor SessionAnchor) error
+type ScheduleTrigger func(ctx context.Context, task ScheduledTask, anchor SessionAnchor) error
 
 type SchedulerOptions struct {
 	StorePath       string
@@ -21,6 +24,9 @@ type SchedulerOptions struct {
 	DefaultTimezone string
 	StartupGrace    time.Duration
 	HistoryLimit    int
+	MaxConcurrent   int
+	Jitter          time.Duration
+	DefaultTimeout  time.Duration
 	Logger          *slog.Logger
 	Now             func() time.Time
 }
@@ -38,8 +44,15 @@ type Scheduler struct {
 	defaultTimezone string
 	startupGrace    time.Duration
 	historyLimit    int
+	maxConcurrent   int
+	jitter          time.Duration
+	defaultTimeout  time.Duration
 	logger          *slog.Logger
 	now             func() time.Time
+
+	sem     chan struct{}
+	ctx     context.Context
+	cancels map[string]context.CancelFunc
 
 	wake    chan struct{}
 	stop    chan struct{}
@@ -65,9 +78,22 @@ func NewScheduler(opts SchedulerOptions) (*Scheduler, error) {
 		defaultTimezone: opts.DefaultTimezone,
 		startupGrace:    opts.StartupGrace,
 		historyLimit:    opts.HistoryLimit,
+		maxConcurrent:   opts.MaxConcurrent,
+		jitter:          opts.Jitter,
+		defaultTimeout:  opts.DefaultTimeout,
 		logger:          logger,
 		now:             now,
+		cancels:         make(map[string]context.CancelFunc),
 		wake:            make(chan struct{}, 1),
+	}
+	if s.maxConcurrent > 0 {
+		s.sem = make(chan struct{}, s.maxConcurrent)
+	}
+	if s.jitter < 0 {
+		s.jitter = 0
+	}
+	if s.defaultTimeout < 0 {
+		s.defaultTimeout = 0
 	}
 	if opts.StorePath != "" {
 		tasks, err := loadScheduleTasks(opts.StorePath)
@@ -97,6 +123,10 @@ func (s *Scheduler) Start(ctx context.Context, trigger ScheduleTrigger) error {
 	}
 	s.started = true
 	s.trigger = trigger
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.ctx = ctx
 	s.stop = make(chan struct{}, 1)
 	s.done = make(chan struct{})
 	s.recoverLocked(s.now())
@@ -118,8 +148,15 @@ func (s *Scheduler) Stop() {
 	s.stopped = true
 	stopCh := s.stop
 	doneCh := s.done
+	cancels := make([]context.CancelFunc, 0, len(s.cancels))
+	for _, cancel := range s.cancels {
+		cancels = append(cancels, cancel)
+	}
 	s.mu.Unlock()
 
+	for _, cancel := range cancels {
+		cancel()
+	}
 	select {
 	case stopCh <- struct{}{}:
 	default:
@@ -220,9 +257,15 @@ func (s *Scheduler) signalWake() {
 	}
 }
 
+type scheduledRun struct {
+	task              ScheduledTask
+	ctx               context.Context
+	consumeOccurrence bool
+}
+
 func (s *Scheduler) fireDue(now time.Time) {
 	s.mu.Lock()
-	var due []ScheduledTask
+	var due []scheduledRun
 	for _, task := range s.tasks {
 		if task.Status != ScheduleActive || task.NextRun.IsZero() || task.NextRun.After(now) {
 			continue
@@ -241,7 +284,6 @@ func (s *Scheduler) fireDue(now time.Time) {
 			continue
 		}
 		copy := *task
-		s.running[task.ID] = true
 		if task.Mode == ScheduleOnce {
 			task.NextRun = time.Time{}
 		} else {
@@ -255,34 +297,49 @@ func (s *Scheduler) fireDue(now time.Time) {
 			}
 		}
 		task.UpdatedAt = now
-		due = append(due, copy)
+		due = append(due, s.prepareRunLocked(copy, true))
 	}
 	if err := s.saveLocked(); err != nil {
 		s.logger.Error("could not persist due schedule state", "error", err)
 	}
 	s.mu.Unlock()
 
-	for _, task := range due {
-		go s.execute(task, true)
+	for _, run := range due {
+		go s.execute(run)
 	}
 }
 
-func (s *Scheduler) execute(task ScheduledTask, consumeOccurrence bool) {
+func (s *Scheduler) prepareRunLocked(task ScheduledTask, consumeOccurrence bool) scheduledRun {
+	base := s.ctx
+	if base == nil {
+		base = context.Background()
+	}
+	ctx, cancel := context.WithCancel(base)
+	s.running[task.ID] = true
+	s.cancels[task.ID] = cancel
+	if s.stopped {
+		cancel()
+	}
+	return scheduledRun{task: task, ctx: ctx, consumeOccurrence: consumeOccurrence}
+}
+
+func (s *Scheduler) execute(run scheduledRun) {
+	task := run.task
 	startedAt := s.now()
-	var anchor SessionAnchor
-	var runErr error
-	if s.anchors != nil {
-		anchor, _ = s.anchors.Get(task.Key)
+
+	s.mu.Lock()
+	cancel := s.cancels[task.ID]
+	s.mu.Unlock()
+	if cancel != nil {
+		defer cancel()
 	}
-	if anchor.ChatID == "" {
-		runErr = fmt.Errorf("no delivery target for chat %s; send a message in that chat first", task.Key.ChatID)
-	} else if s.trigger != nil {
-		runErr = s.trigger(task, anchor)
-	}
+
+	runErr := s.runScheduled(run)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.running, task.ID)
+	delete(s.cancels, task.ID)
 	current, ok := s.tasks[task.ID]
 	if !ok {
 		s.signalWake()
@@ -297,7 +354,7 @@ func (s *Scheduler) execute(task ScheduledTask, consumeOccurrence bool) {
 	} else {
 		current.LastError = ""
 	}
-	if consumeOccurrence && current.Mode == ScheduleOnce {
+	if run.consumeOccurrence && current.Mode == ScheduleOnce {
 		current.NextRun = time.Time{}
 		if runErr != nil {
 			current.Status = ScheduleFailed
@@ -309,6 +366,80 @@ func (s *Scheduler) execute(task ScheduledTask, consumeOccurrence bool) {
 		s.logger.Error("could not persist completed schedule run", "id", task.ID, "error", err)
 	}
 	s.signalWake()
+}
+
+func (s *Scheduler) runScheduled(run scheduledRun) error {
+	if s.jitter > 0 && run.consumeOccurrence && run.task.Mode != ScheduleOnce {
+		delay := time.Duration(rand.Int63n(int64(s.jitter)))
+		timer := time.NewTimer(delay)
+		select {
+		case <-run.ctx.Done():
+			timer.Stop()
+			return s.describeContextError(run.ctx, 0)
+		case <-timer.C:
+		}
+	}
+	if s.sem != nil {
+		select {
+		case s.sem <- struct{}{}:
+			defer func() { <-s.sem }()
+		case <-run.ctx.Done():
+			return s.describeContextError(run.ctx, 0)
+		}
+	}
+
+	timeout, err := s.timeoutFor(run.task)
+	if err != nil {
+		return err
+	}
+	ctx := run.ctx
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(run.ctx, timeout)
+		defer cancel()
+	}
+
+	var anchor SessionAnchor
+	if s.anchors != nil {
+		anchor, _ = s.anchors.Get(run.task.Key)
+	}
+	var runErr error
+	switch {
+	case anchor.ChatID == "":
+		runErr = fmt.Errorf("no delivery target for chat %s; send a message in that chat first", run.task.Key.ChatID)
+	case s.trigger == nil:
+		runErr = errors.New("scheduler trigger is not configured")
+	default:
+		runErr = s.trigger(ctx, run.task, anchor)
+	}
+	if ctxErr := s.describeContextError(ctx, timeout); ctxErr != nil {
+		return ctxErr
+	}
+	return runErr
+}
+
+func (s *Scheduler) describeContextError(ctx context.Context, timeout time.Duration) error {
+	err := ctx.Err()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		if timeout > 0 {
+			return fmt.Errorf("run timed out after %s", timeout)
+		}
+		return errors.New("run timed out")
+	}
+	if s.ctx != nil && s.ctx.Err() != nil {
+		return errors.New("run interrupted by shutdown")
+	}
+	return errors.New("run cancelled")
+}
+
+func (s *Scheduler) timeoutFor(task ScheduledTask) (time.Duration, error) {
+	if strings.TrimSpace(task.Timeout) != "" {
+		return parseScheduleTimeout(task.Timeout)
+	}
+	return s.defaultTimeout, nil
 }
 
 func (s *Scheduler) Add(req ScheduleRequest, createdBy string) (*ScheduledTask, error) {
@@ -394,7 +525,9 @@ func (s *Scheduler) List(includeAll bool) []ScheduledTask {
 		if !includeAll && task.Status != ScheduleActive && task.Status != SchedulePaused {
 			continue
 		}
-		out = append(out, *task)
+		copy := *task
+		copy.Running = s.running[task.ID]
+		out = append(out, copy)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
@@ -412,7 +545,9 @@ func (s *Scheduler) Get(id string) (ScheduledTask, bool) {
 	if !ok {
 		return ScheduledTask{}, false
 	}
-	return *task, true
+	copy := *task
+	copy.Running = s.running[id]
+	return copy, true
 }
 
 func (s *Scheduler) Pause(id string) error {
@@ -534,20 +669,38 @@ func (s *Scheduler) Update(id string, patch SchedulePatch) (*ScheduledTask, erro
 
 func (s *Scheduler) RunNow(id string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	task, ok := s.tasks[id]
 	if !ok {
+		s.mu.Unlock()
 		return fmt.Errorf("schedule %s not found", id)
 	}
 	if s.running[id] {
+		s.mu.Unlock()
 		return fmt.Errorf("schedule %s is already running", id)
 	}
 	if task.Status == ScheduleCompleted || task.Status == ScheduleFailed {
+		s.mu.Unlock()
 		return fmt.Errorf("schedule %s is %s", id, task.Status)
 	}
-	s.running[id] = true
 	copy := *task
-	go s.execute(copy, false)
+	run := s.prepareRunLocked(copy, false)
+	s.mu.Unlock()
+	go s.execute(run)
+	return nil
+}
+
+func (s *Scheduler) Cancel(id string) error {
+	s.mu.Lock()
+	if _, ok := s.tasks[id]; !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("schedule %s not found", id)
+	}
+	cancel, ok := s.cancels[id]
+	s.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("schedule %s is not running", id)
+	}
+	cancel()
 	return nil
 }
 
@@ -558,7 +711,9 @@ func (s *Scheduler) saveLocked() error {
 	}
 	tasks := make([]ScheduledTask, 0, len(s.tasks))
 	for _, task := range s.tasks {
-		tasks = append(tasks, *task)
+		copy := *task
+		copy.Running = false
+		tasks = append(tasks, copy)
 	}
 	sort.Slice(tasks, func(i, j int) bool {
 		if tasks[i].CreatedAt.Equal(tasks[j].CreatedAt) {

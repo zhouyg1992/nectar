@@ -219,6 +219,8 @@ func (a *ScheduleAPI) handleItem(w http.ResponseWriter, r *http.Request) {
 		a.handleAction(w, id, a.scheduler.Resume)
 	case action == "run" && r.Method == http.MethodPost:
 		a.handleAction(w, id, a.scheduler.RunNow)
+	case (action == "cancel" || action == "stop") && r.Method == http.MethodPost:
+		a.handleAction(w, id, a.scheduler.Cancel)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, errors.New("method or action not allowed"))
 	}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -150,4 +151,60 @@ func TestScheduleAPIRejectsNonAdmin(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %s", resp.Status)
 	}
+}
+
+func TestScheduleAPIRunAndCancel(t *testing.T) {
+	now := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	scheduler, _, key := newTestScheduler(t, func() time.Time { return now }, true)
+	started := make(chan struct{})
+	scheduler.trigger = func(ctx context.Context, _ ScheduledTask, _ SessionAnchor) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	task, err := scheduler.Add(scheduleRequestFor(key, "cron", "long report"), "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := NewScheduleAPI(ScheduleAPIOptions{Scheduler: scheduler})
+	server := httptest.NewServer(api.Handler())
+	defer server.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/schedule/"+task.ID+"/run", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("run status = %s", resp.Status)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("task did not start")
+	}
+
+	req, _ = http.NewRequest(http.MethodPost, server.URL+"/schedule/"+task.ID+"/cancel", nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("cancel status = %s", resp.Status)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		current, _ := scheduler.Get(task.ID)
+		if !current.Running {
+			if current.LastError != "run cancelled" {
+				t.Fatalf("last error = %q", current.LastError)
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("task did not stop after cancel")
 }

@@ -210,3 +210,11 @@ timezone = "Local"
 startup_grace = "5m"
 # Keep at most this many completed/failed tasks. 0 keeps all history.
 history_limit = 100
+# Maximum number of scheduled runs executing at the same time. 0 = unlimited.
+max_concurrent = 4
+# Spread due recurring runs over a random delay up to this duration. "0s"
+# disables it. One-shot tasks and manual runs are never delayed.
+jitter = "0s"
+# Default per-run timeout. Tasks can override it with --timeout. "0s" disables
+# the scheduler deadline; the engine's own timeout still applies.
+timeout = "30m"

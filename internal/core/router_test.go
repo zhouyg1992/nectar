@@ -240,6 +240,13 @@ type scriptedEngine struct {
 	events []engine.Event
 }
 
+type contextEngine struct {
+	started   sync.Once
+	cancelled sync.Once
+	startCh   chan struct{}
+	cancelCh  chan struct{}
+}
+
 type fakeTypingPlatform struct {
 	*fakePlatform
 	started atomic.Int32
@@ -271,6 +278,26 @@ func (s *scriptedEngine) stream() <-chan engine.Event {
 	close(ch)
 	return ch
 }
+
+func (e *contextEngine) Name() string { return "context" }
+
+func (e *contextEngine) Start(ctx context.Context, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	ch := make(chan engine.Event, 1)
+	ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: "context-session"}
+	e.started.Do(func() { close(e.startCh) })
+	go func() {
+		<-ctx.Done()
+		e.cancelled.Do(func() { close(e.cancelCh) })
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (e *contextEngine) Resume(ctx context.Context, _ string, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	return e.Start(ctx, "", engine.EngineOptions{})
+}
+
+func (e *contextEngine) Cancel(context.Context, string) error { return nil }
 
 func newTestRouter(t *testing.T, eng engine.EngineAdapter, plat platform.PlatformAdapter) (*Router, *comb.FileStore) {
 	t.Helper()
@@ -415,6 +442,46 @@ func TestRouterExecuteScheduledWaitsForAgentCompletion(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("ExecuteScheduled did not wait for completion")
+	}
+}
+
+func TestRouterExecuteScheduledCancelsEngineOnContextDone(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &contextEngine{
+		startCh:  make(chan struct{}),
+		cancelCh: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- router.ExecuteScheduled(ctx, platform.Message{
+			Channel: "feishu",
+			ChatID:  "c1",
+			Text:    "scheduled work",
+			Origin:  "schedule",
+		})
+	}()
+
+	select {
+	case <-eng.startCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("agent did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("ExecuteScheduled error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ExecuteScheduled did not return after cancellation")
+	}
+	select {
+	case <-eng.cancelCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("engine context was not cancelled")
 	}
 }
 
