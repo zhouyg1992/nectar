@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.6.0 — 2026-11-14
+
+### Added
+
+- Built-in scheduled tasks with standard five-field cron, fixed intervals, and one-shot runs, manageable from chat, the CLI, and a local Unix socket API
+- Persistent schedules with startup catch-up, timezone-aware previews, failure history, and a configurable history limit
+- Scheduling controls: global concurrency limits, recurring-run jitter, per-task timeouts, in-flight cancellation, and a `running` state
+- The `nectar-schedule` agent skill, installed by the installer, refreshed by `nectar update`, and independently removable
+- Complete `nectar uninstall` support, with options to keep or remove config, task data, workspaces, and backups
+
+### Changed
+
+- Scheduled tasks are enabled by default; management commands are limited to `bot.admin_users`, and an empty list leaves administration unrestricted
+- Reworked the README into a quick start and split engine, configuration, command, install, service, and scheduling references into dedicated docs
+
+### Fixed
+
+- Scheduled task status now changes only after the agent run actually completes, preventing long runs from being queued repeatedly
+- Failed schedule persistence now rolls back in-memory mutations and logs background write errors
+- Corrected cron wildcard step semantics for day-of-month/day-of-week combinations and the behavior of `startup_grace = "0s"`
+- `schedule run` no longer consumes a one-shot task's original plan
+
 ## v0.5.3 — 2026-11-13
 
 ### Fixed
