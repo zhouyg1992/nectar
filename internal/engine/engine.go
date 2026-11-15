@@ -18,6 +18,7 @@ const (
 	EventToolCall
 	EventToolResult
 	EventDone
+	EventUsage
 	EventError
 )
 
@@ -35,6 +36,8 @@ func (t EventType) String() string {
 		return "tool_result"
 	case EventDone:
 		return "done"
+	case EventUsage:
+		return "usage"
 	case EventError:
 		return "error"
 	default:

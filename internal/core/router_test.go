@@ -1152,6 +1152,41 @@ func TestRouterStreamsProgressAndFinalOnly(t *testing.T) {
 	}
 }
 
+func TestRouterMarksCompleteBeforeUsage(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventMessage, Text: "answer"},
+		{Type: engine.EventDone},
+		{Type: engine.EventUsage, Meta: map[string]any{
+			"usage":          `{"input_tokens":10,"output_tokens":5,"context_tokens":15}`,
+			"context_window": 100,
+		}},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "run"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	plat.mu.Lock()
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+	foundFinalizing := false
+	for _, card := range updates {
+		if card.Status == platform.CardFinalizing && card.Title == cardTitleComplete && card.Body == "answer" {
+			foundFinalizing = true
+			break
+		}
+	}
+	if !foundFinalizing {
+		t.Fatalf("missing finalizing card before usage: %#v", updates)
+	}
+	final := plat.lastUpdate()
+	if final.Status != platform.CardComplete || !strings.Contains(final.Footer, "ctx: 15/100 (15.0%)") {
+		t.Fatalf("final card = %#v", final)
+	}
+}
+
 func TestInitialCardBody(t *testing.T) {
 	if got := initialCardBody(false); got != "Hold on, warming up the hive…" {
 		t.Fatalf("initialCardBody(false) = %q", got)

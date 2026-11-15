@@ -22,6 +22,7 @@
 - Messages waiting behind another run now use a single card that transitions from Queued to Working to Complete
 - DingTalk AI card Markdown now preserves single line breaks
 - Session list, status, and session detail cards use Markdown tables for alignment
+- Chat cards switch to a finalizing Complete state as soon as the answer is ready; usage metadata updates the footer afterward
 
 ## v0.8.0 — 2026-11-14
 

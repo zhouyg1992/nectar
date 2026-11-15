@@ -54,7 +54,7 @@ esac
 	for event := range events {
 		got = append(got, event)
 	}
-	if len(got) != 3 {
+	if len(got) != 4 {
 		t.Fatalf("events = %#v", got)
 	}
 	if got[0].Type != engine.EventSessionStarted || got[0].SessionID != "ses_fake" {
@@ -66,8 +66,11 @@ esac
 	if got[2].Type != engine.EventDone {
 		t.Fatalf("done = %#v", got[2])
 	}
-	if got[2].Meta["usage"] != `{"cached_input_tokens":25,"context_tokens":180,"input_tokens":120,"output_tokens":35}` {
-		t.Fatalf("usage = %v", got[2].Meta["usage"])
+	if got[3].Type != engine.EventUsage {
+		t.Fatalf("usage event = %#v", got[3])
+	}
+	if got[3].Meta["usage"] != `{"cached_input_tokens":25,"context_tokens":180,"input_tokens":120,"output_tokens":35}` {
+		t.Fatalf("usage = %v", got[3].Meta["usage"])
 	}
 }
 

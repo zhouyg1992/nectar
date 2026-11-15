@@ -22,6 +22,7 @@
 - 排在其它运行后面的消息会使用同一张卡片，从 Queued 原地变为 Working 和 Complete
 - 钉钉 AI 卡片 Markdown 现在会保留单换行
 - 会话列表、状态和会话详情卡片改用 Markdown 表格对齐
+- 聊天卡片在答案就绪后先进入可更新的 Complete/Finalizing 状态，usage 到达后再补页脚
 
 ## v0.8.0 — 2026-11-14
 

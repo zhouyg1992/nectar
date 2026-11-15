@@ -168,24 +168,30 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 		}
 		if waitErr != nil {
 			emit(engine.Event{Type: engine.EventError, Text: processError(runCtx, waitErr, stderr.String())})
-		} else if !sentDone {
-			done := engine.Event{Type: engine.EventDone}
+		} else {
+			if !sentDone {
+				emit(engine.Event{Type: engine.EventDone})
+			}
 			if parseErr == nil && trackedSession != "" {
-				contextUsage := a.sessionUsage(trackedSession, workdir)
-				if contextUsage == nil && parsedUsage != nil && !parsedUsage.Last.empty() {
+				contextUsage := (*tokenUsage)(nil)
+				if parsedUsage != nil && !parsedUsage.Last.empty() {
 					last := parsedUsage.Last
 					contextUsage = &last
+				}
+				if contextUsage == nil {
+					contextUsage = a.sessionUsage(trackedSession, workdir)
 				}
 				var turnUsage *tokenUsage
 				if parsedUsage != nil && !parsedUsage.Turn.empty() {
 					turn := parsedUsage.Turn
 					turnUsage = &turn
 				}
-				if meta := opencodeUsageMeta(contextUsage, turnUsage); meta != nil {
-					done.Meta = meta
+				usage := engine.Event{Type: engine.EventUsage}
+				usage.Meta = opencodeUsageMeta(contextUsage, turnUsage)
+				if usage.Meta != nil {
+					emit(usage)
 				}
 			}
-			emit(done)
 		}
 	}()
 

@@ -70,8 +70,17 @@ func TestCardFinalStatuses(t *testing.T) {
 	if cardFinal(platform.CardThinking) {
 		t.Fatal("CardThinking must remain updatable for queued/working cards")
 	}
+	if cardFinal(platform.CardFinalizing) {
+		t.Fatal("CardFinalizing must remain updatable while usage is collected")
+	}
 	if !cardFinal(platform.CardInfo) {
 		t.Fatal("CardInfo should remain a final command/status card")
+	}
+	if got := cardTheme(platform.CardFinalizing); got != "green" {
+		t.Fatalf("CardFinalizing theme = %q, want green", got)
+	}
+	if got := cardFlowStatus(platform.CardFinalizing, false); got != "PROCESSING" {
+		t.Fatalf("CardFinalizing flow = %q, want PROCESSING", got)
 	}
 }
 

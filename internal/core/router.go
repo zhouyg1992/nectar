@@ -612,6 +612,62 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	toolCount := 0
 	displayBody := ""
 	var lastCardUpdate time.Time
+	finalizing := false
+
+	answerText := func() string {
+		answer := strings.TrimSpace(explicitFinal)
+		if answer == "" {
+			answer = strings.TrimSpace(finalMessage)
+		}
+		if answer == "" {
+			answer = strings.TrimSpace(stream.String())
+		}
+		if answer == "" {
+			answer = strings.TrimSpace(lastAgentMessage)
+		}
+		if answer == "" {
+			if len(errTexts) > 0 {
+				answer = "❌ " + strings.Join(errTexts, "\n")
+			} else if len(toolErrors) > 0 {
+				answer = "❌ " + strings.Join(toolErrors, "\n")
+			} else {
+				answer = "(Agent returned no text output)"
+			}
+		} else if len(errTexts) > 0 {
+			answer += "\n\n⚠️ " + strings.Join(errTexts, "\n")
+		}
+		if sessionNotice != "" {
+			answer = sessionNotice + "\n\n" + answer
+		}
+		if len(answer) > maxReplyBytes {
+			answer = execguard.Truncate(answer, maxReplyBytes) + "\n\n… (output truncated)"
+		}
+		return answer
+	}
+
+	hasAnswer := func() bool {
+		return strings.TrimSpace(explicitFinal) != "" ||
+			strings.TrimSpace(finalMessage) != "" ||
+			stream.Len() > 0 ||
+			strings.TrimSpace(lastAgentMessage) != ""
+	}
+
+	updateFinalizingCard := func() {
+		if cardID == "" || !hasAnswer() || len(errTexts) > 0 {
+			return
+		}
+		finalizing = true
+		reply := replyTarget(msg)
+		reply.Card = &platform.Card{
+			Status: platform.CardFinalizing,
+			Title:  cardTitleComplete,
+			Body:   answerText(),
+			Footer: cardFooter(modelName, time.Since(startedAt), usage, contextWindow),
+		}
+		if err := r.platform.Update(r.ctx, cardID, reply); err != nil {
+			r.logger.Debug("update finalizing card failed", "error", err)
+		}
+	}
 
 	updateProgress := func(body string, force bool) {
 		if cardID == "" {
@@ -683,9 +739,22 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 				errTexts = append(errTexts, ev.Text)
 			}
 		case engine.EventDone:
-			usage = parseUsage(ev.Meta)
+			if parsed := parseUsage(ev.Meta); parsed != nil {
+				usage = parsed
+			}
 			if value := metaInt(ev.Meta, "context_window"); value > 0 {
 				contextWindow = value
+			}
+			updateFinalizingCard()
+		case engine.EventUsage:
+			if parsed := parseUsage(ev.Meta); parsed != nil {
+				usage = parsed
+			}
+			if value := metaInt(ev.Meta, "context_window"); value > 0 {
+				contextWindow = value
+			}
+			if finalizing {
+				updateFinalizingCard()
 			}
 		}
 	}
@@ -696,36 +765,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		r.logger.Warn("could not finish session turn", "error", err)
 	}
 
-	// Codex exec does not reliably mark the final answer in JSONL. Prefer an
-	// explicit final_answer phase, then the last non-commentary message, then
-	// the last streamed/received message.
-	answer := strings.TrimSpace(explicitFinal)
-	if answer == "" {
-		answer = strings.TrimSpace(finalMessage)
-	}
-	if answer == "" {
-		answer = strings.TrimSpace(stream.String())
-	}
-	if answer == "" {
-		answer = strings.TrimSpace(lastAgentMessage)
-	}
-	if answer == "" {
-		if len(errTexts) > 0 {
-			answer = "❌ " + strings.Join(errTexts, "\n")
-		} else if len(toolErrors) > 0 {
-			answer = "❌ " + strings.Join(toolErrors, "\n")
-		} else {
-			answer = "(Agent returned no text output)"
-		}
-	} else if len(errTexts) > 0 {
-		answer += "\n\n⚠️ " + strings.Join(errTexts, "\n")
-	}
-	if sessionNotice != "" {
-		answer = sessionNotice + "\n\n" + answer
-	}
-	if len(answer) > maxReplyBytes {
-		answer = execguard.Truncate(answer, maxReplyBytes) + "\n\n… (output truncated)"
-	}
+	answer := answerText()
 
 	elapsed := time.Since(startedAt)
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
