@@ -466,6 +466,7 @@ func TestRouterSendsQueuedNoticeForWaitingMessage(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.QueueNoticeDelay = 10 * time.Millisecond
 
 	router.Handle(platform.Message{
 		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "first",
@@ -479,9 +480,53 @@ func TestRouterSendsQueuedNoticeForWaitingMessage(t *testing.T) {
 		Channel: "feishu", ChatID: "c1", MessageID: "m2", Text: "second",
 	})
 	waitForReplies(t, plat, 1)
-	if reply := plat.lastReply(); !strings.Contains(reply, "Queued") || !strings.Contains(reply, "1 message ahead") {
+	if reply := plat.lastReply(); !strings.Contains(reply, "Queued") || !strings.Contains(reply, "1 task ahead") {
 		t.Fatalf("queued notice = %q", reply)
 	}
 	close(eng.release)
 	waitForReplies(t, plat, 3)
+}
+
+func TestRouterQueuedNoticeReusesCard(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &blockingEngine{
+		startCh: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.QueueNoticeDelay = 10 * time.Millisecond
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "first",
+	})
+	select {
+	case <-eng.startCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first run did not start")
+	}
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m2", Text: "second",
+	})
+	waitForCardSends(t, plat, 2)
+	plat.mu.Lock()
+	queued := plat.sentCards[1]
+	plat.mu.Unlock()
+	if queued.Title != "⏳ Queued" || !strings.Contains(queued.Body, "1 task ahead") {
+		t.Fatalf("queued card = %#v", queued)
+	}
+
+	close(eng.release)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if plat.cardUpdateCount() >= 3 && plat.lastUpdate().Body == "finished" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if plat.cardUpdateCount() < 3 || plat.lastUpdate().Body != "finished" {
+		t.Fatalf("second run did not finish in the queued card: %#v", plat.lastUpdate())
+	}
+	if got := plat.cardSendCount(); got != 2 {
+		t.Fatalf("queued run sent a second card: sent=%d, want 2", got)
+	}
 }

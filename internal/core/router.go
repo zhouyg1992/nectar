@@ -36,6 +36,7 @@ type RouterConfig struct {
 	ModelName              string
 	ContextWindow          int
 	CardUpdateInterval     time.Duration
+	QueueNoticeDelay       time.Duration
 	EngineOptions          engine.EngineOptions
 	AdminUsers             []string
 	DataDir                string
@@ -50,6 +51,18 @@ type sessionRun struct {
 	key             SessionKey
 	cancel          context.CancelFunc
 	engineSessionID string
+	notice          *queuedRunNotice
+}
+
+type queuedRunNotice struct {
+	mu        sync.Mutex
+	msg       platform.Message
+	ahead     int
+	cardID    string
+	sent      bool
+	started   bool
+	canceled  bool
+	startedCh chan struct{}
 }
 
 type Router struct {
@@ -99,6 +112,9 @@ func NewRouter(
 	if cfg.CardUpdateInterval <= 0 {
 		cfg.CardUpdateInterval = 2 * time.Second
 	}
+	if cfg.QueueNoticeDelay <= 0 {
+		cfg.QueueNoticeDelay = 800 * time.Millisecond
+	}
 	if cfg.MemoryMaxItems <= 0 {
 		cfg.MemoryMaxItems = 6
 	}
@@ -140,10 +156,10 @@ func (r *Router) newRunID(sessionID string) string {
 	return fmt.Sprintf("%s:%d", sessionID, r.runSeq.Add(1))
 }
 
-func (r *Router) trackRun(runID, sessionID string, key SessionKey, cancel context.CancelFunc) {
+func (r *Router) trackRun(runID, sessionID string, key SessionKey, cancel context.CancelFunc, notice *queuedRunNotice) {
 	r.runMu.Lock()
 	defer r.runMu.Unlock()
-	r.runs[runID] = &sessionRun{sessionID: sessionID, key: key, cancel: cancel}
+	r.runs[runID] = &sessionRun{sessionID: sessionID, key: key, cancel: cancel, notice: notice}
 }
 
 func (r *Router) untrackRun(runID string) {
@@ -181,6 +197,101 @@ func (r *Router) isSessionRunning(sessionID string) bool {
 		}
 	}
 	return false
+}
+
+func newQueuedRunNotice(msg platform.Message) *queuedRunNotice {
+	return &queuedRunNotice{
+		msg:       msg,
+		startedCh: make(chan struct{}),
+	}
+}
+
+func (n *queuedRunNotice) setAhead(ahead int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.ahead = ahead
+}
+
+func (n *queuedRunNotice) markStarted() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.started {
+		return n.cardID
+	}
+	n.started = true
+	close(n.startedCh)
+	return n.cardID
+}
+
+func (r *Router) sendQueuedNoticeAfter(ctx context.Context, notice *queuedRunNotice) {
+	timer := time.NewTimer(r.cfg.QueueNoticeDelay)
+	defer timer.Stop()
+	select {
+	case <-notice.startedCh:
+		return
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
+
+	notice.mu.Lock()
+	defer notice.mu.Unlock()
+	if notice.started || notice.canceled || notice.sent {
+		return
+	}
+	noun := "tasks"
+	if notice.ahead == 1 {
+		noun = "task"
+	}
+	card := &platform.Card{
+		Status: platform.CardInfo,
+		Title:  "⏳ Queued",
+		Body:   fmt.Sprintf("%d %s ahead. I'll start after the current run finishes.", notice.ahead, noun),
+	}
+	id, err := r.sendCardReply(notice.msg, card)
+	if err != nil {
+		r.logger.Debug("send queued notice failed", "error", err)
+		return
+	}
+	notice.sent = true
+	notice.cardID = id
+}
+
+func (r *Router) cancelQueuedNotice(notice *queuedRunNotice) {
+	if notice == nil {
+		return
+	}
+	notice.mu.Lock()
+	if notice.started || notice.canceled {
+		notice.mu.Unlock()
+		return
+	}
+	notice.canceled = true
+	cardID := notice.cardID
+	msg := notice.msg
+	notice.mu.Unlock()
+	if cardID == "" {
+		return
+	}
+	reply := replyTarget(msg)
+	reply.Card = &platform.Card{
+		Status: platform.CardError,
+		Title:  "⚠️ Cancelled",
+		Body:   "Cancelled while queued.",
+	}
+	if err := r.platform.Update(r.ctx, cardID, reply); err != nil {
+		r.logger.Debug("cancel queued notice failed", "error", err)
+	}
+}
+
+func (r *Router) sendCardReply(msg platform.Message, card *platform.Card) (string, error) {
+	if caps := r.platform.Capabilities(); caps.Card {
+		reply := replyTarget(msg)
+		reply.Card = card
+		return r.platform.Send(r.ctx, reply)
+	}
+	fallback := strings.TrimSpace(card.Title + "\n\n" + card.Body)
+	return "", r.reply(msg, fallback)
 }
 
 func (r *Router) Handle(msg platform.Message) {
@@ -259,18 +370,16 @@ func (r *Router) Handle(msg platform.Message) {
 	}
 	runCtx, cancel := context.WithCancel(r.ctx)
 	runID := r.newRunID(session.ID)
-	r.trackRun(runID, session.ID, key, cancel)
+	notice := newQueuedRunNotice(msg)
+	r.trackRun(runID, session.ID, key, cancel, notice)
 	ahead := r.queue.Do(session.ID, func() {
 		defer cancel()
 		defer r.untrackRun(runID)
-		r.execute(runCtx, key, session.ID, runID, msg, text)
+		r.execute(runCtx, key, session.ID, runID, msg, text, notice)
 	})
 	if ahead > 0 {
-		noun := "messages"
-		if ahead == 1 {
-			noun = "message"
-		}
-		_ = r.reply(msg, fmt.Sprintf("⏳ Queued · %d %s ahead. I'll start after the current run finishes.", ahead, noun))
+		notice.setAhead(ahead)
+		go r.sendQueuedNoticeAfter(runCtx, notice)
 	}
 }
 
@@ -306,7 +415,7 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	runID := r.newRunID(session.ID)
-	r.trackRun(runID, session.ID, key, cancel)
+	r.trackRun(runID, session.ID, key, cancel, nil)
 	done := make(chan error, 1)
 	r.queue.Do(session.ID, func() {
 		defer cancel()
@@ -315,7 +424,7 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 			done <- err
 			return
 		}
-		done <- r.execute(runCtx, key, session.ID, runID, msg, text)
+		done <- r.execute(runCtx, key, session.ID, runID, msg, text, nil)
 	})
 	select {
 	case err := <-done:
@@ -325,7 +434,7 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 	}
 }
 
-func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string) error {
+func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string, notice *queuedRunNotice) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -367,6 +476,10 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
 
+	initialCardID := ""
+	if notice != nil {
+		initialCardID = notice.markStarted()
+	}
 	cardID := ""
 	caps := r.platform.Capabilities()
 	stopTyping := func() {}
@@ -377,7 +490,21 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 	defer stopTyping()
 
-	if caps.Card && caps.Streaming {
+	if initialCardID != "" {
+		initial := &platform.Card{
+			Status: platform.CardThinking,
+			Title:  cardTitleThinking,
+			Body:   initialCardBody(len(msg.Attachments) > 0),
+		}
+		reply := replyTarget(msg)
+		reply.Card = initial
+		if err := r.platform.Update(r.ctx, initialCardID, reply); err != nil {
+			r.logger.Warn("update queued card failed", "error", err)
+		} else {
+			cardID = initialCardID
+		}
+	}
+	if cardID == "" && caps.Card && caps.Streaming {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
@@ -665,6 +792,7 @@ func (r *Router) stop(key SessionKey, msg platform.Message) {
 		if run.cancel != nil {
 			run.cancel()
 		}
+		r.cancelQueuedNotice(run.notice)
 		if run.engineSessionID != "" {
 			_ = r.engine.Cancel(r.ctx, run.engineSessionID)
 		}

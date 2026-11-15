@@ -19,7 +19,7 @@
 - 归档会话不会被迟到的引擎事件复活；新增 `/unarchive` 恢复会话
 - `/list` 的数字快捷方式只统计未归档会话；归档条目使用 `archived:` 前缀
 - 会话名会移除 Markdown/HTML 元字符；自动命名会先做凭据脱敏
-- 排在其它运行后面的消息会立即收到 `Queued · N messages ahead` 提示
+- 排在其它运行后面的消息会使用同一张卡片，从 Queued 原地变为 Working 和 Complete
 
 ## v0.8.0 — 2026-11-14
 
