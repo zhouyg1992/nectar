@@ -111,16 +111,15 @@ func (r *Router) sessionListText(key SessionKey, includeArchived bool) string {
 	activeID := r.sessions.ActiveID(key)
 	lines := make([]string, 0, len(sessions)+2)
 	for index, session := range sessions {
-		marker := " "
+		marker := ""
 		if session.ID == activeID {
-			marker = "*"
+			marker = " · active"
 		}
 		status := ""
 		if session.Status != SessionStatusActive {
 			status = " [" + session.Status + "]"
 		}
-		lines = append(lines, fmt.Sprintf("%s %d. %s%s  %s  %s  %s  %s",
-			marker,
+		lines = append(lines, fmt.Sprintf("#%d  %s%s  ·  %s  ·  %s  ·  %s  ·  %s%s",
 			index+1,
 			session.DisplayName(),
 			status,
@@ -128,9 +127,10 @@ func (r *Router) sessionListText(key SessionKey, includeArchived bool) string {
 			session.AgentID,
 			sessionContext(session),
 			formatSessionAge(session.LastUsedAt),
+			marker,
 		))
 	}
-	lines = append(lines, "", "Use /switch <id|#|name>. /list all includes archived sessions.")
+	lines = append(lines, "", "Use /switch #1, /switch <id>, or /switch <name>. /list all includes archived sessions.")
 	return strings.Join(lines, "\n")
 }
 

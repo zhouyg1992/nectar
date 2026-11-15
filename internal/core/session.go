@@ -175,7 +175,7 @@ func NewPersistentSessionStore(path string) (*SessionStore, error) {
 		}
 		name := cleanSessionName(item.Name)
 		if name == "" && file.Version < sessionFileVersion {
-			name = legacySessionName(item.AgentID, updated)
+			name = legacySessionName(updated)
 		}
 		status := strings.TrimSpace(item.Status)
 		if status == "" {
@@ -750,12 +750,8 @@ func deriveSessionName(prompt string) string {
 	return prompt
 }
 
-func legacySessionName(agentID string, updated time.Time) string {
-	label := strings.TrimSpace(agentID)
-	if label == "" {
-		label = "Session"
-	}
-	return label + " " + updated.Local().Format("Jan 02 15:04")
+func legacySessionName(updated time.Time) string {
+	return "Session " + updated.Local().Format("Jan 02 15:04")
 }
 
 func (p persistedSession) key() SessionKey {

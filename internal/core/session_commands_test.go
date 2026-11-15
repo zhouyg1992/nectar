@@ -36,10 +36,13 @@ func TestRouterSessionCommandsPreserveAndSwitch(t *testing.T) {
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m4", Text: "/list"})
 	waitForReplies(t, plat, 4)
 	listReply := plat.lastReply()
-	for _, want := range []string{"first task", "second", "* 1."} {
+	for _, want := range []string{"first task", "second", "#1", "active"} {
 		if !strings.Contains(listReply, want) {
 			t.Fatalf("list reply = %q, want %q", listReply, want)
 		}
+	}
+	if strings.Contains(listReply, "* 1.") || strings.Contains(listReply, "\n  2.") {
+		t.Fatalf("list reply uses markdown list markers: %q", listReply)
 	}
 
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m5", Text: "/switch " + first.ID})
