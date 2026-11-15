@@ -364,7 +364,6 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID string, 
 	var usage *tokenUsage
 	contextWindow := r.cfg.ContextWindow
 	toolCount := 0
-	lastTool := ""
 	displayBody := ""
 	var lastCardUpdate time.Time
 
@@ -378,9 +377,6 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID string, 
 		activity := ""
 		if toolCount > 0 {
 			activity = fmt.Sprintf("⏳ Tool calls · %d", toolCount)
-			if lastTool != "" {
-				activity += " · " + lastTool
-			}
 		}
 		card := &platform.Card{
 			Status:   platform.CardThinking,
@@ -429,9 +425,6 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID string, 
 		case engine.EventToolCall:
 			r.logger.Debug("agent tool call", "chat", msg.ChatID, "command", ev.Text)
 			toolCount++
-			if tool := toolEventName(ev); tool != "" {
-				lastTool = tool
-			}
 			updateProgress(displayBody, true)
 		case engine.EventToolResult:
 			r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)
@@ -811,22 +804,6 @@ func metaInt(meta map[string]any, key string) int {
 	default:
 		return 0
 	}
-}
-
-func toolEventName(ev engine.Event) string {
-	if ev.Meta == nil {
-		return ""
-	}
-	tool, _ := ev.Meta["tool"].(string)
-	tool = strings.Join(strings.Fields(strings.TrimSpace(tool)), " ")
-	if tool == "command_execution" {
-		tool = "command"
-	}
-	runes := []rune(tool)
-	if len(runes) > 24 {
-		return string(runes[:24]) + "…"
-	}
-	return tool
 }
 
 func cardFooter(model string, elapsed time.Duration, usage *tokenUsage, contextWindow int) string {
