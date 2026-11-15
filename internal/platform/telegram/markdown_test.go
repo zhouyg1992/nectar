@@ -70,3 +70,18 @@ func TestTruncatePreviewKeepsTail(t *testing.T) {
 		t.Fatalf("preview = %q", got)
 	}
 }
+
+func TestRenderSessionListIsPlatformSafe(t *testing.T) {
+	source := "1:  hello  ·  ses_bca6ee20  ·  codex  ·  ctx 18.7k/996.1k (1.9%)  ·  just now  ·  active\n" +
+		"2:  Session Nov 15 16:58  ·  ses_04a8d5d7  ·  codex  ·  ctx 19.2k/996.1k (2.0%)  ·  just now\n\n" +
+		"Use /switch 1, /switch ID, or /switch NAME. /list all includes archived sessions."
+	got := renderTelegramHTML(source)
+	for _, want := range []string{"1:", "active", "Use /switch 1"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("telegram html = %q, want %q", got, want)
+		}
+	}
+	if strings.Contains(got, "<id>") || strings.Contains(got, "<name>") {
+		t.Fatalf("telegram html contains raw placeholder markup: %q", got)
+	}
+}

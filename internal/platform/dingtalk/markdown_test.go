@@ -77,6 +77,21 @@ func TestEscapeHTMLOutsideCode(t *testing.T) {
 	}
 }
 
+func TestNormalizeSessionListIsPlatformSafe(t *testing.T) {
+	body := "1:  hello  ·  ses_bca6ee20  ·  codex  ·  ctx 18.7k/996.1k (1.9%)  ·  just now  ·  active\n" +
+		"2:  Session Nov 15 16:58  ·  ses_04a8d5d7  ·  codex  ·  ctx 19.2k/996.1k (2.0%)  ·  just now\n\n" +
+		"Use /switch 1, /switch ID, or /switch NAME. /list all includes archived sessions."
+	if got := normalizeA2UIMarkdown(body); got != body {
+		t.Fatalf("session list changed by dingtalk sanitizer:\\n%s", got)
+	}
+	fallback := preprocessDingTalkMarkdown(body)
+	for _, want := range []string{"1:", "active", "Use /switch 1"} {
+		if !strings.Contains(fallback, want) {
+			t.Fatalf("dingtalk fallback = %q, want %q", fallback, want)
+		}
+	}
+}
+
 func TestTruncateUTF8(t *testing.T) {
 	input := strings.Repeat("中文", maxCardBodyBytes)
 	got := truncateUTF8(input, maxCardBodyBytes)
