@@ -1191,6 +1191,36 @@ func TestRouterShowsToolCountAndReplacesIntermediateOutput(t *testing.T) {
 	}
 }
 
+func TestRouterShowsLastToolNameInProgressActivity(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventToolCall, Text: "rg foo", Meta: map[string]any{"tool": "grep"}},
+		{Type: engine.EventToolCall, Text: "cat a.txt", Meta: map[string]any{"tool": "read"}},
+		{Type: engine.EventMessage, Text: "final answer"},
+		{Type: engine.EventDone},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.CardUpdateInterval = time.Nanosecond
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "inspect"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	plat.mu.Lock()
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+	found := false
+	for _, card := range updates {
+		if card.Activity == "⏳ Tool calls · 2 · read" && card.Body == "final answer" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing last-tool activity: %#v", updates)
+	}
+}
+
 func TestRouterRendersEngineUsage(t *testing.T) {
 	plat := &fakePlatform{cards: true}
 	eng := &scriptedEngine{events: []engine.Event{
