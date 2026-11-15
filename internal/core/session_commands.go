@@ -236,7 +236,7 @@ func sessionContext(session Session) string {
 		return "ctx -"
 	}
 	percent := float64(session.ContextTokens) / float64(session.ContextWindow) * 100
-	return fmt.Sprintf("ctx %s/%s (%.0f%%)",
+	return fmt.Sprintf("ctx %s/%s (%.1f%%)",
 		formatTokens(session.ContextTokens), formatTokens(session.ContextWindow), percent)
 }
 
