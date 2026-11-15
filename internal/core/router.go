@@ -260,11 +260,18 @@ func (r *Router) Handle(msg platform.Message) {
 	runCtx, cancel := context.WithCancel(r.ctx)
 	runID := r.newRunID(session.ID)
 	r.trackRun(runID, session.ID, key, cancel)
-	r.queue.Do(session.ID, func() {
+	ahead := r.queue.Do(session.ID, func() {
 		defer cancel()
 		defer r.untrackRun(runID)
 		r.execute(runCtx, key, session.ID, runID, msg, text)
 	})
+	if ahead > 0 {
+		noun := "messages"
+		if ahead == 1 {
+			noun = "message"
+		}
+		_ = r.reply(msg, fmt.Sprintf("⏳ Queued · %d %s ahead. I'll start after the current run finishes.", ahead, noun))
+	}
 }
 
 // ExecuteScheduled runs a scheduler-owned prompt through the same per-session

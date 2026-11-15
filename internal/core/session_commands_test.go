@@ -458,3 +458,30 @@ func TestRouterSerializesRunsSharingWorkspace(t *testing.T) {
 	}
 	waitForReplies(t, plat, 3)
 }
+
+func TestRouterSendsQueuedNoticeForWaitingMessage(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &blockingEngine{
+		startCh: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "first",
+	})
+	select {
+	case <-eng.startCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first run did not start")
+	}
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m2", Text: "second",
+	})
+	waitForReplies(t, plat, 1)
+	if reply := plat.lastReply(); !strings.Contains(reply, "Queued") || !strings.Contains(reply, "1 message ahead") {
+		t.Fatalf("queued notice = %q", reply)
+	}
+	close(eng.release)
+	waitForReplies(t, plat, 3)
+}

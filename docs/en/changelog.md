@@ -19,6 +19,7 @@
 - Archived sessions cannot be revived by late engine events, and `/unarchive` restores them
 - Numeric `/list` shortcuts only count non-archived sessions; archived entries are prefixed with `archived:`
 - Session names strip Markdown/HTML metacharacters, and auto-generated names redact credentials
+- Messages waiting behind another run now receive a `Queued · N messages ahead` notice
 
 ## v0.8.0 — 2026-11-14
 

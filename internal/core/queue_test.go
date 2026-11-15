@@ -67,3 +67,30 @@ func TestQueueAllowsDifferentKeys(t *testing.T) {
 	}
 	close(release)
 }
+
+func TestQueueReportsPosition(t *testing.T) {
+	q := NewQueue()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	secondDone := make(chan struct{})
+
+	first := q.Do("same", func() {
+		close(started)
+		<-release
+	})
+	<-started
+	second := q.Do("same", func() {
+		close(secondDone)
+	})
+	other := q.Do("other", func() {})
+
+	if first != 0 || second != 1 || other != 0 {
+		t.Fatalf("queue positions = %d, %d, %d; want 0, 1, 0", first, second, other)
+	}
+	close(release)
+	select {
+	case <-secondDone:
+	case <-time.After(time.Second):
+		t.Fatal("queued job did not run")
+	}
+}
