@@ -245,7 +245,7 @@ func (r *Router) sendQueuedNoticeAfter(ctx context.Context, notice *queuedRunNot
 	}
 	card := &platform.Card{
 		Status: platform.CardThinking,
-		Title:  "Queued",
+		Title:  r.queuedCardTitle(),
 		Body:   fmt.Sprintf("%d %s ahead. I'll start after the current run finishes.", notice.ahead, noun),
 	}
 	id, err := r.sendCardReply(notice.msg, card)
@@ -255,6 +255,13 @@ func (r *Router) sendQueuedNoticeAfter(ctx context.Context, notice *queuedRunNot
 	}
 	notice.sent = true
 	notice.cardID = id
+}
+
+func (r *Router) queuedCardTitle() string {
+	if r.platform.Name() == "dingtalk" {
+		return "🕒 Queued"
+	}
+	return "⏳ Queued"
 }
 
 func (r *Router) cancelQueuedNotice(notice *queuedRunNotice) {

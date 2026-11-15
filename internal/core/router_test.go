@@ -25,6 +25,7 @@ import (
 
 type fakePlatform struct {
 	mu              sync.Mutex
+	name            string
 	cards           bool
 	replies         []string
 	sentCards       []platform.Card
@@ -40,7 +41,12 @@ type fakePlatform struct {
 	downloadErr     error
 }
 
-func (f *fakePlatform) Name() string { return "fake" }
+func (f *fakePlatform) Name() string {
+	if f.name != "" {
+		return f.name
+	}
+	return "fake"
+}
 func (f *fakePlatform) Capabilities() platform.Capabilities {
 	return platform.Capabilities{Card: f.cards, Streaming: f.cards}
 }

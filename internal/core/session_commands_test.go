@@ -511,7 +511,7 @@ func TestRouterQueuedNoticeReusesCard(t *testing.T) {
 	plat.mu.Lock()
 	queued := plat.sentCards[1]
 	plat.mu.Unlock()
-	if queued.Status != platform.CardThinking || queued.Title != "Queued" || !strings.Contains(queued.Body, "1 task ahead") {
+	if queued.Status != platform.CardThinking || queued.Title != "⏳ Queued" || !strings.Contains(queued.Body, "1 task ahead") {
 		t.Fatalf("queued card = %#v", queued)
 	}
 
@@ -528,5 +528,22 @@ func TestRouterQueuedNoticeReusesCard(t *testing.T) {
 	}
 	if got := plat.cardSendCount(); got != 2 {
 		t.Fatalf("queued run sent a second card: sent=%d, want 2", got)
+	}
+}
+
+func TestQueuedCardTitleByPlatform(t *testing.T) {
+	cases := []struct {
+		platform string
+		want     string
+	}{
+		{platform: "dingtalk", want: "🕒 Queued"},
+		{platform: "feishu", want: "⏳ Queued"},
+		{platform: "telegram", want: "⏳ Queued"},
+	}
+	for _, tc := range cases {
+		router, _ := newTestRouter(t, &fakeEngine{}, &fakePlatform{name: tc.platform})
+		if got := router.queuedCardTitle(); got != tc.want {
+			t.Fatalf("queuedCardTitle(%s) = %q, want %q", tc.platform, got, tc.want)
+		}
 	}
 }
