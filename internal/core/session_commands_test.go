@@ -511,7 +511,7 @@ func TestRouterQueuedNoticeReusesCard(t *testing.T) {
 	plat.mu.Lock()
 	queued := plat.sentCards[1]
 	plat.mu.Unlock()
-	if queued.Title != "⏳ Queued" || !strings.Contains(queued.Body, "1 task ahead") {
+	if queued.Status != platform.CardThinking || queued.Title != "Queued" || !strings.Contains(queued.Body, "1 task ahead") {
 		t.Fatalf("queued card = %#v", queued)
 	}
 

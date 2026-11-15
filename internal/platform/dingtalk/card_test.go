@@ -66,6 +66,15 @@ func TestBuildCreatePayloadGroup(t *testing.T) {
 	}
 }
 
+func TestCardFinalStatuses(t *testing.T) {
+	if cardFinal(platform.CardThinking) {
+		t.Fatal("CardThinking must remain updatable for queued/working cards")
+	}
+	if !cardFinal(platform.CardInfo) {
+		t.Fatal("CardInfo should remain a final command/status card")
+	}
+}
+
 func TestBuildCreatePayloadDirect(t *testing.T) {
 	adapter := testAdapter(t)
 	rc := replyContext{

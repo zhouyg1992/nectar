@@ -244,8 +244,8 @@ func (r *Router) sendQueuedNoticeAfter(ctx context.Context, notice *queuedRunNot
 		noun = "task"
 	}
 	card := &platform.Card{
-		Status: platform.CardInfo,
-		Title:  "⏳ Queued",
+		Status: platform.CardThinking,
+		Title:  "Queued",
 		Body:   fmt.Sprintf("%d %s ahead. I'll start after the current run finishes.", notice.ahead, noun),
 	}
 	id, err := r.sendCardReply(notice.msg, card)
