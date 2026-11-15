@@ -11,6 +11,14 @@ import (
 
 // handleSessionCommand returns true when text was a session command.
 func (r *Router) handleSessionCommand(key SessionKey, msg platform.Message, text string) bool {
+	if !isSessionManagementCommand(text) {
+		return false
+	}
+	if !r.canManageSessions(msg) {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can manage sessions in group chats.")
+		return true
+	}
+
 	if name, ok := commandArg(text, "/new", "/reset"); ok {
 		session, err := r.sessions.Create(key, name)
 		if err != nil {
@@ -22,12 +30,12 @@ func (r *Router) handleSessionCommand(key SessionKey, msg platform.Message, text
 	}
 
 	if arg, ok := commandArg(text, "/list", "/sessions"); ok {
-		includeArchived := strings.EqualFold(strings.TrimSpace(arg), "all")
-		if arg != "" && !includeArchived {
-			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /list [all]")
+		includeArchived, limit, err := parseSessionListArgs(arg)
+		if err != nil {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /list [all] [limit]")
 			return true
 		}
-		r.sendCommandResult(msg, platform.CardInfo, "🌿 Sessions", r.sessionListText(key, includeArchived))
+		r.sendCommandResult(msg, platform.CardInfo, "🌿 Sessions", r.sessionListText(key, includeArchived, limit))
 		return true
 	}
 
@@ -75,7 +83,7 @@ func (r *Router) handleSessionCommand(key SessionKey, msg platform.Message, text
 			return true
 		}
 		updated, _ := r.sessions.GetSession(session.ID)
-		r.sendCommandResult(msg, platform.CardInfo, "✏️ Session Renamed", "Renamed to **"+updated.DisplayName()+"**.")
+		r.sendCommandResult(msg, platform.CardInfo, "✏️ Session Renamed", "Renamed to "+updated.DisplayName()+".")
 		return true
 	}
 
@@ -97,30 +105,80 @@ func (r *Router) handleSessionCommand(key SessionKey, msg platform.Message, text
 		return true
 	}
 
+	if ref, ok := commandArg(text, "/unarchive", "/restore"); ok {
+		if ref == "" {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /unarchive <id|name>")
+			return true
+		}
+		session, err := r.findSessionIncludingArchived(key, ref)
+		if err != nil {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Session Not Found", err.Error())
+			return true
+		}
+		session, err = r.sessions.Unarchive(key, session.ID)
+		if err != nil {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Restore Failed", err.Error())
+			return true
+		}
+		r.sendCommandResult(msg, platform.CardInfo, "📤 Session Restored", sessionDetailText(session, r.engine.Name(), r.resolvedModel()))
+		return true
+	}
+
 	return false
 }
 
-func (r *Router) sessionListText(key SessionKey, includeArchived bool) string {
+func (r *Router) canManageSessions(msg platform.Message) bool {
+	return !isGroupChat(msg) || r.isAdmin(msg.UserID)
+}
+
+func isSessionManagementCommand(text string) bool {
+	for _, command := range []string{
+		"/new", "/reset", "/list", "/sessions", "/switch", "/current",
+		"/rename", "/archive", "/unarchive", "/restore",
+	} {
+		if _, ok := commandArg(text, command); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Router) sessionListText(key SessionKey, includeArchived bool, limit int) string {
 	sessions := r.sessions.List(key, includeArchived)
 	if len(sessions) == 0 {
 		return "No sessions yet. Send a message or /new."
 	}
-	if len(sessions) > 20 {
-		sessions = sessions[:20]
+	total := len(sessions)
+	if limit <= 0 {
+		limit = 50
+	}
+	if len(sessions) > limit {
+		sessions = sessions[:limit]
 	}
 	activeID := r.sessions.ActiveID(key)
-	lines := make([]string, 0, len(sessions)+2)
-	for index, session := range sessions {
+	lines := make([]string, 0, len(sessions)+3)
+	number := 0
+	for _, session := range sessions {
+		prefix := ""
+		if session.Status == SessionStatusArchived {
+			prefix = "archived:"
+		} else {
+			number++
+			prefix = fmt.Sprintf("%d:", number)
+		}
 		marker := ""
 		if session.ID == activeID {
 			marker = " · active"
 		}
+		if r.isSessionRunning(session.ID) {
+			marker += " · running"
+		}
 		status := ""
-		if session.Status != SessionStatusActive {
+		if session.Status != SessionStatusActive && session.Status != SessionStatusArchived {
 			status = " [" + session.Status + "]"
 		}
-		lines = append(lines, fmt.Sprintf("%d:  %s%s  ·  %s  ·  %s  ·  %s  ·  %s%s",
-			index+1,
+		lines = append(lines, fmt.Sprintf("%s  %s%s  ·  %s  ·  %s  ·  %s  ·  %s%s",
+			prefix,
 			session.DisplayName(),
 			status,
 			shortSessionID(session.ID),
@@ -130,11 +188,44 @@ func (r *Router) sessionListText(key SessionKey, includeArchived bool) string {
 			marker,
 		))
 	}
-	lines = append(lines, "", "Use /switch 1, /switch ID, or /switch NAME. /list all includes archived sessions.")
+	if total > len(sessions) {
+		lines = append(lines, fmt.Sprintf("… showing %d of %d; use a larger /list limit for more.", len(sessions), total))
+	}
+	lines = append(lines, "", "Use /switch 1, /switch ID, or /switch NAME. /list all includes archived; /unarchive restores.")
 	return strings.Join(lines, "\n")
 }
 
+func parseSessionListArgs(arg string) (bool, int, error) {
+	fields := strings.Fields(arg)
+	includeArchived := false
+	limit := 50
+	if len(fields) > 0 && strings.EqualFold(fields[0], "all") {
+		includeArchived = true
+		fields = fields[1:]
+	}
+	if len(fields) > 0 {
+		value, err := strconv.Atoi(fields[0])
+		if err != nil || value < 1 || value > 200 {
+			return false, 0, fmt.Errorf("limit must be between 1 and 200")
+		}
+		limit = value
+		fields = fields[1:]
+	}
+	if len(fields) > 0 {
+		return false, 0, fmt.Errorf("unexpected session list arguments")
+	}
+	return includeArchived, limit, nil
+}
+
 func (r *Router) findSession(key SessionKey, ref string) (Session, error) {
+	return r.findSessionRef(key, ref, false)
+}
+
+func (r *Router) findSessionIncludingArchived(key SessionKey, ref string) (Session, error) {
+	return r.findSessionRef(key, ref, true)
+}
+
+func (r *Router) findSessionRef(key SessionKey, ref string, includeArchived bool) (Session, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return Session{}, fmt.Errorf("session reference is empty; use /list")
@@ -143,9 +234,12 @@ func (r *Router) findSession(key SessionKey, ref string) (Session, error) {
 		ref = strings.TrimPrefix(ref, "#")
 	}
 	if index, err := strconv.Atoi(ref); err == nil {
+		if includeArchived {
+			return Session{}, fmt.Errorf("numeric shortcuts only refer to non-archived sessions; use an id or name")
+		}
 		sessions := r.sessions.List(key, false)
 		if index < 1 || index > len(sessions) {
-			return Session{}, fmt.Errorf("session #%d is out of range; use /list", index)
+			return Session{}, fmt.Errorf("session %d is out of range; use /list", index)
 		}
 		return sessions[index-1], nil
 	}
@@ -153,7 +247,7 @@ func (r *Router) findSession(key SessionKey, ref string) (Session, error) {
 	sessions := r.sessions.List(key, true)
 	for _, session := range sessions {
 		if session.ID == ref {
-			if session.Status == SessionStatusArchived {
+			if session.Status == SessionStatusArchived && !includeArchived {
 				return Session{}, fmt.Errorf("session %q is archived", ref)
 			}
 			return session, nil
@@ -167,7 +261,7 @@ func (r *Router) findSession(key SessionKey, ref string) (Session, error) {
 		}
 	}
 	if len(prefix) == 1 {
-		if prefix[0].Status == SessionStatusArchived {
+		if prefix[0].Status == SessionStatusArchived && !includeArchived {
 			return Session{}, fmt.Errorf("session %q is archived", prefix[0].ID)
 		}
 		return prefix[0], nil
@@ -178,7 +272,7 @@ func (r *Router) findSession(key SessionKey, ref string) (Session, error) {
 
 	matches := make([]Session, 0, 1)
 	for _, session := range sessions {
-		if session.Status == SessionStatusArchived {
+		if session.Status == SessionStatusArchived && !includeArchived {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(session.Name), ref) {

@@ -692,12 +692,19 @@ func TestRouterRecordsLessonOnError(t *testing.T) {
 	if got := plat.lastReply(); got == "" {
 		t.Fatal("empty error reply")
 	}
-	pending, err := lessons.ListPending(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pending) != 1 {
-		t.Fatalf("pending lessons = %d, want 1", len(pending))
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := lessons.ListPending(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(pending) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pending lessons = %d, want 1", len(pending))
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

@@ -308,3 +308,84 @@ func TestSessionStoreSortsByLastUsed(t *testing.T) {
 		t.Fatalf("list order = %#v", items)
 	}
 }
+
+func TestSessionStoreArchiveDoesNotReviveSession(t *testing.T) {
+	store := NewSessionStore()
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	session, err := store.Create(key, "archived")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Archive(key, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetEngineSession(session.ID, "engine-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkStale(session.ID); err != nil {
+		t.Fatal(err)
+	}
+	archived, ok := store.GetSession(session.ID)
+	if !ok || archived.Status != SessionStatusArchived {
+		t.Fatalf("archived session revived: %#v, ok=%v", archived, ok)
+	}
+	restored, err := store.Unarchive(key, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Status != SessionStatusActive {
+		t.Fatalf("restored status = %q", restored.Status)
+	}
+	if got := store.ActiveID(key); got != session.ID {
+		t.Fatalf("active after restore = %q, want %q", got, session.ID)
+	}
+}
+
+func TestSessionStoreBeginTurnSanitizesAndCounts(t *testing.T) {
+	store := NewSessionStore()
+	key := SessionKey{Channel: "telegram", ChatID: "42", AgentID: "codex"}
+	session, err := store.Create(key, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := "<at id=all></at> **secret** " + strings.Repeat("长任务 ", 20)
+	if err := store.BeginTurn(session.ID, prompt); err != nil {
+		t.Fatal(err)
+	}
+	updated, ok := store.GetSession(session.ID)
+	if !ok {
+		t.Fatal("session missing")
+	}
+	if updated.MessageCount != 1 {
+		t.Fatalf("message count = %d", updated.MessageCount)
+	}
+	if strings.ContainsAny(updated.Name, "<>*") {
+		t.Fatalf("session name still contains markup: %q", updated.Name)
+	}
+	if !strings.HasSuffix(updated.Name, "…") {
+		t.Fatalf("long session name was not truncated: %q", updated.Name)
+	}
+	if err := store.FinishTurn(session.ID, &tokenUsage{
+		InputTokens:   10,
+		OutputTokens:  5,
+		ContextTokens: 15,
+	}, 100); err != nil {
+		t.Fatal(err)
+	}
+	usage, window, ok := store.UsageByID(session.ID)
+	if !ok || usage.InputTokens != 10 || window != 100 {
+		t.Fatalf("usage = %#v, %d, %v", usage, window, ok)
+	}
+}
+
+func TestSessionStoreSanitizesExplicitName(t *testing.T) {
+	store := NewSessionStore()
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	session, err := store.Create(key, "<at id=all></at> **release**")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(session.Name, "<>*") {
+		t.Fatalf("explicit session name still contains markup: %q", session.Name)
+	}
+}

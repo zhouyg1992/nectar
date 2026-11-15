@@ -5,13 +5,20 @@
 ### Added
 
 - Session management v2: stable Nectar session ids, names, active-session pointers, per-session usage and message counts, and automatic migration from the version 1 session file
-- Chat commands for `/list`, `/switch`, `/current`, `/rename`, and `/archive`; `/new [name]` now creates a new session without deleting the previous one
-- Per-session FIFO queues so different sessions in the same chat can run independently while turns within one session stay serialized
+- Chat commands for `/list`, `/switch`, `/current`, `/rename`, `/archive`, and `/unarchive`; `/new [name]` now creates a new session without deleting the previous one
+- Per-session FIFO queues, with workspace-level serialization for runs that share files
 
 ### Changed
 
 - `/status` now shows both the underlying engine session id and the Nectar session id
 - Auto-naming uses the first user message, and archived sessions remain visible through `/list all`
+- Runs sharing a workspace are serialized, preventing concurrent agents from editing the same files
+- `/stop` cancels all runs in the current chat, including runs that are no longer the active session
+- Group-chat session management is limited to `bot.admin_users`; direct chats are unchanged
+- Scheduled tasks capture the active session at creation time and fail rather than silently switching if it is archived
+- Archived sessions cannot be revived by late engine events, and `/unarchive` restores them
+- Numeric `/list` shortcuts only count non-archived sessions; archived entries are prefixed with `archived:`
+- Session names strip Markdown/HTML metacharacters, and auto-generated names redact credentials
 
 ## v0.8.0 — 2026-11-14
 

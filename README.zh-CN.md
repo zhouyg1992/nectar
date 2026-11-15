@@ -161,11 +161,12 @@ nectar uninstall                      卸载 Nectar
 | 命令 | 作用 |
 |---|---|
 | `/new [name]`、`/reset` | 新建会话；旧会话仍可在列表中找回 |
-| `/list [all]` | 列出当前聊天的会话 |
+| `/list [all] [limit]` | 列出当前聊天的会话；默认最多 50 条 |
 | `/switch <id\|#\|name>` | 切换当前会话 |
 | `/current` | 查看当前会话 |
 | `/rename <name>` | 重命名当前会话 |
 | `/archive [id]` | 归档会话 |
+| `/unarchive <id\|name>` | 恢复已归档会话 |
 | `/status` | 查看当前引擎、模型和会话 |
 | `/stop` | 中断当前任务 |
 | `/cron`、`/schedule` | 定时任务入口 |
@@ -183,6 +184,8 @@ nectar uninstall                      卸载 Nectar
 ```
 
 详见[定时任务](docs/zh-CN/schedule.md)，或在聊天里发送 `/cron help`。定时任务默认开启，无需在配置里添加 `[schedule]`。管理命令仅限 `bot.admin_users`；该列表为空时不限制管理员。参见[安全加固](#可选安全加固)。
+
+群聊里的会话管理命令（`/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/stop`、`/status`）仅限 `bot.admin_users`；单聊保持单人使用行为。
 
 ## 维护
 

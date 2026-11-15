@@ -11,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+
+	"github.com/zhouyg1992/nectar/internal/memory"
 )
 
 const (
@@ -457,6 +460,29 @@ func (s *SessionStore) Archive(key SessionKey, id string) error {
 	return s.persistLocked()
 }
 
+// Unarchive restores an archived session. It becomes active when the lane has
+// no other active session.
+func (s *SessionStore) Unarchive(key SessionKey, id string) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session := s.sessions[id]
+	if session == nil {
+		return Session{}, fmt.Errorf("session %q not found", id)
+	}
+	if !session.matchesKey(key) {
+		return Session{}, fmt.Errorf("session %q belongs to a different chat", id)
+	}
+	session.Status = SessionStatusActive
+	touchSession(session, time.Now().UTC())
+	if s.active[key] == "" {
+		s.active[key] = id
+	}
+	if err := s.persistLocked(); err != nil {
+		return Session{}, err
+	}
+	return *session, nil
+}
+
 func (s *SessionStore) SetEngineSession(id, engineSessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -465,7 +491,9 @@ func (s *SessionStore) SetEngineSession(id, engineSessionID string) error {
 		return fmt.Errorf("session %q not found", id)
 	}
 	session.EngineSessionID = engineSessionID
-	session.Status = SessionStatusActive
+	if session.Status != SessionStatusArchived {
+		session.Status = SessionStatusActive
+	}
 	touchSession(session, time.Now().UTC())
 	return s.persistLocked()
 }
@@ -477,9 +505,45 @@ func (s *SessionStore) MarkStale(id string) error {
 	if session == nil {
 		return fmt.Errorf("session %q not found", id)
 	}
+	if session.Status == SessionStatusArchived {
+		return nil
+	}
 	session.Status = SessionStatusStale
 	session.EngineSessionID = ""
 	session.UpdatedAt = time.Now().UTC()
+	return s.persistLocked()
+}
+
+// BeginTurn records a new turn and auto-names the session in one write.
+func (s *SessionStore) BeginTurn(id, prompt string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session := s.sessions[id]
+	if session == nil {
+		return fmt.Errorf("session %q not found", id)
+	}
+	session.MessageCount++
+	if strings.TrimSpace(session.Name) == "" {
+		session.Name = deriveSessionName(prompt)
+	}
+	touchSession(session, time.Now().UTC())
+	return s.persistLocked()
+}
+
+// FinishTurn records usage and activity in one write.
+func (s *SessionStore) FinishTurn(id string, usage *tokenUsage, contextWindow int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session := s.sessions[id]
+	if session == nil {
+		return fmt.Errorf("session %q not found", id)
+	}
+	if usage != nil {
+		session.usage = *usage
+		session.ContextTokens = usage.ContextTokens
+		session.ContextWindow = contextWindow
+	}
+	touchSession(session, time.Now().UTC())
 	return s.persistLocked()
 }
 
@@ -731,6 +795,20 @@ func cleanSessionName(name string) string {
 	if name == "" {
 		return ""
 	}
+	name = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		switch r {
+		case '<', '>', '`', '*', '_', '~', '[', ']', '(', ')', '\\', '|':
+			return -1
+		}
+		return r
+	}, name)
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		return ""
+	}
 	runes := []rune(name)
 	if len(runes) > maxSessionNameRunes {
 		name = string(runes[:maxSessionNameRunes]) + "…"
@@ -739,15 +817,16 @@ func cleanSessionName(name string) string {
 }
 
 func deriveSessionName(prompt string) string {
-	prompt = strings.Join(strings.Fields(strings.TrimSpace(prompt)), " ")
+	prompt = memory.Redact(strings.TrimSpace(prompt))
+	prompt = strings.Join(strings.Fields(prompt), " ")
 	if prompt == "" || strings.HasPrefix(prompt, "/") {
 		return ""
 	}
 	runes := []rune(prompt)
 	if len(runes) > maxAutoSessionNameRunes {
-		return string(runes[:maxAutoSessionNameRunes]) + "…"
+		return cleanSessionName(string(runes[:maxAutoSessionNameRunes]) + "…")
 	}
-	return prompt
+	return cleanSessionName(prompt)
 }
 
 func legacySessionName(updated time.Time) string {

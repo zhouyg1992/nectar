@@ -161,11 +161,12 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 | Command | Purpose |
 |---|---|
 | `/new [name]`, `/reset` | Start a new session; previous sessions stay available |
-| `/list [all]` | List sessions for this chat |
+| `/list [all] [limit]` | List sessions for this chat; default limit 50 |
 | `/switch <id\|#\|name>` | Switch the active session |
 | `/current` | Show the active session |
 | `/rename <name>` | Rename the active session |
 | `/archive [id]` | Archive a session |
+| `/unarchive <id\|name>` | Restore an archived session |
 | `/status` | Show the current engine, model, and session |
 | `/stop` | Cancel the current run |
 | `/cron`, `/schedule` | Scheduled task entry point |
@@ -183,6 +184,8 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 ```
 
 See [scheduled tasks](docs/en/schedule.md) for details, or send `/cron help` in chat. Scheduled tasks are enabled by default; no `[schedule]` section is required. Only users in `bot.admin_users` can manage them; an empty list removes that restriction. See [hardening access](#optional-harden-access).
+
+In group chats, session management commands (`/new`, `/list`, `/switch`, `/current`, `/rename`, `/archive`, `/unarchive`, `/stop`, `/status`) are limited to `bot.admin_users`. Direct messages keep the single-user behavior.
 
 ## Maintenance
 

@@ -40,6 +40,7 @@ type ScheduledTask struct {
 	Description      string         `json:"description,omitempty"`
 	Timeout          string         `json:"timeout,omitempty"`
 	Key              SessionKey     `json:"session_key"`
+	SessionID        string         `json:"session_id,omitempty"`
 	Status           ScheduleStatus `json:"status"`
 	ExecuteAt        time.Time      `json:"execute_at,omitempty"`
 	RemainingSeconds int64          `json:"remaining_seconds,omitempty"`
@@ -71,6 +72,7 @@ type ScheduleRequest struct {
 	ChatID      string `json:"chat_id,omitempty"`
 	ThreadID    string `json:"thread_id,omitempty"`
 	AgentID     string `json:"agent_id,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
 }
 
 // SchedulePatch updates an existing task. Empty strings mean "leave as is"
@@ -202,6 +204,7 @@ func buildScheduledTask(req ScheduleRequest, now time.Time, defaultTimezone, cre
 			ThreadID: strings.TrimSpace(req.ThreadID),
 			AgentID:  strings.TrimSpace(req.AgentID),
 		},
+		SessionID: strings.TrimSpace(req.SessionID),
 		Status:    ScheduleActive,
 		CreatedBy: createdBy,
 		CreatedAt: now,

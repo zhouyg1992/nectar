@@ -222,11 +222,12 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 | Command | Purpose |
 |---|---|
 | `/new [name]`, `/reset` | Start a new session; previous sessions stay listed |
-| `/list [all]` | List sessions for this chat; `all` includes archived sessions |
+| `/list [all] [limit]` | List sessions for this chat; `all` includes archived sessions, default limit 50 |
 | `/switch <id\|#\|name>` | Switch the active session |
 | `/current` | Show the active session |
 | `/rename <name>` | Rename the active session |
 | `/archive [id]` | Archive a session; the next message starts a new one if it was active |
+| `/unarchive <id\|name>` | Restore an archived session |
 | `/status` | Show the current engine, model, and session |
 | `/about`, `/whoami` | Show the Nectar version, platform, underlying engine, and model |
 | `/stop` | Cancel the current run |
@@ -243,8 +244,13 @@ Nectar keeps a list of sessions per chat, thread, and engine. `/new` creates a
 new active session without deleting the previous one. `/list` shows the most
 recent sessions with their short id, agent, context usage, and last activity.
 Use `/switch <id>`, `/switch #2`, or `/switch <name>` to choose another active
-session. `/rename` and `/archive` manage the list; archived sessions are only
-shown by `/list all`.
+session. Numeric shortcuts only count non-archived sessions; archived sessions
+are shown by `/list all` with an `archived:` prefix. `/rename`, `/archive`, and
+`/unarchive` manage the list.
+
+In group chats, `/new`, `/list`, `/switch`, `/current`, `/rename`, `/archive`,
+`/unarchive`, `/status`, and `/stop` require a user in `bot.admin_users`.
+Direct chats keep the normal single-user behavior.
 
 Sessions are persisted in `~/.nectar/sessions.json`. Version 1 files are
 migrated automatically on startup, and the next write uses the version 2

@@ -165,7 +165,7 @@ func runBot(configPath string) error {
 				Text:      task.Prompt,
 				ThreadID:  anchor.ThreadID,
 				Origin:    "schedule",
-			})
+			}, task.SessionID)
 		}); err != nil {
 			return err
 		}

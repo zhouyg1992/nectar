@@ -2,6 +2,11 @@
 
 Nectar embeds an in-process scheduler. Tasks are persisted in `~/.nectar/schedules.json` and fired by the running bot process; no system crontab is involved.
 
+Tasks created from chat capture the active Nectar session at creation time. If
+that session is archived before the next run, the run fails instead of silently
+switching to another session. Tasks created through the CLI without a session
+id fall back to the chat's active session when they fire.
+
 ## Configuration
 
 Every setting below is optional. Nectar enables the scheduler by default (`enabled = true`), uses the host timezone, and applies the defaults shown here.
