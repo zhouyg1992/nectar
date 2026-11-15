@@ -42,6 +42,33 @@ func TestNormalizeA2UIMarkdownKeepsSingleLineBreaks(t *testing.T) {
 	}
 }
 
+func TestCommandCardBodiesKeepLineBreaks(t *testing.T) {
+	bodies := map[string]string{
+		"help":   "**Session**\n- `/new` — new\n- `/list` — list\n\nUse /help",
+		"status": "Engine: codex\nModel: deepseek\nSession: ses_1",
+		"list":   "1: first\n2: second\n\nUse /switch 1",
+		"cron":   "`task-1` · active\nPrompt: check CI\nNext: 2026-11-16 09:00",
+		"memory": "Memory\n- id: m1\n- kind: fact",
+	}
+	for name, body := range bodies {
+		got := normalizeA2UIMarkdown(body)
+		if !strings.Contains(got, "  \n") {
+			t.Fatalf("%s card lost hard line breaks: %q", name, got)
+		}
+	}
+}
+
+func TestNormalizedTableStillBecomesTableBlock(t *testing.T) {
+	body := normalizeA2UIMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
+	blocks := parseCardBlocks(body)
+	if len(blocks) != 1 || blocks[0].Table == nil {
+		t.Fatalf("normalized table was not parsed as a table: %#v", blocks)
+	}
+	if len(blocks[0].Table.Rows) != 1 || blocks[0].Table.Rows[0][1] != "2" {
+		t.Fatalf("normalized table rows = %#v", blocks[0].Table.Rows)
+	}
+}
+
 func TestPreprocessDingTalkMarkdownConvertsTable(t *testing.T) {
 	got := preprocessDingTalkMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
 	if !strings.Contains(got, "```text") {
