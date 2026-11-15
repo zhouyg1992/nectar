@@ -65,10 +65,34 @@ func normalizeA2UIMarkdown(s string) string {
 	s = strings.ReplaceAll(s, "\r", "\n")
 	s = truncateUTF8(s, maxCardBodyBytes)
 	s = escapeHTMLOutsideCode(s)
+	s = hardBreakA2UILines(s)
 	if strings.Count(s, "```")%2 == 1 {
 		s += "\n```"
 	}
 	return s
+}
+
+// hardBreakA2UILines preserves single line breaks in card Markdown. DingTalk's
+// A2UI Markdown component otherwise joins adjacent non-empty lines.
+func hardBreakA2UILines(s string) string {
+	lines := strings.Split(s, "\n")
+	var out strings.Builder
+	inCodeBlock := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inCodeBlock = !inCodeBlock
+		}
+		out.WriteString(line)
+		if i >= len(lines)-1 {
+			continue
+		}
+		if !inCodeBlock && line != "" && lines[i+1] != "" {
+			out.WriteString("  \n")
+		} else {
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
 }
 
 func normalizeMarkdownTables(s string) string {

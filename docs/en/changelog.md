@@ -20,6 +20,7 @@
 - Numeric `/list` shortcuts only count non-archived sessions; archived entries are prefixed with `archived:`
 - Session names strip Markdown/HTML metacharacters, and auto-generated names redact credentials
 - Messages waiting behind another run now use a single card that transitions from Queued to Working to Complete
+- DingTalk AI card Markdown now preserves single line breaks
 
 ## v0.8.0 — 2026-11-14
 

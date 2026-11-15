@@ -32,6 +32,16 @@ func TestNormalizeA2UIMarkdownBalancesFence(t *testing.T) {
 	}
 }
 
+func TestNormalizeA2UIMarkdownKeepsSingleLineBreaks(t *testing.T) {
+	got := normalizeA2UIMarkdown("1: first\n2: second\n\nUse /switch")
+	if !strings.Contains(got, "1: first  \n2: second") {
+		t.Fatalf("line breaks were collapsed: %q", got)
+	}
+	if strings.Contains(got, "```") {
+		t.Fatalf("unexpected code fence: %q", got)
+	}
+}
+
 func TestPreprocessDingTalkMarkdownConvertsTable(t *testing.T) {
 	got := preprocessDingTalkMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
 	if !strings.Contains(got, "```text") {
@@ -81,8 +91,8 @@ func TestNormalizeSessionListIsPlatformSafe(t *testing.T) {
 	body := "1:  hello  ·  ses_bca6ee20  ·  codex  ·  ctx 18.7k/996.1k (1.9%)  ·  just now  ·  active\n" +
 		"2:  Session Nov 15 16:58  ·  ses_04a8d5d7  ·  codex  ·  ctx 19.2k/996.1k (2.0%)  ·  just now\n\n" +
 		"Use /switch 1, /switch ID, or /switch NAME. /list all includes archived sessions."
-	if got := normalizeA2UIMarkdown(body); got != body {
-		t.Fatalf("session list changed by dingtalk sanitizer:\\n%s", got)
+	if got := normalizeA2UIMarkdown(body); !strings.Contains(got, "1:  hello") || !strings.Contains(got, "  \n2:  Session") {
+		t.Fatalf("session list lost line breaks or content:\\n%s", got)
 	}
 	fallback := preprocessDingTalkMarkdown(body)
 	for _, want := range []string{"1:", "active", "Use /switch 1"} {
