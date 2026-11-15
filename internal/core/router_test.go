@@ -1239,6 +1239,46 @@ func TestRouterShowsToolCountAndReplacesIntermediateOutput(t *testing.T) {
 	}
 }
 
+func TestRouterShowsReasoningAndToolFallback(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventToolCall, Text: "ls"},
+		{Type: engine.EventReasoning, Text: "Reading files before answering."},
+		{Type: engine.EventToolCall, Text: "cat a.txt"},
+		{Type: engine.EventMessage, Text: "final answer"},
+		{Type: engine.EventDone},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.CardUpdateInterval = time.Nanosecond
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "inspect"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	plat.mu.Lock()
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+	foundFallback := false
+	foundReasoning := false
+	for _, card := range updates {
+		if card.Status == platform.CardThinking && card.Body == "Gathering results…" {
+			foundFallback = true
+		}
+		if card.Status == platform.CardThinking && card.Body == "Thinking through the task…" {
+			foundReasoning = true
+		}
+		if strings.Contains(card.Body, "Reading files before answering.") {
+			t.Fatalf("raw reasoning leaked into card: %#v", card)
+		}
+	}
+	if !foundFallback || !foundReasoning {
+		t.Fatalf("missing reasoning/fallback updates: %#v", updates)
+	}
+	if final := plat.lastUpdate(); final.Status != platform.CardComplete || final.Body != "final answer" {
+		t.Fatalf("final card = %#v", final)
+	}
+}
+
 func TestRouterRendersEngineUsage(t *testing.T) {
 	plat := &fakePlatform{cards: true}
 	eng := &scriptedEngine{events: []engine.Event{

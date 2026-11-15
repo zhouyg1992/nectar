@@ -23,6 +23,7 @@
 - DingTalk AI card Markdown now preserves single line breaks
 - Session list, status, and session detail cards use Markdown tables for alignment
 - Chat cards switch to a finalizing Complete state as soon as the answer is ready; usage metadata updates the footer afterward
+- Codex `reasoning` items are detected without exposing their content; Working cards show a Thinking-through-the-task placeholder, while tool-only runs show Gathering results
 
 ## v0.8.0 — 2026-11-14
 

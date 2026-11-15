@@ -118,6 +118,8 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 					}
 					emit(engine.Event{Type: engine.EventMessage, Text: ev.Item.Text, Meta: meta})
 				}
+			case "reasoning":
+				emit(engine.Event{Type: engine.EventReasoning})
 			case "command_execution":
 				meta := map[string]any{
 					"item_id": ev.Item.ID,

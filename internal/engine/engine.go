@@ -15,6 +15,7 @@ const (
 	EventSessionStarted EventType = iota
 	EventTextDelta
 	EventMessage
+	EventReasoning
 	EventToolCall
 	EventToolResult
 	EventDone
@@ -30,6 +31,8 @@ func (t EventType) String() string {
 		return "text_delta"
 	case EventMessage:
 		return "message"
+	case EventReasoning:
+		return "reasoning"
 	case EventToolCall:
 		return "tool_call"
 	case EventToolResult:

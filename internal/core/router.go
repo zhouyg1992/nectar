@@ -611,6 +611,8 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	contextWindow := r.cfg.ContextWindow
 	toolCount := 0
 	displayBody := ""
+	sawReasoning := false
+	sawIntermediateText := false
 	var lastCardUpdate time.Time
 	finalizing := false
 
@@ -710,6 +712,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 				r.setRunEngineSession(runID, ev.SessionID)
 			}
 		case engine.EventMessage:
+			sawIntermediateText = true
 			lastAgentMessage = ev.Text
 			phase, _ := ev.Meta["phase"].(string)
 			if phase == "final_answer" {
@@ -720,7 +723,14 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			}
 			displayBody = ev.Text
 			updateProgress(displayBody, true)
+		case engine.EventReasoning:
+			sawReasoning = true
+			if !sawIntermediateText {
+				displayBody = "Thinking through the task…"
+				updateProgress(displayBody, true)
+			}
 		case engine.EventTextDelta:
+			sawIntermediateText = true
 			stream.WriteString(ev.Text)
 			lastAgentMessage = stream.String()
 			displayBody = stream.String()
@@ -728,6 +738,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		case engine.EventToolCall:
 			r.logger.Debug("agent tool call", "chat", msg.ChatID, "command", ev.Text)
 			toolCount++
+			if !sawIntermediateText {
+				if sawReasoning {
+					displayBody = "Thinking through the task…"
+				} else {
+					displayBody = "Gathering results…"
+				}
+			}
 			updateProgress(displayBody, true)
 		case engine.EventToolResult:
 			r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)

@@ -23,6 +23,7 @@
 - 钉钉 AI 卡片 Markdown 现在会保留单换行
 - 会话列表、状态和会话详情卡片改用 Markdown 表格对齐
 - 聊天卡片在答案就绪后先进入可更新的 Complete/Finalizing 状态，usage 到达后再补页脚
+- Codex 的 `reasoning` 只作为信号，不展示原文；Working 卡片显示 Thinking through the task 占位文案，只有工具调用时显示 Gathering results 兜底文案
 
 ## v0.8.0 — 2026-11-14
 

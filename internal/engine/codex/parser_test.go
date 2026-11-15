@@ -61,6 +61,34 @@ func TestParseTurnFailed(t *testing.T) {
 	}
 }
 
+func TestParseReasoningProgress(t *testing.T) {
+	input := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread-1"}`,
+		`{"type":"item.completed","item":{"id":"r1","type":"reasoning","text":"I should inspect the workspace first."}}`,
+		`{"type":"item.completed","item":{"id":"m1","type":"agent_message","text":"final answer"}}`,
+		`{"type":"turn.completed"}`,
+	}, "\n")
+
+	var got []engine.Event
+	if err := Parse(strings.NewReader(input), func(ev engine.Event) {
+		got = append(got, ev)
+	}, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("events = %#v", got)
+	}
+	if got[1].Type != engine.EventReasoning || got[1].Text != "" {
+		t.Fatalf("reasoning event = %#v", got[1])
+	}
+	if got[2].Type != engine.EventMessage || got[2].Text != "final answer" {
+		t.Fatalf("message event = %#v", got[2])
+	}
+	if got[3].Type != engine.EventDone {
+		t.Fatalf("done event = %#v", got[3])
+	}
+}
+
 func TestParseCodexTokenCountUsesLastUsage(t *testing.T) {
 	input := strings.Join([]string{
 		`{"type":"thread.started","thread_id":"thread-1"}`,
