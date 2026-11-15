@@ -37,7 +37,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 ## 为什么是 Nectar
 
 - **聊天就是入口**：在飞书 / 钉钉 / Telegram 里直接对话，单聊和群聊都支持。
-- **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`，服务重启后，如果原会话仍然有效，就继续使用它。
+- **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`；`/list`、`/switch`、`/rename` 让一个聊天可以保留多个会话，服务重启后如果原会话仍然有效，就继续使用它。
 - **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
 - **记忆可携带**：本地优先的 profile / project / chat 记忆，支持审核、检索注入和 Agent CLI 读写。
@@ -160,8 +160,13 @@ nectar uninstall                      卸载 Nectar
 
 | 命令 | 作用 |
 |---|---|
-| `/new`、`/reset` | 新建会话 |
-| `/status` | 查看当前引擎、模型和 Agent thread ID |
+| `/new [name]`、`/reset` | 新建会话；旧会话仍可在列表中找回 |
+| `/list [all]` | 列出当前聊天的会话 |
+| `/switch <id\|#\|name>` | 切换当前会话 |
+| `/current` | 查看当前会话 |
+| `/rename <name>` | 重命名当前会话 |
+| `/archive [id]` | 归档会话 |
+| `/status` | 查看当前引擎、模型和会话 |
 | `/stop` | 中断当前任务 |
 | `/cron`、`/schedule` | 定时任务入口 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |

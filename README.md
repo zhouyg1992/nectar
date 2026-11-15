@@ -37,7 +37,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 ## Why Nectar
 
 - **Chat is the interface**: talk to your agent from Feishu / Lark, DingTalk, or Telegram, in direct messages or group chats.
-- **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`, so the service resumes the same agent session when it is still valid after a restart.
+- **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`; `/list`, `/switch`, and `/rename` keep multiple sessions per chat, and the service resumes the same agent session when it is still valid after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
 - **Memory travels with you**: local-first profile / project / chat memory with review, retrieval, and an agent CLI.
@@ -160,8 +160,13 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 
 | Command | Purpose |
 |---|---|
-| `/new`, `/reset` | Start a new session |
-| `/status` | Show the current engine, model, and agent thread ID |
+| `/new [name]`, `/reset` | Start a new session; previous sessions stay available |
+| `/list [all]` | List sessions for this chat |
+| `/switch <id\|#\|name>` | Switch the active session |
+| `/current` | Show the active session |
+| `/rename <name>` | Rename the active session |
+| `/archive [id]` | Archive a session |
+| `/status` | Show the current engine, model, and session |
 | `/stop` | Cancel the current run |
 | `/cron`, `/schedule` | Scheduled task entry point |
 | `/help`, `/commands` | Show the command card without invoking the engine |

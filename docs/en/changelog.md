@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Session management v2: stable Nectar session ids, names, active-session pointers, per-session usage and message counts, and automatic migration from the version 1 session file
+- Chat commands for `/list`, `/switch`, `/current`, `/rename`, and `/archive`; `/new [name]` now creates a new session without deleting the previous one
+- Per-session FIFO queues so different sessions in the same chat can run independently while turns within one session stay serialized
+
+### Changed
+
+- `/status` now shows both the underlying engine session id and the Nectar session id
+- Auto-naming uses the first user message, and archived sessions remain visible through `/list all`
+
 ## v0.8.0 — 2026-11-14
 
 ### Added

@@ -221,8 +221,13 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 
 | Command | Purpose |
 |---|---|
-| `/new`, `/reset` | Clear the current session; the next message starts a new thread |
-| `/status` | Show the current engine, model, and agent thread ID |
+| `/new [name]`, `/reset` | Start a new session; previous sessions stay listed |
+| `/list [all]` | List sessions for this chat; `all` includes archived sessions |
+| `/switch <id\|#\|name>` | Switch the active session |
+| `/current` | Show the active session |
+| `/rename <name>` | Rename the active session |
+| `/archive [id]` | Archive a session; the next message starts a new one if it was active |
+| `/status` | Show the current engine, model, and session |
 | `/about`, `/whoami` | Show the Nectar version, platform, underlying engine, and model |
 | `/stop` | Cancel the current run |
 | `/cron`, `/schedule` | Scheduled task entry point |
@@ -231,6 +236,19 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 `/help`, `/commands`, and short questions such as "what commands are available" return the command card without invoking the engine.
+
+### Sessions
+
+Nectar keeps a list of sessions per chat, thread, and engine. `/new` creates a
+new active session without deleting the previous one. `/list` shows the most
+recent sessions with their short id, agent, context usage, and last activity.
+Use `/switch <id>`, `/switch #2`, or `/switch <name>` to choose another active
+session. `/rename` and `/archive` manage the list; archived sessions are only
+shown by `/list all`.
+
+Sessions are persisted in `~/.nectar/sessions.json`. Version 1 files are
+migrated automatically on startup, and the next write uses the version 2
+layout.
 
 ### /cron
 

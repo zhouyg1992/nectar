@@ -219,8 +219,13 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 
 | 命令 | 作用 |
 |---|---|
-| `/new`、`/reset` | 清空当前会话，下一条消息启动新 thread |
-| `/status` | 查看当前引擎、模型和 Agent thread ID |
+| `/new [name]`、`/reset` | 新建会话；旧会话仍保留在列表中 |
+| `/list [all]` | 列出当前聊天的会话；`all` 包含已归档会话 |
+| `/switch <id\|#\|name>` | 切换当前会话 |
+| `/current` | 查看当前会话 |
+| `/rename <name>` | 重命名当前会话 |
+| `/archive [id]` | 归档会话；如果归档的是当前会话，下一条消息会新建会话 |
+| `/status` | 查看当前引擎、模型和会话 |
 | `/about`、`/whoami` | 查看 Nectar 版本、平台、底层引擎和模型 |
 | `/stop` | 中断当前任务 |
 | `/cron`、`/schedule` | 定时任务入口 |
@@ -229,6 +234,12 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
 `/help`、`/commands`，以及“有哪些命令”这类短问句会直接返回命令卡片，不调用引擎。
+
+### 会话
+
+Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当前会话，但不会删除旧会话。`/list` 显示最近的会话、短 ID、引擎、上下文占用和最后活动时间。可以用 `/switch <id>`、`/switch #2` 或 `/switch <name>` 切换当前会话；`/rename` 和 `/archive` 用于管理列表，已归档会话只在 `/list all` 中出现。
+
+会话持久化在 `~/.nectar/sessions.json`。启动时会自动迁移 version 1 文件，下一次写入使用 version 2 结构。
 
 ### /cron
 

@@ -138,12 +138,6 @@ func (r *Router) Handle(msg platform.Message) {
 
 	if msg.Origin != "schedule" {
 		switch text {
-		case "/new", "/reset":
-			if err := r.sessions.Delete(key); err != nil {
-				r.logger.Warn("could not persist session reset", "error", err)
-			}
-			r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
-			return
 		case "/status":
 			r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
 			return
@@ -152,6 +146,10 @@ func (r *Router) Handle(msg platform.Message) {
 			return
 		case "/stop":
 			r.stop(key, msg)
+			return
+		}
+
+		if r.handleSessionCommand(key, msg, text) {
 			return
 		}
 
@@ -177,9 +175,14 @@ func (r *Router) Handle(msg platform.Message) {
 	}
 
 	// Platform callbacks must return fast (Feishu retries after ~3s), so the
-	// actual agent run is queued and serialized per session key.
-	r.queue.Do(key.String(), func() {
-		r.execute(r.ctx, key, msg, text)
+	// actual agent run is queued and serialized per Nectar session.
+	session, err := r.sessions.EnsureActive(key, "")
+	if err != nil {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Session Error", "Could not start a session: "+err.Error())
+		return
+	}
+	r.queue.Do(session.ID, func() {
+		r.execute(r.ctx, key, session.ID, msg, text)
 	})
 }
 
@@ -199,13 +202,17 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) err
 		ThreadID: msg.ThreadID,
 		AgentID:  r.cfg.AgentID,
 	}
+	session, err := r.sessions.EnsureActive(key, "")
+	if err != nil {
+		return fmt.Errorf("start scheduled session: %w", err)
+	}
 	done := make(chan error, 1)
-	r.queue.Do(key.String(), func() {
+	r.queue.Do(session.ID, func() {
 		if err := ctx.Err(); err != nil {
 			done <- err
 			return
 		}
-		done <- r.execute(ctx, key, msg, text)
+		done <- r.execute(ctx, key, session.ID, msg, text)
 	})
 	select {
 	case err := <-done:
@@ -215,9 +222,19 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) err
 	}
 }
 
-func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Message, prompt string) error {
+func (r *Router) execute(ctx context.Context, key SessionKey, sessionID string, msg platform.Message, prompt string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	session, ok := r.sessions.GetSession(sessionID)
+	if !ok {
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+	if err := r.sessions.IncrementMessageCount(sessionID); err != nil {
+		r.logger.Warn("could not increment session message count", "error", err)
+	}
+	if err := r.sessions.AutoName(sessionID, prompt); err != nil {
+		r.logger.Warn("could not name session", "error", err)
 	}
 	workdir, err := r.workspaces.ForChat(msg.ChatID)
 	if err != nil {
@@ -296,12 +313,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	prompt = r.withIdentity(prompt)
 	opts.Attachments = attachments
 
-	sessionID, hasSession := r.sessions.Get(key)
-	prompt = r.withMemory(ctx, msg, workdir, prompt, key, hasSession)
+	engineSessionID := session.EngineSessionID
+	hasSession := engineSessionID != ""
+	prompt = r.withMemory(ctx, msg, workdir, prompt, sessionID, hasSession)
 	var events <-chan engine.Event
 	sessionNotice := ""
 	if hasSession {
-		events, err = r.engine.Resume(ctx, sessionID, prompt, opts)
+		events, err = r.engine.Resume(ctx, engineSessionID, prompt, opts)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				answer := "❌ Run stopped: " + ctxErr.Error()
@@ -314,9 +332,9 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 				return errors.Join(ctxErr, finishErr)
 			}
 			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
-			r.logger.Warn("resume failed; starting a new session", "session", sessionID, "error", err)
-			if deleteErr := r.sessions.Delete(key); deleteErr != nil {
-				r.logger.Warn("could not remove stale session", "error", deleteErr)
+			r.logger.Warn("resume failed; starting a new session", "session", engineSessionID, "error", err)
+			if markErr := r.sessions.MarkStale(sessionID); markErr != nil {
+				r.logger.Warn("could not mark stale session", "error", markErr)
 			}
 			events, err = r.engine.Start(ctx, prompt, opts)
 		}
@@ -384,7 +402,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 		switch ev.Type {
 		case engine.EventSessionStarted:
 			if ev.SessionID != "" {
-				if err := r.sessions.Set(key, ev.SessionID); err != nil {
+				if err := r.sessions.SetEngineSession(sessionID, ev.SessionID); err != nil {
 					r.logger.Warn("could not persist session", "error", err)
 				}
 			}
@@ -427,7 +445,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		errTexts = append(errTexts, ctxErr.Error())
 	}
-	if err := r.sessions.SetUsage(key, usage, contextWindow); err != nil {
+	if err := r.sessions.SetUsageByID(sessionID, usage, contextWindow); err != nil {
 		r.logger.Warn("could not persist session usage", "error", err)
 	}
 
@@ -525,12 +543,12 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 }
 
 func (r *Router) stop(key SessionKey, msg platform.Message) {
-	sessionID, ok := r.sessions.Get(key)
-	if !ok {
+	session, ok := r.sessions.Active(key)
+	if !ok || session.EngineSessionID == "" {
 		r.sendCommandResult(msg, platform.CardInfo, "✋ Stop", "No agent is running in this session.")
 		return
 	}
-	if err := r.engine.Cancel(r.ctx, sessionID); err != nil {
+	if err := r.engine.Cancel(r.ctx, session.EngineSessionID); err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Stop Failed", "Failed to stop: "+err.Error())
 		return
 	}
@@ -538,16 +556,23 @@ func (r *Router) stop(key SessionKey, msg platform.Message) {
 }
 
 func (r *Router) status(key SessionKey) string {
-	sessionID, ok := r.sessions.Get(key)
-	if !ok {
-		sessionID = "New session (not started)"
-	}
 	lines := []string{
 		fmt.Sprintf("Engine: %s", r.engine.Name()),
 		fmt.Sprintf("Model: %s", r.resolvedModel()),
-		fmt.Sprintf("Session: %s", sessionID),
 	}
-	if usage, contextWindow, ok := r.sessions.Usage(key); ok {
+	session, ok := r.sessions.Active(key)
+	if !ok {
+		lines = append(lines, "Session: New session (not started)")
+		return strings.Join(lines, "\n")
+	}
+	engineSession := session.EngineSessionID
+	if engineSession == "" {
+		lines = append(lines, "Session: New session (not started)")
+	} else {
+		lines = append(lines, "Session: "+engineSession)
+	}
+	lines = append(lines, fmt.Sprintf("Nectar session: `%s` (%s)", session.ID, session.DisplayName()))
+	if usage, contextWindow, ok := r.sessions.UsageByID(session.ID); ok {
 		if line := formatContextUsage(&usage, contextWindow); line != "" {
 			lines = append(lines, "Context: "+line)
 		}
@@ -902,7 +927,12 @@ func isTransientError(text string) bool {
 
 func helpCardBody(engineName string) string {
 	return "**Session**\n" +
-		"- `/new` / `/reset` — Start a new session\n" +
+		"- `/new [name]` / `/reset` — Start a new session; previous sessions stay available\n" +
+		"- `/list [all]` — List sessions for this chat\n" +
+		"- `/switch <id|#|name>` — Switch the active session\n" +
+		"- `/current` — Show the active session\n" +
+		"- `/rename <name>` — Rename the active session\n" +
+		"- `/archive [id]` — Archive a session\n" +
 		"- `/status` — Show engine, model, and session\n" +
 		"- `/about` — Show what Nectar is and what it is running on\n" +
 		"- `/stop` — Stop the current task\n" +
@@ -917,7 +947,12 @@ func helpCardBody(engineName string) string {
 
 func helpText(engineName string) string {
 	return `Nectar commands:
-/new, /reset     Start a new session
+/new [name]      Start a new session (previous sessions stay available)
+/list [all]      List sessions
+/switch <ref>    Switch active session (id, #number, or name)
+/current         Show the active session
+/rename <name>   Rename the active session
+/archive [ref]   Archive a session
 /status          Show engine, model, and session
 /about, /whoami  Show what Nectar is and what it is running on
 /stop            Stop the current task
