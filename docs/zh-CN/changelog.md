@@ -21,6 +21,7 @@
 - 会话名会移除 Markdown/HTML 元字符；自动命名会先做凭据脱敏
 - 排在其它运行后面的消息会使用同一张卡片，从 Queued 原地变为 Working 和 Complete
 - 钉钉 AI 卡片 Markdown 现在会保留单换行
+- 会话列表、状态和会话详情卡片改用 Markdown 表格对齐
 
 ## v0.8.0 — 2026-11-14
 

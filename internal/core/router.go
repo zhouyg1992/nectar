@@ -812,31 +812,31 @@ func (r *Router) stop(key SessionKey, msg platform.Message) {
 }
 
 func (r *Router) status(key SessionKey) string {
-	lines := []string{
-		fmt.Sprintf("Engine: %s", r.engine.Name()),
-		fmt.Sprintf("Model: %s", r.resolvedModel()),
+	rows := [][2]string{
+		{"Engine", r.engine.Name()},
+		{"Model", r.resolvedModel()},
 	}
 	session, ok := r.sessions.Active(key)
 	if !ok {
-		lines = append(lines, "Session: New session (not started)")
-		return strings.Join(lines, "\n")
+		rows = append(rows, [2]string{"Session", "New session (not started)"})
+		return markdownKeyValue(rows)
 	}
 	engineSession := session.EngineSessionID
 	if engineSession == "" {
-		lines = append(lines, "Session: New session (not started)")
+		rows = append(rows, [2]string{"Session", "New session (not started)"})
 	} else {
-		lines = append(lines, "Session: "+engineSession)
+		rows = append(rows, [2]string{"Session", engineSession})
 	}
-	lines = append(lines, fmt.Sprintf("Nectar session: `%s` (%s)", session.ID, session.DisplayName()))
+	rows = append(rows, [2]string{"Nectar session", "`" + session.ID + "` (" + session.DisplayName() + ")"})
 	if usage, contextWindow, ok := r.sessions.UsageByID(session.ID); ok {
 		if line := formatContextUsage(&usage, contextWindow); line != "" {
-			lines = append(lines, "Context: "+line)
+			rows = append(rows, [2]string{"Context", line})
 		}
 		if line := formatTurnUsage(&usage); line != "" {
-			lines = append(lines, "Last turn: "+line)
+			rows = append(rows, [2]string{"Last turn", line})
 		}
 	}
-	return strings.Join(lines, "\n")
+	return markdownKeyValue(rows)
 }
 
 func (r *Router) withIdentity(prompt string) string {

@@ -1009,7 +1009,7 @@ func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
 	plat.mu.Lock()
 	body := plat.sentCards[0].Body
 	plat.mu.Unlock()
-	for _, want := range []string{"Engine: fake", "Model: gpt-5.2-codex", "Session: session-123"} {
+	for _, want := range []string{"| Engine | fake |", "| Model | gpt-5.2-codex |", "| Session | session-123 |"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("status body = %q, want %q", body, want)
 		}
@@ -1236,7 +1236,7 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 	plat.mu.Lock()
 	statusBody := plat.sentCards[1].Body
 	plat.mu.Unlock()
-	for _, want := range []string{"Context: 180/1k (18.0%)", "Last turn: ↑120 ↓30"} {
+	for _, want := range []string{"| Context | 180/1k (18.0%) |", "| Last turn | ↑120 ↓30 |"} {
 		if !strings.Contains(statusBody, want) {
 			t.Fatalf("status body = %q, want %q", statusBody, want)
 		}

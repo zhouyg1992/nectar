@@ -156,43 +156,40 @@ func (r *Router) sessionListText(key SessionKey, includeArchived bool, limit int
 		sessions = sessions[:limit]
 	}
 	activeID := r.sessions.ActiveID(key)
-	lines := make([]string, 0, len(sessions)+3)
+	var body strings.Builder
+	body.WriteString("| # | Name | Session | Engine | Ctx | Last | State |\n")
+	body.WriteString("|---|---|---|---|---|---|---|\n")
 	number := 0
 	for _, session := range sessions {
-		prefix := ""
+		index := "—"
 		if session.Status == SessionStatusArchived {
-			prefix = "archived:"
+			index = "—"
 		} else {
 			number++
-			prefix = fmt.Sprintf("%d:", number)
+			index = strconv.Itoa(number)
 		}
-		marker := ""
+		state := session.Status
 		if session.ID == activeID {
-			marker = " · active"
+			state = "active"
 		}
 		if r.isSessionRunning(session.ID) {
-			marker += " · running"
+			state += " · running"
 		}
-		status := ""
-		if session.Status != SessionStatusActive && session.Status != SessionStatusArchived {
-			status = " [" + session.Status + "]"
-		}
-		lines = append(lines, fmt.Sprintf("%s  %s%s  ·  %s  ·  %s  ·  %s  ·  %s%s",
-			prefix,
-			session.DisplayName(),
-			status,
-			shortSessionID(session.ID),
-			session.AgentID,
-			sessionContext(session),
-			formatSessionAge(session.LastUsedAt),
-			marker,
-		))
+		fmt.Fprintf(&body, "| %s | %s | %s | %s | %s | %s | %s |\n",
+			index,
+			markdownCell(sessionListName(session)),
+			markdownCell(shortSessionID(session.ID)),
+			markdownCell(session.AgentID),
+			markdownCell(sessionContext(session)),
+			markdownCell(formatSessionAge(session.LastUsedAt)),
+			markdownCell(state),
+		)
 	}
 	if total > len(sessions) {
-		lines = append(lines, fmt.Sprintf("… showing %d of %d; use a larger /list limit for more.", len(sessions), total))
+		fmt.Fprintf(&body, "\n… showing %d of %d; use a larger /list limit for more.\n", len(sessions), total)
 	}
-	lines = append(lines, "", "Use /switch 1, /switch ID, or /switch NAME. /list all includes archived; /unarchive restores.")
-	return strings.Join(lines, "\n")
+	body.WriteString("\nUse /switch 1, /switch ID, or /switch NAME. /list all includes archived; /unarchive restores.")
+	return strings.TrimSpace(body.String())
 }
 
 func parseSessionListArgs(arg string) (bool, int, error) {
@@ -310,19 +307,44 @@ func sessionDetailText(session Session, engineName, model string) string {
 	if engineSession == "" {
 		engineSession = "not started"
 	}
-	lines := []string{
-		"Name: " + session.DisplayName(),
-		"ID: `" + session.ID + "`",
-		"Status: " + session.Status,
-		"Engine: " + engineName,
-		"Model: " + model,
-		"Session: " + engineSession,
-		"Context: " + sessionContext(session),
-		fmt.Sprintf("Messages: %d", session.MessageCount),
-		"Created: " + formatSessionTime(session.CreatedAt),
-		"Last used: " + formatSessionTime(session.LastUsedAt),
+	rows := [][2]string{
+		{"Name", session.DisplayName()},
+		{"ID", "`" + session.ID + "`"},
+		{"Status", session.Status},
+		{"Engine", engineName},
+		{"Model", model},
+		{"Session", engineSession},
+		{"Context", sessionContext(session)},
+		{"Messages", strconv.Itoa(session.MessageCount)},
+		{"Created", formatSessionTime(session.CreatedAt)},
+		{"Last used", formatSessionTime(session.LastUsedAt)},
 	}
-	return strings.Join(lines, "\n")
+	return markdownKeyValue(rows)
+}
+
+func markdownKeyValue(rows [][2]string) string {
+	var body strings.Builder
+	body.WriteString("| Field | Value |\n")
+	body.WriteString("|---|---|\n")
+	for _, row := range rows {
+		fmt.Fprintf(&body, "| %s | %s |\n", markdownCell(row[0]), markdownCell(row[1]))
+	}
+	return strings.TrimSpace(body.String())
+}
+
+func markdownCell(value string) string {
+	value = strings.ReplaceAll(value, "|", `\|`)
+	value = strings.ReplaceAll(value, "\n", " ")
+	return strings.TrimSpace(value)
+}
+
+func sessionListName(session Session) string {
+	name := session.DisplayName()
+	runes := []rune(name)
+	if len(runes) > 32 {
+		return string(runes[:31]) + "…"
+	}
+	return name
 }
 
 func sessionContext(session Session) string {

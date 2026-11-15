@@ -40,7 +40,7 @@ func TestRouterSessionCommandsPreserveAndSwitch(t *testing.T) {
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m4", Text: "/list"})
 	waitForReplies(t, plat, 4)
 	listReply := plat.lastReply()
-	for _, want := range []string{"first task", "second", "1:", "active"} {
+	for _, want := range []string{"first task", "second", "| 1 |", "active"} {
 		if !strings.Contains(listReply, want) {
 			t.Fatalf("list reply = %q, want %q", listReply, want)
 		}
@@ -56,7 +56,7 @@ func TestRouterSessionCommandsPreserveAndSwitch(t *testing.T) {
 	if got := router.sessions.ActiveID(key); got != first.ID {
 		t.Fatalf("active after switch = %q, want %q", got, first.ID)
 	}
-	if reply := plat.lastReply(); !strings.Contains(reply, "Name: first task") {
+	if reply := plat.lastReply(); !strings.Contains(reply, "| Name | first task |") {
 		t.Fatalf("switch reply = %q", reply)
 	}
 
@@ -75,7 +75,7 @@ func TestRouterSessionCommandsPreserveAndSwitch(t *testing.T) {
 
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m8", Text: "/current"})
 	waitForReplies(t, plat, 8)
-	if reply := plat.lastReply(); !strings.Contains(reply, "Name: renamed") || !strings.Contains(reply, first.ID) {
+	if reply := plat.lastReply(); !strings.Contains(reply, "| Name | renamed |") || !strings.Contains(reply, first.ID) {
 		t.Fatalf("current reply = %q", reply)
 	}
 
@@ -253,10 +253,10 @@ func TestRouterListAllNumberingSkipsArchived(t *testing.T) {
 	})
 	waitForReplies(t, plat, 1)
 	reply := plat.lastReply()
-	if !strings.Contains(reply, "archived:  first") || !strings.Contains(reply, "1:  second") {
+	if !strings.Contains(reply, "| — | first |") || !strings.Contains(reply, "| 1 | second |") {
 		t.Fatalf("list all numbering = %q", reply)
 	}
-	if strings.Contains(reply, "1:  first") {
+	if strings.Contains(reply, "| 1 | first |") {
 		t.Fatalf("archived session received a switch number: %q", reply)
 	}
 }
