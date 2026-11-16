@@ -278,6 +278,34 @@ timeout = "30m"               # 单次运行默认超时；0s 关闭调度层超
 
 详细语义见 [定时任务](schedule.md)。
 
+## 本地控制台
+
+Dashboard 默认关闭，开启后只监听本机回环地址，并要求 Token 登录：
+
+```toml
+[dashboard]
+enabled = true
+listen = "127.0.0.1:8787"
+# 默认 ~/.nectar/run/dashboard.token；首次启动时自动生成，权限 0600
+token_file = "~/.nectar/run/dashboard.token"
+# 允许监听非回环地址；开启前请自行加 TLS 反向代理
+allow_remote = false
+# true 时只允许查看，禁止修改记忆和定时任务
+read_only = false
+```
+
+启动 Nectar 后运行：
+
+```bash
+nectar dashboard
+```
+
+命令会打印带一次性登录 Token 的 URL。控制台提供 Bot 状态总览、记忆检索与审核、定时任务管理和只读生效配置；平台凭证、引擎密钥等敏感字段不会返回给浏览器。控制台不修改配置文件，修改 `config.toml` 后仍需重启服务生效。
+
+控制台界面默认英文，右上角的 Language 选择器可切换中文；选择会保存在当前浏览器。
+
+`dashboard.listen` 默认只允许 `127.0.0.1` / `localhost` / 回环 IP。确需远程访问时设置 `allow_remote = true`，并只通过 HTTPS 反向代理暴露；Dashboard Token 等价于管理员密码，不要发到群聊或提交到仓库。
+
 ## 环境变量
 
 环境变量会覆盖配置文件中的对应值：

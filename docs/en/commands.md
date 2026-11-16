@@ -17,6 +17,7 @@ nectar update                         Update Nectar
 nectar schedule <subcommand>          Manage scheduled tasks
 nectar skills <subcommand>            Manage agent skills
 nectar memory <subcommand>            Manage local memory
+nectar dashboard [--config PATH]      Print the local console login URL
 nectar uninstall                      Uninstall Nectar
 ```
 
@@ -29,6 +30,31 @@ Global flags:
 | `-h` / `--help` | Show help |
 
 > The installer starts the background service by default. To run the bot in the foreground, stop the service first with `nectar service stop` to avoid two instances connecting to the platform.
+
+## Local console
+
+```bash
+nectar dashboard [--config PATH] [--json] [--no-browser]
+```
+
+Enable it first:
+
+```toml
+[dashboard]
+enabled = true
+listen = "127.0.0.1:8787"
+```
+
+Restart Nectar and run `nectar dashboard` to print a tokenized login URL and
+open it in the default browser. Use `--no-browser` to print the link only, or
+`--json` to return `url`, `listen`, and `token_file` without opening a browser.
+The token file is generated with `0600` permissions on first start. The listener
+is loopback-only by default; remote access requires `allow_remote = true` plus
+an HTTPS reverse proxy.
+
+The console covers bot status, memory search/review/pin/delete, scheduled-task
+CRUD/pause/resume/run, and a read-only effective-config view. Configuration
+changes still belong in `config.toml` and require a service restart.
 
 ## Multiple bots
 

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Nectar Console</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">🍯</span>
+        <span class="brand-copy"><strong>Nectar</strong><small>Console</small></span>
+      </div>
+      <nav class="nav" id="nav" data-i18n-aria-label="nav.main">
+        <button class="nav-item is-active" type="button" data-view="overview"><span class="nav-icon" aria-hidden="true">🧭</span><span class="nav-label" data-i18n="nav.overview">Overview</span></button>
+        <button class="nav-item" type="button" data-view="memory"><span class="nav-icon" aria-hidden="true">🧠</span><span class="nav-label" data-i18n="nav.memory">Memory</span></button>
+        <button class="nav-item" type="button" data-view="schedules"><span class="nav-icon" aria-hidden="true">⏰</span><span class="nav-label" data-i18n="nav.schedules">Schedules</span></button>
+        <button class="nav-item" type="button" data-view="settings"><span class="nav-icon" aria-hidden="true">⚙️</span><span class="nav-label" data-i18n="nav.settings">Settings</span></button>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="versionLabel">dev</span>
+        <a href="/logout" data-i18n="nav.logout">Log out</a>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" data-i18n="app.eyebrow">LOCAL CONTROL PLANE</p>
+          <h1 id="pageTitle" data-i18n="page.overview">Overview</h1>
+        </div>
+        <div class="top-actions">
+          <span class="badge badge-warn" id="readOnlyBadge" data-i18n="readonly.badge" hidden>Read-only</span>
+          <label class="bot-picker">
+            <span data-i18n="common.language">Language</span>
+            <select id="languageSelect" data-i18n-aria-label="common.language">
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
+          </label>
+          <label class="bot-picker">
+            <span>Bot</span>
+            <select id="botSelect"></select>
+          </label>
+          <button class="button" id="refreshBtn" type="button" data-i18n="common.refresh">Refresh</button>
+        </div>
+      </header>
+
+      <div class="toast" id="toast" hidden></div>
+
+      <section class="view" id="view-overview">
+        <div class="summary-grid" id="summaryCards"></div>
+        <div class="section-head">
+          <div><p class="eyebrow" data-i18n="overview.eyebrow">RUNTIMES</p><h2 data-i18n="overview.botStatus">Bot status</h2></div>
+        </div>
+        <div class="bot-grid" id="botCards"></div>
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="overview.recentErrors">Recent errors</h2><span class="muted" id="errorsMeta"></span></div>
+          <div class="error-list" id="errorsList"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-memory" hidden>
+        <div class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow" data-i18n="memory.eyebrow">MEMORY STORE</p><h2 data-i18n="memory.title">Memory management</h2></div>
+            <span class="muted" id="memoryMeta"></span>
+          </div>
+          <div class="toolbar">
+            <input class="input grow" id="memorySearch" type="search" data-i18n-placeholder="memory.searchPlaceholder" placeholder="Search memory content, projects, or tags…">
+            <select class="input" id="memoryStatus">
+              <option value="all" data-i18n="memory.allStatuses">All statuses</option>
+              <option value="candidate" data-i18n="memory.status.candidate">Pending review</option>
+              <option value="active" data-i18n="memory.status.active">Active</option>
+              <option value="archived" data-i18n="memory.status.archived">Archived</option>
+            </select>
+            <select class="input" id="memoryScope">
+              <option value="all" data-i18n="memory.allScopes">All scopes</option>
+              <option value="bot">bot</option>
+              <option value="chat">chat</option>
+              <option value="project">project</option>
+              <option value="global">global</option>
+            </select>
+            <select class="input" id="memoryKind">
+              <option value="all" data-i18n="memory.allTypes">All types</option>
+              <option value="profile">profile</option>
+              <option value="project">project</option>
+              <option value="fact">fact</option>
+              <option value="lesson">lesson</option>
+              <option value="episode">episode</option>
+            </select>
+            <button class="button button-accent" id="memoryRefresh" type="button" data-i18n="memory.query">Query</button>
+          </div>
+          <div class="count-row" id="memoryCounts"></div>
+          <div class="memory-list" id="memoryList"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-schedules" hidden>
+        <div class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow" data-i18n="schedule.eyebrow">SCHEDULER</p><h2 data-i18n="schedule.title">Scheduled tasks</h2></div>
+            <div class="inline-actions">
+              <label class="check"><input id="showAllSchedules" type="checkbox"> <span data-i18n="schedule.showCompleted">Show completed</span></label>
+              <button class="button button-accent" id="newScheduleBtn" type="button" data-i18n="schedule.new">New task</button>
+            </div>
+          </div>
+          <div class="muted" id="scheduleMeta"></div>
+          <div class="schedule-list" id="scheduleList"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings" hidden>
+        <div class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow" data-i18n="settings.eyebrow">READ-ONLY CONFIG</p><h2 data-i18n="settings.title">Effective config</h2></div>
+            <span class="muted" data-i18n="settings.secrets">Secrets and credentials never leave the process</span>
+          </div>
+          <div class="settings-grid" id="settingsPanel"></div>
+          <div class="notice" id="configNotice"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="dialog" id="memoryDialog">
+    <div class="dialog-card">
+      <div class="dialog-head"><h2 data-i18n="memory.dialog.title">Edit memory</h2><button class="icon-button" type="button" data-close-dialog="memoryDialog" data-i18n-aria-label="common.close">×</button></div>
+      <p class="muted" id="memoryDialogMeta"></p>
+      <textarea class="input textarea" id="memoryContent" rows="8"></textarea>
+      <div class="dialog-actions">
+        <button class="button" type="button" data-close-dialog="memoryDialog" data-i18n="common.cancel">Cancel</button>
+        <button class="button button-accent" id="memorySaveBtn" type="button" data-i18n="common.save">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="dialog" id="scheduleDialog">
+    <div class="dialog-card dialog-wide">
+      <div class="dialog-head"><h2 id="scheduleDialogTitle" data-i18n="schedule.dialog.create">New scheduled task</h2><button class="icon-button" type="button" data-close-dialog="scheduleDialog" data-i18n-aria-label="common.close">×</button></div>
+      <div class="form-grid">
+        <label><span data-i18n="schedule.form.mode">Mode</span>
+          <select class="input" id="scheduleMode">
+            <option value="cron">cron</option>
+            <option value="every" data-i18n="schedule.mode.every">Fixed interval</option>
+            <option value="in" data-i18n="schedule.mode.in">Delay once</option>
+            <option value="at" data-i18n="schedule.mode.at">Specific time</option>
+          </select>
+        </label>
+        <label data-mode-field="cron"><span data-i18n="schedule.form.cron">Cron expression</span>
+          <input class="input" id="scheduleCron" placeholder="0 9 * * *">
+        </label>
+        <label data-mode-field="every"><span data-i18n="schedule.form.interval">Interval</span>
+          <input class="input" id="scheduleEvery" placeholder="2h / 30m">
+        </label>
+        <label data-mode-field="in"><span data-i18n="schedule.form.delay">Delay</span>
+          <input class="input" id="scheduleIn" placeholder="30m / 2h">
+        </label>
+        <label data-mode-field="at"><span data-i18n="schedule.form.at">Execution time</span>
+          <input class="input" id="scheduleAt" placeholder="2026-12-01T10:00:00+08:00">
+        </label>
+        <label><span data-i18n="schedule.form.target">Delivery target</span>
+          <select class="input" id="scheduleTarget"></select>
+        </label>
+        <label><span data-i18n="schedule.form.timezone">Timezone</span>
+          <input class="input" id="scheduleTimezone" placeholder="Local">
+        </label>
+        <label><span data-i18n="schedule.form.timeout">Timeout</span>
+          <input class="input" id="scheduleTimeout" placeholder="30m">
+        </label>
+        <label class="wide"><span data-i18n="schedule.form.description">Description</span>
+          <input class="input" id="scheduleDesc" data-i18n-placeholder="schedule.form.descriptionPlaceholder" placeholder="Optional, e.g. daily standup summary">
+        </label>
+        <label class="wide"><span data-i18n="schedule.form.prompt">Prompt</span>
+          <textarea class="input textarea" id="schedulePrompt" rows="6" data-i18n-placeholder="schedule.form.promptPlaceholder" placeholder="Prompt the agent should receive when the task fires"></textarea>
+        </label>
+      </div>
+      <div class="preview" id="schedulePreview"></div>
+      <div class="dialog-actions">
+        <button class="button" id="schedulePreviewBtn" type="button" data-i18n="schedule.previewButton">Preview next runs</button>
+        <button class="button" type="button" data-close-dialog="scheduleDialog" data-i18n="common.cancel">Cancel</button>
+        <button class="button button-accent" id="scheduleSaveBtn" type="button" data-i18n="common.save">Save</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

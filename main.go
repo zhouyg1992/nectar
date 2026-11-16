@@ -15,6 +15,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/cli"
 	"github.com/zhouyg1992/nectar/internal/core"
 	"github.com/zhouyg1992/nectar/internal/core/decision"
+	"github.com/zhouyg1992/nectar/internal/dashboard"
 	"github.com/zhouyg1992/nectar/internal/engine"
 	"github.com/zhouyg1992/nectar/internal/engine/claude"
 	"github.com/zhouyg1992/nectar/internal/engine/codex"
@@ -83,6 +84,12 @@ func runBot(configPath string) error {
 	if len(setupErrs) > 0 {
 		logger.Warn("starting remaining bots after initialization failures", "failed", len(setupErrs), "running", len(runtimes))
 	}
+	dashboardServer, err := startDashboard(ctx, cfg, configPath, dashboardBots(runtimes), logger)
+	if err != nil {
+		logger.Warn("dashboard did not start", "error", err)
+	} else if dashboardServer != nil {
+		defer dashboardServer.Close()
+	}
 	return runBotRuntimes(ctx, runtimes, logger)
 }
 
@@ -96,6 +103,7 @@ type botRuntime struct {
 	router       *core.Router
 	scheduler    *core.Scheduler
 	scheduleAPI  *core.ScheduleAPI
+	anchors      *core.AnchorStore
 	setup        engineSetup
 	workspaces   *execguard.Workspace
 	memories     memory.Store
@@ -226,6 +234,7 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 		router:       router,
 		scheduler:    scheduler,
 		scheduleAPI:  scheduleAPI,
+		anchors:      anchors,
 		setup:        setup,
 		workspaces:   workspaces,
 		memories:     memories,
@@ -313,6 +322,98 @@ func runBotRuntimes(ctx context.Context, runtimes []*botRuntime, logger *slog.Lo
 		}
 	}
 	return nil
+}
+
+func startDashboard(ctx context.Context, cfg config.Config, configPath string, bots []dashboard.Bot, logger *slog.Logger) (*dashboard.Server, error) {
+	if !cfg.DashboardEnabled() {
+		return nil, nil
+	}
+	if strings.TrimSpace(configPath) == "" {
+		configPath = config.DefaultPath()
+	}
+	server, err := dashboard.New(dashboard.Options{
+		Listen:      cfg.Dashboard.Listen,
+		TokenPath:   cfg.DashboardTokenPath(),
+		ConfigPath:  configPath,
+		Version:     version,
+		ReadOnly:    cfg.Dashboard.ReadOnly,
+		AllowRemote: cfg.Dashboard.AllowRemote,
+		Logger:      logger,
+		Bots:        bots,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := server.Start(ctx); err != nil {
+		return nil, err
+	}
+	return server, nil
+}
+
+func dashboardBots(runtimes []*botRuntime) []dashboard.Bot {
+	out := make([]dashboard.Bot, 0, len(runtimes))
+	for _, runtime := range runtimes {
+		out = append(out, dashboard.Bot{
+			ID:                      runtime.id,
+			Name:                    runtime.name,
+			Platform:                runtime.platformName,
+			Engine:                  runtime.setup.name,
+			Model:                   runtime.setup.model,
+			Workspace:               runtime.workspaces.Root(),
+			DataDir:                 runtime.cfg.Storage.DataDir,
+			WorkspaceMode:           runtime.cfg.Bot.WorkspaceMode,
+			AdminUsers:              runtime.cfg.Bot.AdminUsers,
+			AllowedChats:            runtime.cfg.Bot.AllowedChats,
+			MemoryEnabled:           runtime.memories != nil,
+			MemoryDefaultScope:      runtime.cfg.MemoryDefaultScope(),
+			MemoryMaxItems:          runtime.cfg.Memory.MaxItems,
+			MemoryMaxChars:          runtime.cfg.Memory.MaxChars,
+			MemoryAutoLearnFailures: runtime.cfg.MemoryAutoLearnFailures(),
+			ScheduleEnabled:         runtime.scheduler != nil,
+			ScheduleTimezone:        runtime.cfg.Schedule.Timezone,
+			ScheduleHistoryLimit:    runtime.cfg.Schedule.HistoryLimit,
+			ScheduleMaxConcurrent:   runtime.cfg.Schedule.MaxConcurrent,
+			ScheduleJitter:          runtime.cfg.Schedule.Jitter,
+			ScheduleTimeout:         runtime.cfg.Schedule.Timeout,
+			DefaultChannel:          runtime.platformName,
+			DefaultAgent:            runtime.cfg.Bot.Engine,
+			Memory:                  runtime.memories,
+			Scheduler:               runtime.scheduler,
+			Anchors:                 runtime.anchors,
+		})
+	}
+	return out
+}
+
+func dashboardBot(cfg config.Config, setup engineSetup, platformName string, workspaces *execguard.Workspace, anchors *core.AnchorStore, memories memory.Store, scheduler *core.Scheduler) dashboard.Bot {
+	return dashboard.Bot{
+		ID:                      "default",
+		Name:                    cfg.Bot.Name,
+		Platform:                platformName,
+		Engine:                  setup.name,
+		Model:                   setup.model,
+		Workspace:               workspaces.Root(),
+		DataDir:                 cfg.Storage.DataDir,
+		WorkspaceMode:           cfg.Bot.WorkspaceMode,
+		AdminUsers:              cfg.Bot.AdminUsers,
+		AllowedChats:            cfg.Bot.AllowedChats,
+		MemoryEnabled:           memories != nil,
+		MemoryDefaultScope:      cfg.MemoryDefaultScope(),
+		MemoryMaxItems:          cfg.Memory.MaxItems,
+		MemoryMaxChars:          cfg.Memory.MaxChars,
+		MemoryAutoLearnFailures: cfg.MemoryAutoLearnFailures(),
+		ScheduleEnabled:         scheduler != nil,
+		ScheduleTimezone:        cfg.Schedule.Timezone,
+		ScheduleHistoryLimit:    cfg.Schedule.HistoryLimit,
+		ScheduleMaxConcurrent:   cfg.Schedule.MaxConcurrent,
+		ScheduleJitter:          cfg.Schedule.Jitter,
+		ScheduleTimeout:         cfg.Schedule.Timeout,
+		DefaultChannel:          platformName,
+		DefaultAgent:            cfg.Bot.Engine,
+		Memory:                  memories,
+		Scheduler:               scheduler,
+		Anchors:                 anchors,
+	}
 }
 
 func runLegacyBot(configPath string) error {
@@ -459,6 +560,15 @@ func runLegacyBot(configPath string) error {
 			return err
 		}
 		defer scheduleAPI.Close()
+	}
+
+	dashboardServer, err := startDashboard(ctx, cfg, configPath, []dashboard.Bot{
+		dashboardBot(cfg, setup, platformName, workspaces, anchors, memories, scheduler),
+	}, logger)
+	if err != nil {
+		logger.Warn("dashboard did not start", "error", err)
+	} else if dashboardServer != nil {
+		defer dashboardServer.Close()
 	}
 
 	logger.Info("nectar starting",

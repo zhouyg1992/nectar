@@ -298,3 +298,18 @@ jitter = "0s"
 # Default per-run timeout. Tasks can override it with --timeout. "0s" disables
 # the scheduler deadline; the engine's own timeout still applies.
 timeout = "30m"
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+# Optional local web console for bot status, memory review, and scheduled
+# task management. Disabled by default and loopback-only unless explicitly
+# configured otherwise. Settings are read-only in the console; edit this file
+# and restart the service to change configuration.
+#
+# [dashboard]
+# enabled = false
+# listen = "127.0.0.1:8787"
+# token_file = "~/.nectar/run/dashboard.token"
+# allow_remote = false
+# read_only = false

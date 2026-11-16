@@ -195,6 +195,53 @@ func TestMemoryDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestDashboardDefaultsAndLoopbackValidation(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DashboardEnabled() {
+		t.Fatal("dashboard should be disabled by default")
+	}
+	if cfg.Dashboard.Listen != "127.0.0.1:8787" {
+		t.Fatalf("dashboard listen = %q", cfg.Dashboard.Listen)
+	}
+	if got := cfg.DashboardTokenPath(); got != filepath.Join(cfg.Storage.DataDir, "run", "dashboard.token") {
+		t.Fatalf("dashboard token path = %q", got)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[dashboard]\nenabled = true\nlisten = \"0.0.0.0:8787\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected non-loopback dashboard listener error")
+	}
+
+	body += "allow_remote = true\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.DashboardEnabled() || !cfg.Dashboard.AllowRemote {
+		t.Fatalf("dashboard config = %#v", cfg.Dashboard)
+	}
+}
+
+func TestDashboardRejectsInvalidListen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[dashboard]\nenabled = true\nlisten = \"not-an-address\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid dashboard listen error")
+	}
+}
+
 func TestScheduleRejectsNegativeHistoryLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[schedule]\nhistory_limit = -1\n"), 0o600); err != nil {

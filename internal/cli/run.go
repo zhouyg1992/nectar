@@ -31,6 +31,8 @@ func Run(args []string, deps Deps) error {
 			return runSkills(args[1:])
 		case "memory":
 			return runMemory(args[1:])
+		case "dashboard":
+			return runDashboard(args[1:])
 		case "uninstall":
 			return runUninstall(args[1:])
 		case "help", "-h", "--help":
@@ -66,6 +68,7 @@ func printMainUsage() {
   nectar bots [-config PATH]
   nectar worktrees <list|remove> [--config PATH] [--bot ID]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
+  nectar dashboard [--config PATH] [--json] [--no-browser]
   nectar skills <install|uninstall>
   nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>
   nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
