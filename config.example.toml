@@ -265,6 +265,9 @@ data_dir = "~/.nectar"
 [memory]
 # Enable the local-first memory store and prompt injection.
 enabled = true
+# Default scope for /remember and `nectar memory add`: bot | chat | project.
+# "bot" shares memories across every chat handled by the same bot.
+default_scope = "bot"
 # Maximum number of memories injected into one agent turn.
 max_items = 6
 # Maximum characters of memory context injected into one prompt.

@@ -45,6 +45,7 @@ type RouterConfig struct {
 	WorkspaceLocks         *execguard.WorkspaceLocks
 	MemoryMaxItems         int
 	MemoryMaxChars         int
+	MemoryDefaultScope     string
 	DisableMemoryAutoLearn bool
 }
 
@@ -127,6 +128,9 @@ func NewRouter(
 	}
 	if cfg.MemoryMaxChars <= 0 {
 		cfg.MemoryMaxChars = 1500
+	}
+	if strings.TrimSpace(cfg.MemoryDefaultScope) == "" {
+		cfg.MemoryDefaultScope = "bot"
 	}
 	if logger == nil {
 		logger = slog.Default()

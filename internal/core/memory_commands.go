@@ -81,16 +81,12 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 			if len(items) > maxItems {
 				items = items[:maxItems]
 			}
-			var lines []string
-			for _, item := range items {
-				lines = append(lines, formatMemoryLine(item))
-			}
-			body += strings.Join(lines, "\n")
+			body += formatMemoryTable(items)
 			if !includeArchived && counts[memory.StatusArchived] > 0 {
 				body += "\n\nUse `/memory list archived` to inspect archived items."
 			}
 		}
-		r.sendCommandResult(msg, platform.CardInfo, "🧠 Memory", body)
+		r.sendMemoryCard(msg, body)
 	case "search", "find":
 		query := strings.TrimSpace(strings.Join(args, " "))
 		if query == "" {
@@ -107,14 +103,10 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 			return
 		}
 		if len(items) == 0 {
-			r.sendCommandResult(msg, platform.CardInfo, "🔍 Memory Search", "No matching memories.")
+			r.sendMemoryCard(msg, "Search\n\nNo matching memories.")
 			return
 		}
-		var lines []string
-		for _, item := range items {
-			lines = append(lines, formatMemoryLine(item))
-		}
-		r.sendCommandResult(msg, platform.CardInfo, "🔍 Memory Search", strings.Join(lines, "\n"))
+		r.sendMemoryCard(msg, "Search\n\n"+formatMemoryTable(items))
 	case "show":
 		if len(args) < 1 {
 			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /memory show <id>")
@@ -125,7 +117,7 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 			r.sendCommandResult(msg, platform.CardError, "⚠️ Not Found", "No visible memory with that id.")
 			return
 		}
-		r.sendCommandResult(msg, platform.CardInfo, "🧠 Memory Detail", formatMemoryDetail(item))
+		r.sendMemoryCard(msg, formatMemoryDetail(item))
 	case "approve", "activate":
 		r.setMemoryStatus(msg, args, memory.StatusActive, "✅ Memory Activated")
 	case "reject", "archive":
@@ -135,28 +127,11 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 	case "unpin":
 		r.setMemoryPinned(msg, args, false)
 	case "forget", "delete", "rm":
-		if len(args) < 1 {
-			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /memory forget <id>")
-			return
-		}
-		item, ok := r.visibleMemory(msg, args[0])
-		if !ok {
-			r.sendCommandResult(msg, platform.CardError, "⚠️ Not Found", "No visible memory with that id.")
-			return
-		}
-		if !r.manageableMemory(msg, item) {
-			r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can change shared memory.")
-			return
-		}
-		if err := r.memories.Delete(r.ctx, args[0]); err != nil {
-			r.sendCommandResult(msg, platform.CardError, "⚠️ Memory Error", err.Error())
-			return
-		}
-		r.sendCommandResult(msg, platform.CardInfo, "🧹 Memory Forgotten", "Memory `"+args[0]+"` was deleted.")
+		r.handleMemoryForget(msg, args)
 	case "add":
 		r.handleRemember(msg, "/remember "+strings.Join(args, " "))
 	case "help", "?":
-		r.sendCommandResult(msg, platform.CardInfo, "🧠 Memory Commands", memoryHelpText)
+		r.sendMemoryCard(msg, memoryHelpText)
 	default:
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Unknown Command", memoryHelpText)
 	}
@@ -165,22 +140,22 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 func (r *Router) handleRemember(msg platform.Message, text string) {
 	rest := strings.TrimSpace(text[len("/remember"):])
 	if rest == "" {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /remember [project|global] <text>")
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /remember [bot|chat|project] <text>")
 		return
 	}
-	scope, content := splitMemoryScope(rest)
+	scope, content := splitMemoryScope(rest, r.cfg.MemoryDefaultScope)
 	if content == "" {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /remember [project|global] <text>")
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /remember [bot|chat|project] <text>")
 		return
 	}
-	if scope == memory.ScopeGlobal && !r.isAdmin(msg.UserID) {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can write global memory.")
+	if (scope == memory.ScopeBot || scope == memory.ScopeGlobal) && !r.isAdmin(msg.UserID) {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can write bot-wide memory.")
 		return
 	}
 	scopeID := memoryChatScope(msg)
 	projectID := ""
 	switch scope {
-	case memory.ScopeGlobal:
+	case memory.ScopeBot, memory.ScopeGlobal:
 		scopeID = ""
 	case memory.ScopeProject:
 		scopeID = r.memoryProjectScope(msg)
@@ -191,7 +166,7 @@ func (r *Router) handleRemember(msg platform.Message, text string) {
 		projectID = strings.TrimPrefix(scopeID, "project:")
 	}
 	workdir := ""
-	if scope != memory.ScopeGlobal {
+	if scope != memory.ScopeBot && scope != memory.ScopeGlobal {
 		workdir = r.memoryProjectDir(msg)
 	}
 	content, locality := memory.NormalizeContent(workdir, content)
@@ -220,15 +195,19 @@ func (r *Router) handleRemember(msg platform.Message, text string) {
 	if item.Status == memory.StatusCandidate {
 		body += "\n\nPending review: `/memory approve " + item.ID + "`"
 	}
-	r.sendCommandResult(msg, platform.CardInfo, "🧠 Remembered", body)
+	r.sendMemoryCard(msg, "Saved\n\n"+body)
 }
 
 func (r *Router) handleForget(msg platform.Message, id string) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /forget <id>")
+	r.handleMemoryForget(msg, strings.Fields(id))
+}
+
+func (r *Router) handleMemoryForget(msg platform.Message, args []string) {
+	if len(args) < 1 {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /memory forget <id> [confirm]")
 		return
 	}
+	id := strings.TrimSpace(args[0])
 	item, ok := r.visibleMemory(msg, id)
 	if !ok {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Not Found", "No visible memory with that id.")
@@ -238,11 +217,16 @@ func (r *Router) handleForget(msg platform.Message, id string) {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can change shared memory.")
 		return
 	}
+	confirmed := len(args) > 1 && (strings.EqualFold(args[1], "confirm") || strings.EqualFold(args[1], "--confirm") || strings.EqualFold(args[1], "yes"))
+	if !confirmed {
+		r.sendMemoryCard(msg, fmt.Sprintf("Delete confirmation\n\nMemory `%s`\n%s\n\nReply `/memory forget %s confirm` to delete it.", item.ID, execguard.Truncate(item.Content, 300), item.ID))
+		return
+	}
 	if err := r.memories.Delete(r.ctx, id); err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Memory Error", err.Error())
 		return
 	}
-	r.sendCommandResult(msg, platform.CardInfo, "🧹 Memory Forgotten", "Memory `"+id+"` was deleted.")
+	r.sendMemoryCard(msg, fmt.Sprintf("Deleted\n\nMemory `%s` was deleted.", id))
 }
 
 func (r *Router) setMemoryStatus(msg platform.Message, args []string, status memory.Status, title string) {
@@ -263,7 +247,7 @@ func (r *Router) setMemoryStatus(msg platform.Message, args []string, status mem
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Memory Error", err.Error())
 		return
 	}
-	r.sendCommandResult(msg, platform.CardInfo, title, fmt.Sprintf("Memory `%s` is now %s.", args[0], status))
+	r.sendMemoryCard(msg, title+"\n\n"+fmt.Sprintf("Memory `%s` is now %s.", args[0], status))
 }
 
 func (r *Router) setMemoryPinned(msg platform.Message, args []string, pinned bool) {
@@ -288,7 +272,7 @@ func (r *Router) setMemoryPinned(msg platform.Message, args []string, pinned boo
 	if pinned {
 		action = "pinned"
 	}
-	r.sendCommandResult(msg, platform.CardInfo, "📌 Memory Updated", fmt.Sprintf("Memory `%s` is now %s.", args[0], action))
+	r.sendMemoryCard(msg, fmt.Sprintf("Pinned\n\nMemory `%s` is now %s.", args[0], action))
 }
 
 func (r *Router) visibleMemory(msg platform.Message, id string) (memory.Memory, bool) {
@@ -303,7 +287,7 @@ func (r *Router) visibleMemory(msg platform.Message, id string) (memory.Memory, 
 }
 
 func (r *Router) manageableMemory(msg platform.Message, item memory.Memory) bool {
-	if item.Scope == memory.ScopeGlobal {
+	if item.Scope == memory.ScopeBot || item.Scope == memory.ScopeGlobal {
 		return r.isAdmin(msg.UserID)
 	}
 	if isGroupChat(msg) {
@@ -313,7 +297,7 @@ func (r *Router) manageableMemory(msg platform.Message, item memory.Memory) bool
 }
 
 func memoryVisible(item memory.Memory, scopeIDs []string) bool {
-	if item.Scope == memory.ScopeGlobal {
+	if item.Scope == memory.ScopeBot || item.Scope == memory.ScopeGlobal {
 		return true
 	}
 	for _, id := range scopeIDs {
@@ -444,17 +428,25 @@ func memoryChatScope(msg platform.Message) string {
 	return memory.ChatScope(msg.Channel, msg.ChatID)
 }
 
+func (r *Router) sendMemoryCard(msg platform.Message, body string) {
+	r.sendCommandResult(msg, platform.CardInfo, "🧠 Memory", body)
+}
+
 func memoryProjectScope(workdir string) string {
 	return memory.ProjectScope(workdir)
 }
 
-func splitMemoryScope(text string) (memory.Scope, string) {
+func splitMemoryScope(text, defaultScope string) (memory.Scope, string) {
 	text = strings.TrimSpace(text)
 	parts := strings.SplitN(text, " ", 2)
 	switch strings.ToLower(parts[0]) {
+	case "bot":
+		if len(parts) == 2 {
+			return memory.ScopeBot, strings.TrimSpace(parts[1])
+		}
 	case "global":
 		if len(parts) == 2 {
-			return memory.ScopeGlobal, strings.TrimSpace(parts[1])
+			return memory.ScopeBot, strings.TrimSpace(parts[1])
 		}
 	case "project":
 		if len(parts) == 2 {
@@ -465,7 +457,16 @@ func splitMemoryScope(text string) (memory.Scope, string) {
 			return memory.ScopeChat, strings.TrimSpace(parts[1])
 		}
 	}
-	return memory.ScopeChat, text
+	switch strings.ToLower(strings.TrimSpace(defaultScope)) {
+	case "bot":
+		return memory.ScopeBot, text
+	case "global":
+		return memory.ScopeBot, text
+	case "project":
+		return memory.ScopeProject, text
+	default:
+		return memory.ScopeChat, text
+	}
 }
 
 func classifyMemory(content string) memory.Kind {
@@ -481,12 +482,38 @@ func classifyMemory(content string) memory.Kind {
 	return memory.KindFact
 }
 
-func formatMemoryLine(item memory.Memory) string {
-	pin := ""
-	if item.Pinned {
-		pin = " 📌"
+func formatMemoryTable(items []memory.Memory) string {
+	var body strings.Builder
+	body.WriteString("| ID | Kind | Scope | Status | Content |\n")
+	body.WriteString("|---|---|---|---|---|\n")
+	for _, item := range items {
+		kind := string(item.Kind)
+		if item.Pinned {
+			kind = "📌 " + kind
+		}
+		body.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s | %s |\n",
+			item.ID,
+			tableCell(kind, 24),
+			memoryScopeLabel(item.Scope),
+			tableCell(string(item.Status), 16),
+			tableCell(item.Content, 120),
+		))
 	}
-	return fmt.Sprintf("- `%s` [%s/%s]%s %s", item.ID, item.Kind, item.Status, pin, execguard.Truncate(singleLine(item.Content), 120))
+	return strings.TrimRight(body.String(), "\n")
+}
+
+func memoryScopeLabel(scope memory.Scope) string {
+	if scope == memory.ScopeBot || scope == memory.ScopeGlobal {
+		return "bot"
+	}
+	return string(scope)
+}
+
+func tableCell(value string, max int) string {
+	value = singleLine(value)
+	value = strings.ReplaceAll(value, "|", "\\|")
+	value = strings.ReplaceAll(value, "`", "'")
+	return execguard.Truncate(value, max)
 }
 
 func formatMemoryDetail(item memory.Memory) string {
@@ -540,5 +567,5 @@ const memoryHelpText = "`/memory` — list active memories\n" +
 	"`/memory approve <id>` — activate a candidate\n" +
 	"`/memory reject <id>` — archive a memory\n" +
 	"`/memory pin|unpin <id>` — keep a memory prominent\n" +
-	"`/memory forget <id>` — delete a memory\n" +
-	"`/remember [project|global] <text>` — add a memory"
+	"`/memory forget <id>` — start a two-step memory deletion\n" +
+	"`/remember [bot|chat|project] <text>` — add a memory"

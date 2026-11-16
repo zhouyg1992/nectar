@@ -67,12 +67,21 @@ func runBot(configPath string) error {
 
 	runtimes := make([]*botRuntime, 0, len(bots))
 	workspaceLocks := execguard.NewWorkspaceLocks()
+	var setupErrs []error
 	for _, bot := range bots {
 		runtime, err := newBotRuntime(ctx, bot, logger, workspaceLocks)
 		if err != nil {
-			return fmt.Errorf("bot %q: %w", bot.ID, err)
+			logger.Error("bot failed to initialize", "bot", bot.ID, "error", err)
+			setupErrs = append(setupErrs, fmt.Errorf("bot %q: %w", bot.ID, err))
+			continue
 		}
 		runtimes = append(runtimes, runtime)
+	}
+	if len(runtimes) == 0 {
+		return errors.Join(setupErrs...)
+	}
+	if len(setupErrs) > 0 {
+		logger.Warn("starting remaining bots after initialization failures", "failed", len(setupErrs), "running", len(runtimes))
 	}
 	return runBotRuntimes(ctx, runtimes, logger)
 }
@@ -158,6 +167,7 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 			WorkspaceLocks:         workspaceLocks,
 			MemoryMaxItems:         cfg.Memory.MaxItems,
 			MemoryMaxChars:         cfg.Memory.MaxChars,
+			MemoryDefaultScope:     cfg.MemoryDefaultScope(),
 			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
 		},
 	)
@@ -382,6 +392,7 @@ func runLegacyBot(configPath string) error {
 			WorkspaceLocks:         execguard.NewWorkspaceLocks(),
 			MemoryMaxItems:         cfg.Memory.MaxItems,
 			MemoryMaxChars:         cfg.Memory.MaxChars,
+			MemoryDefaultScope:     cfg.MemoryDefaultScope(),
 			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
 		},
 	)

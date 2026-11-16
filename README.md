@@ -40,7 +40,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`; `/list`, `/switch`, and `/rename` keep multiple sessions per chat, and the service resumes the same agent session when it is still valid after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
-- **Memory travels with you**: local-first profile / project / chat memory with review, retrieval, and an agent CLI.
+- **Memory travels with you**: bot-wide, project, or chat-scoped local memory with review, retrieval, and an agent CLI.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 - **Run several bots at once**: give Codex, Claude, and ops bots separate identities, workspaces, sessions, and memory in one process, with optional per-session git worktrees.
 

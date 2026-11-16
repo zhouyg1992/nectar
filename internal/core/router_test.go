@@ -403,7 +403,7 @@ func newTestRouterWithMemory(t *testing.T, eng engine.EngineAdapter, plat platfo
 		memories,
 		decision.Noop{},
 		logger,
-		RouterConfig{AgentID: "codex"},
+		RouterConfig{AgentID: "codex", MemoryDefaultScope: "chat"},
 	)
 	return router, lessons, memories
 }
@@ -1149,7 +1149,7 @@ func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
 	}
 }
 
-func TestRouterAllowsDifferentChatsToRunTogether(t *testing.T) {
+func TestRouterSharedWorkspaceAllowsDifferentChatsToRunTogether(t *testing.T) {
 	plat := &fakePlatform{cards: true}
 	eng := &concurrentEngine{started: make(chan struct{}, 2), release: make(chan struct{})}
 	defer close(eng.release)

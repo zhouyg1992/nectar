@@ -65,6 +65,128 @@ func TestRouterRemembersAndInjectsMemory(t *testing.T) {
 	}
 }
 
+func TestRouterBotScopeMemoryIsSharedAcrossChats(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, memories := newTestRouterWithMemory(t, eng, plat)
+	router.cfg.MemoryDefaultScope = "bot"
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "dm",
+		MessageID: "m1",
+		Text:      "/remember 以后默认用中文回复",
+	})
+	waitForReplies(t, plat, 1)
+
+	active, err := memories.List(context.Background(), memory.ListOptions{Status: memory.StatusActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 1 || active[0].Scope != memory.ScopeBot {
+		t.Fatalf("active memories = %#v", active)
+	}
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "group",
+		ChatType:  "group",
+		MessageID: "m2",
+		Text:      "hello",
+	})
+	waitForReplies(t, plat, 2)
+	prompt, _ := eng.lastRequest()
+	if !strings.Contains(prompt, "以后默认用中文回复") {
+		t.Fatalf("group prompt missing bot-scoped memory: %q", prompt)
+	}
+}
+
+func TestRouterDoesNotSendRecallMemoryCard(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &fakeEngine{}
+	router, _, _ := newTestRouterWithMemory(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m1",
+		Text:      "/remember 用户喜欢吃苹果",
+	})
+	waitForCardSends(t, plat, 1)
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m2",
+		Text:      "我喜欢什么水果",
+	})
+	waitForCardSends(t, plat, 2)
+
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	for _, card := range plat.sentCards {
+		if card.Title == "🧠 Memory" && strings.Contains(card.Body, "Recalled for this turn") {
+			t.Fatalf("recall card should not be sent: %#v", card)
+		}
+	}
+}
+
+func TestRouterMemoryForgetRequiresConfirmation(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, memories := newTestRouterWithMemory(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m1",
+		Text:      "/remember 用户喜欢吃苹果",
+	})
+	waitForReplies(t, plat, 1)
+	active, err := memories.List(context.Background(), memory.ListOptions{Status: memory.StatusActive})
+	if err != nil || len(active) != 1 {
+		t.Fatalf("active = %#v err=%v", active, err)
+	}
+	id := active[0].ID
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m2",
+		Text:      "/memory forget " + id,
+	})
+	waitForReplies(t, plat, 2)
+	if got := plat.lastReply(); !strings.Contains(got, "confirm") {
+		t.Fatalf("confirmation reply = %q", got)
+	}
+	if _, ok, err := memories.Get(context.Background(), id); err != nil || !ok {
+		t.Fatalf("memory deleted before confirmation: ok=%v err=%v", ok, err)
+	}
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m3",
+		Text:      "/memory forget " + id + " confirm",
+	})
+	waitForReplies(t, plat, 3)
+	if _, ok, err := memories.Get(context.Background(), id); err != nil || ok {
+		t.Fatalf("memory not deleted after confirmation: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestFormatMemoryTableIncludesScope(t *testing.T) {
+	table := formatMemoryTable([]memory.Memory{
+		{ID: "id1", Kind: memory.KindProfile, Scope: memory.ScopeBot, Status: memory.StatusActive, Content: "用户喜欢吃苹果"},
+		{ID: "id2", Kind: memory.KindFact, Scope: memory.ScopeChat, Status: memory.StatusCandidate, Content: "a|b"},
+	})
+	for _, want := range []string{"| ID | Kind | Scope | Status | Content |", "| bot |", "| chat |", "a\\|b"} {
+		if !strings.Contains(table, want) {
+			t.Fatalf("table missing %q:\n%s", want, table)
+		}
+	}
+}
+
 func TestRouterDoesNotRepeatUnchangedMemoryBlock(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{}

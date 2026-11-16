@@ -253,6 +253,33 @@ func TestRedactAndNormalizeContent(t *testing.T) {
 	}
 }
 
+func TestBotScopeAlwaysIncludedInSearch(t *testing.T) {
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.Put(context.Background(), Memory{
+		Kind:    KindProfile,
+		Scope:   ScopeBot,
+		Content: "用户喜欢吃苹果",
+		Status:  StatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.Search(context.Background(), SearchOptions{
+		Query:    "苹果",
+		ScopeIDs: []string{"chat:feishu/other"},
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != item.ID {
+		t.Fatalf("items = %#v", items)
+	}
+}
+
 func TestProjectIDUsesExplicitFile(t *testing.T) {
 	workdir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(workdir, ".nectar"), 0o755); err != nil {

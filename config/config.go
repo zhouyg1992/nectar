@@ -152,10 +152,11 @@ type StorageConfig struct {
 }
 
 type MemoryConfig struct {
-	Enabled           *bool `toml:"enabled"`
-	MaxItems          int   `toml:"max_items"`
-	MaxChars          int   `toml:"max_chars"`
-	AutoLearnFailures *bool `toml:"auto_learn_failures"`
+	Enabled           *bool  `toml:"enabled"`
+	MaxItems          int    `toml:"max_items"`
+	MaxChars          int    `toml:"max_chars"`
+	AutoLearnFailures *bool  `toml:"auto_learn_failures"`
+	DefaultScope      string `toml:"default_scope"`
 }
 
 type ScheduleConfig struct {
@@ -217,8 +218,9 @@ func defaults() Config {
 		Bot:     BotConfig{Name: "Nectar", WorkspaceMode: "shared"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
 		Memory: MemoryConfig{
-			MaxItems: 6,
-			MaxChars: 1500,
+			MaxItems:     6,
+			MaxChars:     1500,
+			DefaultScope: "bot",
 		},
 		Schedule: ScheduleConfig{
 			StartupGrace:  "5m",
@@ -302,6 +304,17 @@ func (c Config) MemoryEnabled() bool {
 
 func (c Config) MemoryAutoLearnFailures() bool {
 	return c.Memory.AutoLearnFailures == nil || *c.Memory.AutoLearnFailures
+}
+
+func (c Config) MemoryDefaultScope() string {
+	switch strings.ToLower(strings.TrimSpace(c.Memory.DefaultScope)) {
+	case "chat":
+		return "chat"
+	case "project":
+		return "project"
+	default:
+		return "bot"
+	}
 }
 
 func (c Config) ScheduleGrace() (time.Duration, error) {
@@ -447,6 +460,15 @@ func normalize(cfg *Config) error {
 	}
 	if cfg.Memory.MaxChars <= 0 {
 		cfg.Memory.MaxChars = 1500
+	}
+	cfg.Memory.DefaultScope = strings.ToLower(strings.TrimSpace(cfg.Memory.DefaultScope))
+	if cfg.Memory.DefaultScope == "" {
+		cfg.Memory.DefaultScope = "bot"
+	}
+	switch cfg.Memory.DefaultScope {
+	case "bot", "chat", "project":
+	default:
+		return fmt.Errorf("unsupported memory.default_scope %q (supported: bot, chat, project)", cfg.Memory.DefaultScope)
 	}
 	if cfg.Codex.WorkingDir == "" {
 		return errors.New("codex.working_dir is required")

@@ -276,6 +276,52 @@ func TestPersistentSessionStoreMigratesV1(t *testing.T) {
 	}
 }
 
+func TestPersistentSessionStoreMigratesEngineBotIDToDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	legacy := `{
+  "version": 2,
+  "sessions": [
+    {
+      "id": "ses_legacy",
+      "channel": "feishu",
+      "chat_id": "c1",
+      "agent_id": "codex",
+      "bot_id": "codex",
+      "engine_session_id": "thread-old",
+      "status": "active",
+      "updated_at": "2026-11-16T10:00:00Z"
+    }
+  ],
+  "active": [
+    {
+      "channel": "feishu",
+      "chat_id": "c1",
+      "agent_id": "codex",
+      "bot_id": "codex",
+      "session_id": "ses_legacy"
+    }
+  ]
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewPersistentSessionStore(path, "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := SessionKey{BotID: "default", Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	if got := store.ActiveID(key); got != "ses_legacy" {
+		t.Fatalf("active session = %q, want ses_legacy", got)
+	}
+	session, ok := store.GetSession("ses_legacy")
+	if !ok || session.BotID != "default" {
+		t.Fatalf("migrated session = %#v, %v", session, ok)
+	}
+	if got, ok := store.Get(key); !ok || got != "thread-old" {
+		t.Fatalf("engine session = %q, %v", got, ok)
+	}
+}
+
 func TestSessionStoreAutoNameAndUsage(t *testing.T) {
 	store := NewSessionStore()
 	key := SessionKey{Channel: "telegram", ChatID: "42", AgentID: "codex"}

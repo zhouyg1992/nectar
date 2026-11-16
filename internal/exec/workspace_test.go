@@ -71,7 +71,7 @@ func TestWorkspaceWorktreeIsolatesSessions(t *testing.T) {
 	if len(items) != 1 || items[0].Path != wantPath {
 		t.Fatalf("worktrees = %#v", items)
 	}
-	if err := workspace.RemoveWorktree("ses_abc", true); err != nil {
+	if err := workspace.RemoveWorktree("ses_abc", true, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(session.Path); !os.IsNotExist(err) {
@@ -112,6 +112,54 @@ func TestWorkspaceExplicitWorktreeRequiresGit(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected worktree requirement error")
+	}
+}
+
+func TestWorkspaceRemoveAllWorktreesRequiresForceWhenDirty(t *testing.T) {
+	repo := gitRepo(t)
+	workspace, err := NewWorkspaceWithOptions(Options{
+		Root:    repo,
+		Mode:    ModeWorktree,
+		DataDir: t.TempDir(),
+		BotID:   "bot",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := workspace.ForSession("ses_dirty", "chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(session.Path, "dirty.txt"), []byte("dirty"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.RemoveAllWorktrees(false, false); err == nil {
+		t.Fatal("expected dirty worktree removal to fail without force")
+	}
+	if err := workspace.RemoveAllWorktrees(true, false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkspaceRemoveWorktreeCanDeleteBranch(t *testing.T) {
+	repo := gitRepo(t)
+	workspace, err := NewWorkspaceWithOptions(Options{
+		Root:    repo,
+		Mode:    ModeWorktree,
+		DataDir: t.TempDir(),
+		BotID:   "bot",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := workspace.ForSession("ses_branch", "chat"); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.RemoveWorktree("ses_branch", true, true); err != nil {
+		t.Fatal(err)
+	}
+	if branches := strings.TrimSpace(runGit(t, repo, "branch", "--list", "nectar/bot/ses_branch")); branches != "" {
+		t.Fatalf("branch still exists: %q", branches)
 	}
 }
 

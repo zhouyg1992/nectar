@@ -274,7 +274,7 @@ func (w *Workspace) ListWorktrees() ([]WorktreeInfo, error) {
 	return worktrees, nil
 }
 
-func (w *Workspace) RemoveWorktree(sessionID string, force bool) error {
+func (w *Workspace) RemoveWorktree(sessionID string, force, deleteBranch bool) error {
 	if w.mode != ModeWorktree {
 		return fmt.Errorf("workspace mode is %s, not worktree", w.mode)
 	}
@@ -290,14 +290,23 @@ func (w *Workspace) RemoveWorktree(sessionID string, force bool) error {
 	if output, err := gitOutput(w.projectRoot, args...); err != nil {
 		if !isWorktree(session.Path) && !pathExists(session.Path) {
 			_ = w.PruneWorktrees()
+			if deleteBranch {
+				return w.deleteBranch("nectar/" + w.botID + "/" + safeName(sessionID))
+			}
 			return nil
 		}
 		return fmt.Errorf("remove worktree %s: %v: %s", session.Path, err, strings.TrimSpace(output))
 	}
-	return w.PruneWorktrees()
+	if err := w.PruneWorktrees(); err != nil {
+		return err
+	}
+	if deleteBranch {
+		return w.deleteBranch("nectar/" + w.botID + "/" + safeName(sessionID))
+	}
+	return nil
 }
 
-func (w *Workspace) RemoveAllWorktrees(force bool) error {
+func (w *Workspace) RemoveAllWorktrees(force, deleteBranch bool) error {
 	if w.mode != ModeWorktree {
 		return nil
 	}
@@ -314,10 +323,25 @@ func (w *Workspace) RemoveAllWorktrees(force bool) error {
 		args = append(args, item.Path)
 		if output, err := gitOutput(w.projectRoot, args...); err != nil {
 			errs = append(errs, fmt.Errorf("remove worktree %s: %v: %s", item.Path, err, strings.TrimSpace(output)))
+		} else if deleteBranch && item.Branch != "" {
+			if err := w.deleteBranch(item.Branch); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 	errs = append(errs, w.PruneWorktrees())
 	return errors.Join(errs...)
+}
+
+func (w *Workspace) deleteBranch(branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return nil
+	}
+	if output, err := gitOutput(w.projectRoot, "branch", "-D", branch); err != nil {
+		return fmt.Errorf("delete worktree branch %s: %v: %s", branch, err, strings.TrimSpace(output))
+	}
+	return nil
 }
 
 func (w *Workspace) PruneWorktrees() error {

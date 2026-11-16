@@ -83,7 +83,7 @@ func runMemory(args []string) error {
 func printMemoryUsage() {
 	fmt.Print(`Usage:
   nectar memory add [--bot ID] [--kind profile|project|fact|lesson|episode]
-                    [--scope chat|project|global] [--status candidate|active]
+                    [--scope bot|chat|project|global] [--status candidate|active]
                     [--tags a,b] [--source agent] [--socket PATH] [--json] <text>
   nectar memory search [--bot ID] [--scope chat|project|global|all] [--limit N] [--json] <query>
   nectar memory list [--bot ID] [--status active|pending|archived|all]
@@ -201,12 +201,12 @@ func memoryCLIAdd(positional []string, opts memoryCLIOptions) error {
 	if err != nil {
 		return err
 	}
-	scope, scopeID, err := memoryCLIAddScope(opts)
+	scope, scopeID, err := memoryCLIAddScope(opts, cfg.MemoryDefaultScope())
 	if err != nil {
 		return err
 	}
-	if scope == memory.ScopeGlobal && !memoryCLIIsAdmin(cfg) {
-		return errors.New("global memory requires an admin user")
+	if isBotWideScope(scope) && !memoryCLIIsAdmin(cfg) {
+		return errors.New("bot-wide memory requires an admin user")
 	}
 	if memoryCLIIsGroup(opts) && status == memory.StatusActive && !memoryCLIIsAdmin(cfg) {
 		status = memory.StatusCandidate
@@ -216,7 +216,7 @@ func memoryCLIAdd(positional []string, opts memoryCLIOptions) error {
 		confidence = 0.9
 	}
 	workdir := ""
-	if scope != memory.ScopeGlobal {
+	if !isBotWideScope(scope) {
 		workdir, _ = memoryCLIProjectDir(opts)
 	}
 	content, locality := memory.NormalizeContent(workdir, content)
@@ -376,7 +376,7 @@ func memoryCLIUpdate(positional []string, opts memoryCLIOptions) error {
 		return err
 	}
 	workdir := ""
-	if existing.Scope != memory.ScopeGlobal {
+	if !isBotWideScope(existing.Scope) {
 		workdir, _ = memoryCLIProjectDir(opts)
 	}
 	content, _ = memory.NormalizeContent(workdir, content)
@@ -483,18 +483,31 @@ func memoryCLILoad(opts memoryCLIOptions) (config.Config, memory.Store, error) {
 	return cfg, store, nil
 }
 
-func memoryCLIAddScope(opts memoryCLIOptions) (memory.Scope, string, error) {
+func memoryCLIAddScope(opts memoryCLIOptions, defaultScope string) (memory.Scope, string, error) {
 	scope := strings.ToLower(strings.TrimSpace(opts.scope))
 	if scope == "" || scope == "auto" {
-		if memoryCLIChatID(opts) != "" {
+		switch strings.ToLower(strings.TrimSpace(defaultScope)) {
+		case "bot":
+			scope = string(memory.ScopeBot)
+		case "global":
+			scope = string(memory.ScopeBot)
+		case "chat":
 			scope = string(memory.ScopeChat)
-		} else {
+		case "project":
 			scope = string(memory.ScopeProject)
+		default:
+			if memoryCLIChatID(opts) != "" {
+				scope = string(memory.ScopeChat)
+			} else {
+				scope = string(memory.ScopeProject)
+			}
 		}
 	}
 	switch memory.Scope(scope) {
+	case memory.ScopeBot:
+		return memory.ScopeBot, "", nil
 	case memory.ScopeGlobal:
-		return memory.ScopeGlobal, "", nil
+		return memory.ScopeBot, "", nil
 	case memory.ScopeChat:
 		chatID := memoryCLIChatID(opts)
 		if chatID == "" {
@@ -527,7 +540,9 @@ func memoryCLIViewScope(opts memoryCLIOptions) (memory.Scope, []string, error) {
 		}
 		return "", nil, nil
 	case "global":
-		return memory.ScopeGlobal, nil, nil
+		return memory.ScopeBot, nil, nil
+	case "bot":
+		return memory.ScopeBot, nil, nil
 	case "chat":
 		chatID := memoryCLIChatID(opts)
 		if chatID == "" {
@@ -560,13 +575,13 @@ func memoryCLIManageable(store memory.Store, id string, opts memoryCLIOptions) (
 	if err := memoryCLICheckVisible(item, opts); err != nil {
 		return memory.Memory{}, err
 	}
-	if item.Scope == memory.ScopeGlobal {
+	if isBotWideScope(item.Scope) {
 		cfg, err := loadConfigForBot(opts.configPath, opts.bot)
 		if err != nil {
 			return memory.Memory{}, err
 		}
 		if !memoryCLIIsAdmin(cfg) {
-			return memory.Memory{}, errors.New("global memory requires an admin user")
+			return memory.Memory{}, errors.New("bot-wide memory requires an admin user")
 		}
 	}
 	if memoryCLIIsGroup(opts) && !memoryCLIIsAdminForPath(opts) {
@@ -577,9 +592,14 @@ func memoryCLIManageable(store memory.Store, id string, opts memoryCLIOptions) (
 
 func memoryCLICheckVisible(item memory.Memory, opts memoryCLIOptions) error {
 	switch strings.ToLower(strings.TrimSpace(opts.scope)) {
+	case "bot":
+		if item.Scope != memory.ScopeBot {
+			return fmt.Errorf("memory %q is not a bot memory", item.ID)
+		}
+		return nil
 	case "global":
-		if item.Scope != memory.ScopeGlobal {
-			return fmt.Errorf("memory %q is not a global memory", item.ID)
+		if item.Scope != memory.ScopeBot {
+			return fmt.Errorf("memory %q is not a bot memory", item.ID)
 		}
 		return nil
 	case "chat":
@@ -591,7 +611,7 @@ func memoryCLICheckVisible(item memory.Memory, opts memoryCLIOptions) error {
 			return fmt.Errorf("memory %q is not a project memory", item.ID)
 		}
 	}
-	if item.Scope == memory.ScopeGlobal {
+	if isBotWideScope(item.Scope) {
 		return nil
 	}
 	_, ids, err := memoryCLIViewScope(opts)
@@ -620,6 +640,10 @@ func memoryCLIIsAdmin(cfg config.Config) bool {
 		}
 	}
 	return false
+}
+
+func isBotWideScope(scope memory.Scope) bool {
+	return scope == memory.ScopeBot || scope == memory.ScopeGlobal
 }
 
 func memoryCLIIsAdminForPath(opts memoryCLIOptions) bool {

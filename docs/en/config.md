@@ -116,13 +116,16 @@ app_secret = "yyy"
 Rules:
 
 - Each bot needs its own platform app or token. Duplicate credentials are rejected so one message is not processed twice.
-- `[bots.<id>]` always uses `~/.nectar/bots/<id>`, so adding or removing another bot never changes an existing bot's data path. The legacy `[bot]` continues to use `storage.data_dir`.
+- `[bots.<id>]` defaults to `~/.nectar/bots/<id>` and can be overridden with `data_dir`. Adding or removing another bot never changes an existing bot's default data path. The legacy `[bot]` continues to use `storage.data_dir`.
 - Different chats for the same bot run concurrently; sessions inside one chat are serialized. Direct messages and group chats do not block each other.
 - New bots default to `workspace_mode = "auto"`: a committed git repository gets one worktree per session, otherwise Nectar falls back to `per_chat`.
 - `workspace = "..."` overrides the engine working directory; `model = "..."` overrides the selected engine model.
+- An omitted `engine` inherits `[bot].engine`; if that is also unset, Nectar defaults to `codex`.
 - The legacy `[bot]` plus global `[feishu]` / `[codex]` config keeps working. Adding `[bots.*]` starts both the legacy default bot and the new bots.
 
 `workspace_mode` accepts `shared`, `per_chat`, `per_session`, `worktree`, or `auto`. `worktree` creates a `nectar/<bot>/<session>` branch and directory from the repository's current `HEAD`; worktrees live under `~/.nectar/worktrees/<bot>/<session>`.
+
+`shared` only means every chat uses the same directory; it does not serialize runs. Different chats still run concurrently, while sessions in one chat are serialized. Use `worktree` when two chats may edit the same files.
 
 A worktree starts from the committed `HEAD`; uncommitted changes in the main workspace are not copied.
 
@@ -244,12 +247,15 @@ data_dir = "~/.nectar"
 ```toml
 [memory]
 enabled = true                # false disables storage, commands, and injection
+default_scope = "bot"         # bot | chat | project; bot shares across every chat of this bot
 max_items = 6                 # maximum memories injected per turn
 max_chars = 1500              # maximum memory context characters per turn
 auto_learn_failures = true    # record failures as pending candidates for review
 ```
 
-Memories are stored in `~/.nectar/memory/memory.json`. Explicit `/remember` entries become active immediately; failure lessons start as `candidate` and only join retrieval after `/memory approve <id>`.
+Memories are stored in `~/.nectar/memory/memory.json`. By default `/remember` writes bot-scoped memory shared by every chat handled by the same bot. Set `default_scope = "chat"` to isolate memories by chat, or use `/remember chat <text>` for one entry. `/remember project` writes project-scoped memory. Failure lessons start as `candidate` and only join retrieval after `/memory approve <id>`.
+
+Writing bot-scoped memory requires an admin user; an empty `admin_users` list removes that restriction.
 
 Agents read and write memory through the `nectar memory` CLI. `nectar skills install` also installs the `nectar-memory` skill and its managed `AGENTS.md` instructions so the agent can handle natural-language requests in any supported language.
 

@@ -23,6 +23,7 @@ func runUninstall(args []string) error {
 	configPath := fs.String("config", "", "path to config.toml")
 	binaryPath := fs.String("binary", "", "path to the installed nectar binary")
 	purgeData := fs.Bool("purge-data", false, "also remove config, data, workspaces, and skill backups")
+	forceWorktrees := fs.Bool("force-worktrees", false, "delete dirty worktrees during --purge-data")
 	keepBinary := fs.Bool("keep-binary", false, "keep the nectar binary")
 	noSkills := fs.Bool("no-skills", false, "keep installed agent skills and workspace hints")
 	dryRun := fs.Bool("dry-run", false, "show what would be removed")
@@ -60,6 +61,7 @@ func runUninstall(args []string) error {
 			fmt.Println("would remove", resolvedBinary)
 		}
 		if *purgeData {
+			fmt.Println("would remove configured worktrees; uncommitted worktree changes require --force-worktrees")
 			fmt.Println("would remove", dataDir)
 			if !pathWithin(resolvedConfig, dataDir) {
 				fmt.Println("would remove", resolvedConfig)
@@ -98,15 +100,17 @@ func runUninstall(args []string) error {
 	}
 
 	if *purgeData {
-		if err := removeBotWorktrees(resolvedConfig); err != nil {
+		if err := removeBotWorktrees(resolvedConfig, *forceWorktrees); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
-		}
-		if err := removeManagedDataDir(dataDir, home); err != nil {
-			cleanupErrs = append(cleanupErrs, err)
-		}
-		if !pathWithin(resolvedConfig, dataDir) {
-			if err := os.Remove(resolvedConfig); err != nil && !os.IsNotExist(err) {
-				cleanupErrs = append(cleanupErrs, fmt.Errorf("remove config %s: %w", resolvedConfig, err))
+			fmt.Fprintln(os.Stderr, "data was not removed because worktree cleanup failed; clean the worktrees or rerun with --force-worktrees")
+		} else {
+			if err := removeManagedDataDir(dataDir, home); err != nil {
+				cleanupErrs = append(cleanupErrs, err)
+			}
+			if !pathWithin(resolvedConfig, dataDir) {
+				if err := os.Remove(resolvedConfig); err != nil && !os.IsNotExist(err) {
+					cleanupErrs = append(cleanupErrs, fmt.Errorf("remove config %s: %w", resolvedConfig, err))
+				}
 			}
 		}
 	} else {
@@ -120,7 +124,7 @@ func runUninstall(args []string) error {
 	return nil
 }
 
-func removeBotWorktrees(configPath string) error {
+func removeBotWorktrees(configPath string, force bool) error {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return fmt.Errorf("load bots for worktree cleanup: %w", err)
@@ -143,7 +147,7 @@ func removeBotWorktrees(configPath string) error {
 		if workspace.Mode() != execguard.ModeWorktree {
 			continue
 		}
-		if err := workspace.RemoveAllWorktrees(true); err != nil {
+		if err := workspace.RemoveAllWorktrees(force, false); err != nil {
 			errs = append(errs, fmt.Errorf("bot %s worktrees: %w", bot.ID, err))
 		}
 	}

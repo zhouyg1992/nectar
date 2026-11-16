@@ -21,8 +21,8 @@ type ResolvedBot struct {
 
 // ResolveBots expands the legacy [bot] section and the newer [bots.<id>]
 // entries into independent per-bot configs. Legacy configs keep the existing
-// data directory and global workspace lock; additional bots get isolated data
-// directories and per-chat workspace locks by default.
+// data directory. Workspace locking is per chat for every mode; shared mode
+// controls directory sharing, not serialization.
 func (c Config) ResolveBots() ([]ResolvedBot, error) {
 	keys := make([]string, 0, len(c.Bots))
 	for key := range c.Bots {
@@ -113,6 +113,9 @@ func (c Config) resolveBotEntry(key string, entry BotEntry) (ResolvedBot, error)
 		return ResolvedBot{}, fmt.Errorf("bot %q: %w", id, err)
 	}
 	engine := strings.TrimSpace(entry.Engine)
+	if engine == "" {
+		engine = strings.TrimSpace(c.Bot.Engine)
+	}
 	if engine == "" {
 		engine = "codex"
 	}

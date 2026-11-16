@@ -42,11 +42,11 @@ Lists the `[bot]` and `[bots.*]` entries after resolution, including ID, platfor
 
 ```bash
 nectar worktrees list [--config PATH] [--bot ID] [--json]
-nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force]
-nectar worktrees remove --all [--config PATH] [--bot ID] [--force]
+nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force] [--delete-branch]
+nectar worktrees remove --all [--config PATH] [--bot ID] [--force] [--delete-branch]
 ```
 
-Lists or removes worktrees for the selected bot (`workspace_mode = worktree`, or `auto` on a git repository). Removing a worktree does not delete its branch; dirty worktrees require `--force`.
+Lists or removes worktrees for the selected bot (`workspace_mode = worktree`, or `auto` on a git repository). Branches are kept by default; dirty worktrees require `--force`, and `--delete-branch` also removes the `nectar/<bot>/<session>` branch.
 
 ## Background service
 
@@ -208,9 +208,9 @@ tool; it is also useful for manual inspection:
 
 ```bash
 nectar memory add [--kind profile|project|fact|lesson|episode] \
-  [--scope chat|project|global] [--status candidate|active] \
+  [--scope bot|chat|project|global] [--status candidate|active] \
   [--tags a,b] [--source agent] <text>
-nectar memory search [--scope chat|project|global|all] [--limit N] <query>
+nectar memory search [--scope bot|chat|project|global|all] [--limit N] <query>
 nectar memory list [--status active|pending|archived|all] [--json]
 nectar memory get <id> [--json]
 nectar memory update <id> <new text> [--json]
@@ -221,9 +221,9 @@ nectar memory forget <id> --confirm
 With multiple bots, pass `--bot ID` to select that bot's data directory and access policy, or keep using `--socket` to target a specific bot API socket.
 
 - `--status candidate` is the default; candidates join retrieval only after approval. Use `--status active` when the user explicitly asks to remember something.
-- Scope defaults to `NECTAR_CHAT_ID` in an agent session, otherwise the current project.
+- Scope follows `[memory] default_scope` (default `bot`, shared by every chat of the bot). Pass `chat` explicitly to keep an entry in one conversation.
 - Agent sessions call the daemon through `NECTAR_API_SOCKET`, so sandboxed agents do not need write access to `~/.nectar/memory`; manual CLI without a socket reads/writes the local file.
-- `global` memories can only be written, approved, pinned, or deleted by admins.
+- `bot` / `global` memories can only be written, approved, pinned, or deleted by admins.
 - In group chats, non-admin writes become candidates and review/pin/delete operations require an admin.
 - Deletion requires `--confirm` so agents cannot remove memory by accident.
 - Project/home paths are normalized to `${PROJECT_ROOT}` / `${HOME}`; other absolute paths are marked device-local.
@@ -231,12 +231,13 @@ With multiple bots, pass `--bot ID` to select that bot's data directory and acce
 ## Uninstall
 
 ```bash
-nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
+nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--force-worktrees] [--keep-binary] [--no-skills] [--dry-run]
 ```
 
 | Flag | Description |
 |---|---|
 | `--purge-data` | Also remove config, task data, workspaces, and backups |
+| `--force-worktrees` | With `--purge-data`, remove worktrees that contain uncommitted changes |
 | `--keep-binary` | Keep the binary |
 | `--no-skills` | Keep agent skills and managed `AGENTS.md` blocks |
 | `--dry-run` | Preview cleanup |
@@ -329,16 +330,17 @@ Scheduled tasks are enabled by default. Management commands are limited to `bot.
 /memory reject <id>
 /memory pin <id>
 /memory unpin <id>
-/memory forget <id>
-/remember [project|global] <text>
-/forget <id>
+/memory forget <id> [confirm]
+/remember [bot|chat|project] <text>
+/forget <id> [confirm]
 ```
 
 - `/memory` without a subcommand is equivalent to `/memory list`.
 - Failed runs are stored as `pending` candidates and are not injected until approved.
-- `/remember` writes to the current chat by default; `project` writes to the current workspace; `global` requires an admin.
+- `/remember` writes bot-scoped memory by default (shared by every chat of this bot); `chat` keeps it in the current chat; `project` writes to the current workspace; `global` is a compatibility alias for `bot` and requires an admin.
 - Global memories can only be approved, pinned, or deleted by an admin.
 - In group chats, non-admin `/remember` creates a pending candidate; review and deletion require an admin.
+- `/memory forget` is a two-step confirmation: the first call returns a confirmation card; the second call with `confirm` performs the deletion.
 
 Memories are stored in `~/.nectar/memory/memory.json` for inspection and backup.
 

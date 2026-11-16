@@ -185,6 +185,9 @@ func NewPersistentSessionStore(path string, defaultBotID ...string) (*SessionSto
 				item.BotID = item.AgentID
 			}
 		}
+		if store.defaultBotID != "" && strings.TrimSpace(item.BotID) == strings.TrimSpace(item.AgentID) {
+			item.BotID = store.defaultBotID
+		}
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
 			id, err = newSessionID()
@@ -258,6 +261,9 @@ func NewPersistentSessionStore(path string, defaultBotID ...string) (*SessionSto
 			if botID == "" {
 				botID = item.AgentID
 			}
+		}
+		if store.defaultBotID != "" && botID == strings.TrimSpace(item.AgentID) {
+			botID = store.defaultBotID
 		}
 		key := SessionKey{
 			BotID:    botID,

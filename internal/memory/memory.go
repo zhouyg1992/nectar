@@ -27,6 +27,7 @@ const (
 type Scope string
 
 const (
+	ScopeBot     Scope = "bot"
 	ScopeGlobal  Scope = "global"
 	ScopeProject Scope = "project"
 	ScopeChat    Scope = "chat"
@@ -72,8 +73,8 @@ type SearchOptions struct {
 	// Scope optionally restricts results to one kind of scope. Empty means all
 	// scopes visible through ScopeIDs.
 	Scope Scope
-	// ScopeIDs are the concrete scopes visible to this search. Global memories
-	// are always included. Empty means every scope.
+	// ScopeIDs are the concrete scopes visible to this search. Bot and global
+	// memories are always included. Empty means every scope.
 	ScopeIDs []string
 	Limit    int
 	Now      time.Time

@@ -90,6 +90,7 @@ func worktreesRemove(args []string) error {
 	configPath := fs.String("config", "", "path to config.toml")
 	botID := fs.String("bot", "", "bot id")
 	force := fs.Bool("force", false, "remove even when the worktree has changes")
+	deleteBranch := fs.Bool("delete-branch", false, "also delete the nectar/<bot>/<session> branch")
 	all := fs.Bool("all", false, "remove all worktrees for the selected bot")
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
@@ -106,7 +107,7 @@ func worktreesRemove(args []string) error {
 		return fmt.Errorf("bot %s workspace mode is %s, not worktree", bot.ID, workspace.Mode())
 	}
 	if *all {
-		if err := workspace.RemoveAllWorktrees(*force); err != nil {
+		if err := workspace.RemoveAllWorktrees(*force, *deleteBranch); err != nil {
 			return err
 		}
 		fmt.Printf("Removed all worktrees for bot %s\n", bot.ID)
@@ -119,7 +120,7 @@ func worktreesRemove(args []string) error {
 	if strings.ContainsRune(target, filepath.Separator) {
 		target = filepath.Base(filepath.Clean(target))
 	}
-	if err := workspace.RemoveWorktree(target, *force); err != nil {
+	if err := workspace.RemoveWorktree(target, *force, *deleteBranch); err != nil {
 		return err
 	}
 	fmt.Printf("Removed worktree %s for bot %s\n", target, bot.ID)
@@ -171,8 +172,8 @@ func worktreeBots(configPath, botID string) ([]config.ResolvedBot, error) {
 func printWorktreesUsage() {
 	fmt.Print(`Usage:
   nectar worktrees list [--config PATH] [--bot ID] [--json]
-  nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force]
-  nectar worktrees remove --all [--config PATH] [--bot ID] [--force]
+  nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force] [--delete-branch]
+  nectar worktrees remove --all [--config PATH] [--bot ID] [--force] [--delete-branch]
 
 Worktrees are created per session when workspace_mode is worktree or auto on a
 committed git repository. Removing a worktree does not delete its branch.

@@ -315,3 +315,23 @@ data_dir = "` + root + `"
 		t.Fatalf("telegram bot = %#v", got)
 	}
 }
+
+func TestBotEntryInheritsLegacyEngine(t *testing.T) {
+	cfg := Config{
+		Bot:     BotConfig{Engine: "claude"},
+		Storage: StorageConfig{DataDir: t.TempDir()},
+		Bots: map[string]BotEntry{
+			"reviewer": {
+				Platform: "telegram",
+				Telegram: &TelegramConfig{BotToken: "token-reviewer"},
+			},
+		},
+	}
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bots) != 1 || bots[0].Config.Bot.Engine != "claude" {
+		t.Fatalf("bots = %#v", bots)
+	}
+}
