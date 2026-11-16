@@ -75,7 +75,8 @@ sandbox = "workspace-write"
 working_dir = "~/.nectar/workspace"
 # Per-turn execution timeout. Default: 30m.
 timeout = "30m"
-# Maximum captured stdout bytes. Default: 2 MiB.
+# Maximum size of one app-server stdout event. Default: 2 MiB.
+# With backend = "exec", this limits total JSONL output instead.
 max_output_bytes = 2097152
 # Context window used for the card footer. 0 = auto-detect from Codex's model
 # catalog; set an explicit value (e.g. 258000) to override.

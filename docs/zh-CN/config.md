@@ -154,6 +154,8 @@ per_chat_workspace = false
 bypass_approvals = false      # 谨慎开启
 ```
 
+默认使用 `backend = "app-server"` 时，`max_output_bytes` 限制单条 JSON-RPC 事件；整个 turn 的 stdout 会持续流式处理，不受该总量的限制。使用 `backend = "exec"` 时，它仍限制总 JSONL 输出。
+
 ### OpenCode
 
 ```toml

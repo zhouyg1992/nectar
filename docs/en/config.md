@@ -154,6 +154,8 @@ per_chat_workspace = false
 bypass_approvals = false      # use with care
 ```
 
+With the default `backend = "app-server"`, `max_output_bytes` limits one JSON-RPC event. Total stdout for a turn is streamed and is not capped by this setting. With `backend = "exec"`, it limits total JSONL output.
+
 ### OpenCode
 
 ```toml
