@@ -3,7 +3,7 @@
 Nectar has two command surfaces:
 
 - CLI commands: run `nectar ...` in a terminal.
-- Chat commands: send `/new`, `/cron`, and similar messages in Feishu / DingTalk.
+- Chat commands: send `/new`, `/cron`, `/oncall`, and similar messages in Feishu / DingTalk.
 
 ## CLI overview
 
@@ -14,6 +14,7 @@ nectar help                           Show CLI help
 nectar service <subcommand>           Manage the background service
 nectar update                         Update Nectar
 nectar schedule <subcommand>          Manage scheduled tasks
+nectar oncall <subcommand>            Manage on-call watches and jobs
 nectar skills <subcommand>            Manage agent skills
 nectar memory <subcommand>            Manage local memory
 nectar uninstall                      Uninstall Nectar
@@ -174,8 +175,9 @@ nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry
 
 `remove` is an alias for `uninstall`.
 
-The installer writes both the `nectar-schedule` and `nectar-memory` agent
-skills and maintains their managed blocks in workspace `AGENTS.md` files.
+The installer writes the `nectar-schedule`, `nectar-memory`, and
+`nectar-oncall` agent skills and maintains their managed blocks in workspace
+`AGENTS.md` files.
 
 ## Memory
 
@@ -289,6 +291,42 @@ layout.
 
 Scheduled tasks are enabled by default. Management commands are limited to `bot.admin_users`; when that list is empty, admin access is unrestricted. See [Scheduled tasks](schedule.md).
 
+### /oncall
+
+```text
+/oncall
+/oncall list
+/oncall watch [repo] [branch]
+/oncall check <watch-id>
+/oncall pause|resume|delete <watch-id>
+/oncall jobs [limit]
+/oncall job <job-id>
+/oncall retry|cancel <job-id>
+/oncall report [duration]
+/oncall help
+```
+
+`/oncall` without a subcommand is equivalent to `/oncall list`. `watch` uses
+the current chat workspace as the local checkout; agents can also create
+watches from natural language, or you can pass `--path` explicitly in the CLI.
+
+```bash
+nectar oncall watch add [--repo OWNER/NAME] [--path DIR] [--branch BRANCH]
+  [--every 5m] [--window 22:00-08:00] [--autonomy diagnose|fix]
+  [--max-minutes 20] [--max-attempts 2]
+  [--channel CHANNEL] [--chat CHAT_ID] [--thread THREAD_ID] [--agent AGENT]
+nectar oncall watch list [--all] [--json]
+nectar oncall watch pause|resume|check|delete <watch-id>
+nectar oncall jobs [--limit N] [--json]
+nectar oncall job <job-id> [--json]
+nectar oncall retry|cancel <job-id>
+nectar oncall report [--since 12h] [--json]
+```
+
+The CLI talks to the running bot over the local socket. Agent sessions
+automatically receive the target chat and default workspace. See
+[On-call mode](oncall.md).
+
 ### /memory
 
 ```text
@@ -321,6 +359,8 @@ Agent sessions receive:
 |---|---|
 | `NECTAR_CHANNEL` | Current platform |
 | `NECTAR_CHAT_ID` | Current chat ID |
+| `NECTAR_CHAT_TYPE` | Current chat type |
+| `NECTAR_MESSAGE_ID` | Triggering message ID |
 | `NECTAR_THREAD_ID` | Current thread ID |
 | `NECTAR_AGENT_ID` | Current engine |
 | `NECTAR_WORKING_DIR` | Current workspace |

@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar sends chat messages to a coding agent on your machine and streams progress and results back as live messages or cards. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. The installer detects installed engines, writes the config, and starts the background service.
+Nectar sends chat messages to a coding agent on your machine and streams progress and results back as live messages or cards. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. With on-call mode enabled, it also watches GitHub Actions failures and investigates or fixes CI in an isolated worktree. The installer detects installed engines, writes the config, and starts the background service.
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
@@ -40,6 +40,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`; `/list`, `/switch`, and `/rename` keep multiple sessions per chat, and the service resumes the same agent session when it is still valid after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
+- **It can take the on-call shift**: poll GitHub Actions failures, investigate or fix CI in an isolated worktree, and report back with a summary and diff.
 - **Memory travels with you**: local-first profile / project / chat memory with review, retrieval, and an agent CLI.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 
@@ -108,7 +109,7 @@ Then restart the service:
 nectar service restart
 ```
 
-The IDs above are Feishu examples: DingTalk uses `staffId` / `openConversationId`, and Telegram uses numeric user and chat IDs (quote negative group IDs). An empty `admin_users` leaves scheduled-task management open to anyone; an empty `allowed_chats` leaves group chats unrestricted. See the [configuration reference](docs/en/config.md) and [security boundaries](docs/en/security.md).
+The IDs above are Feishu examples: DingTalk uses `staffId` / `openConversationId`, and Telegram uses numeric user and chat IDs (quote negative group IDs). An empty `admin_users` leaves scheduled-task and on-call management open to anyone; an empty `allowed_chats` leaves group chats unrestricted. See the [configuration reference](docs/en/config.md) and [security boundaries](docs/en/security.md).
 
 ## Support matrix
 
@@ -149,6 +150,7 @@ nectar service uninstall              Uninstall the service
 
 nectar update                         Update to the latest release
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
+nectar oncall watch|jobs|job|retry|cancel|report
 nectar skills install|uninstall       Manage agent skills
 nectar memory add|search|list|get|approve|reject|pin|unpin|forget
 nectar uninstall                      Uninstall Nectar
@@ -170,6 +172,7 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 | `/status` | Show the current engine, model, and session |
 | `/stop` | Cancel the current run |
 | `/cron`, `/schedule` | Scheduled task entry point |
+| `/oncall` | On-call mode entry point |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 `/cron` subcommands:
@@ -184,6 +187,20 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 ```
 
 See [scheduled tasks](docs/en/schedule.md) for details, or send `/cron help` in chat. Scheduled tasks are enabled by default; no `[schedule]` section is required. Only users in `bot.admin_users` can manage them; an empty list removes that restriction. See [hardening access](#optional-harden-access).
+
+`/oncall` subcommands:
+
+```text
+/oncall watch [repo] [branch]
+/oncall list
+/oncall check|pause|resume|delete <watch-id>
+/oncall jobs [limit]
+/oncall job <job-id>
+/oncall retry|cancel <job-id>
+/oncall report [duration]
+```
+
+See [on-call mode](docs/en/oncall.md), or send `/oncall help` in chat. The first check ignores failures older than the watch; use `/oncall check <watch-id>` to investigate a failure that is already red.
 
 In group chats, session management commands (`/new`, `/list`, `/switch`, `/current`, `/rename`, `/archive`, `/unarchive`, `/stop`, `/status`) are limited to `bot.admin_users`. Direct messages keep the single-user behavior.
 
@@ -208,6 +225,7 @@ See [Install and upgrade](docs/en/install.md) for all update and uninstall flags
 - [Telegram setup and troubleshooting](docs/en/telegram.md)
 - [Background service](docs/en/service.md)
 - [Scheduled tasks](docs/en/schedule.md)
+- [On-call mode](docs/en/oncall.md)
 - [Security boundaries](docs/en/security.md)
 - [Roadmap](docs/en/roadmap.md)
 - [Changelog](docs/en/changelog.md)

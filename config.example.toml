@@ -72,6 +72,7 @@ sandbox = "workspace-write"
 working_dir = "~/.nectar/workspace"
 # Per-turn execution timeout. Default: 30m.
 timeout = "30m"
+
 # Maximum captured stdout bytes. Default: 2 MiB.
 max_output_bytes = 2097152
 # Context window used for the card footer. 0 = auto-detect from Codex's model
@@ -97,6 +98,7 @@ path = "opencode"
 working_dir = "~/.nectar/workspace"
 # Per-turn execution timeout. Default: 30m.
 timeout = "30m"
+
 # Maximum captured stdout bytes. Default: 2 MiB.
 max_output_bytes = 2097152
 # Context window used for the card footer. 0 = read limit.context from the
@@ -252,3 +254,22 @@ jitter = "0s"
 # Default per-run timeout. Tasks can override it with --timeout. "0s" disables
 # the scheduler deadline; the engine's own timeout still applies.
 timeout = "30m"
+
+# ---------------------------------------------------------------------------
+# On-call mode
+# ---------------------------------------------------------------------------
+[oncall]
+# Poll GitHub Actions failures and run isolated investigation/fix jobs.
+enabled = true
+# Default polling interval for new watches. Watches can override it.
+default_every = "5m"
+# Optional local-time window, e.g. "22:00-08:00". Empty means all day.
+window = ""
+# diagnose = investigate only; fix = edit and run tests in an isolated worktree.
+autonomy = "diagnose"
+# Per-job timeout.
+max_minutes = 20
+# Maximum number of manual retries per job.
+max_attempts = 2
+# Maximum number of on-call jobs executing at the same time.
+max_concurrent = 1

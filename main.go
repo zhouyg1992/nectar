@@ -24,6 +24,7 @@ import (
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/memory"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
+	"github.com/zhouyg1992/nectar/internal/oncall"
 	"github.com/zhouyg1992/nectar/internal/platform"
 	"github.com/zhouyg1992/nectar/internal/platform/dingtalk"
 	"github.com/zhouyg1992/nectar/internal/platform/feishu"
@@ -127,6 +128,37 @@ func runBot(configPath string) error {
 
 	var scheduler *core.Scheduler
 	var scheduleAPI *core.ScheduleAPI
+	var oncallService *oncall.Service
+	if cfg.OnCallEnabled() {
+		oncallService, err = oncall.New(oncall.Options{
+			StorePath:         filepath.Join(cfg.Storage.DataDir, "oncall.json"),
+			WorktreeRoot:      filepath.Join(cfg.Storage.DataDir, "oncall", "worktrees"),
+			ArtifactRoot:      filepath.Join(cfg.Storage.DataDir, "oncall", "jobs"),
+			DefaultRepoPath:   setup.workspaceDir,
+			DefaultBranch:     "main",
+			DefaultEvery:      cfg.OnCall.DefaultEvery,
+			DefaultWindow:     cfg.OnCall.Window,
+			DefaultAutonomy:   oncall.Autonomy(cfg.OnCall.Autonomy),
+			DefaultMaxMinutes: cfg.OnCall.MaxMinutes,
+			DefaultMaxAttempt: cfg.OnCall.MaxAttempts,
+			MaxConcurrent:     cfg.OnCall.MaxConcurrent,
+			Watcher:           oncall.NewGitHubCLI(),
+			Resolver:          oncall.NewGitRepoResolver(),
+			Worktrees:         oncall.NewGitWorktrees(filepath.Join(cfg.Storage.DataDir, "oncall", "worktrees")),
+			Runner:            &oncall.EngineRunner{Engine: setup.adapter},
+			Notifier:          &oncall.PlatformNotifier{Platform: platformAdapter, BotName: cfg.Bot.Name},
+			EngineOpts:        setup.options,
+			Logger:            logger,
+		})
+		if err != nil {
+			return fmt.Errorf("load on-call service: %w", err)
+		}
+		if err := oncallService.Start(ctx); err != nil {
+			return fmt.Errorf("start on-call service: %w", err)
+		}
+		defer oncallService.Close()
+		router.SetOnCall(oncallService)
+	}
 	if cfg.ScheduleEnabled() {
 		grace, err := cfg.ScheduleGrace()
 		if err != nil {
@@ -173,11 +205,12 @@ func runBot(configPath string) error {
 	} else {
 		router.SetScheduling(anchors, nil)
 	}
-	if scheduler != nil || memories != nil {
+	if scheduler != nil || memories != nil || oncallService != nil {
 		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
 			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
 			Scheduler:      scheduler,
 			Memory:         memories,
+			OnCall:         oncallService,
 			Logger:         logger,
 			DefaultChannel: platformName,
 			DefaultAgent:   cfg.Bot.Engine,
@@ -199,6 +232,7 @@ func runBot(configPath string) error {
 		"context_window", setup.contextWindow,
 		"memory_enabled", memories != nil,
 		"schedule_enabled", scheduler != nil,
+		"oncall_enabled", oncallService != nil,
 	)
 	switch platformName {
 	case "feishu":

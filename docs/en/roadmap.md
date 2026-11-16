@@ -1,5 +1,11 @@
 # Roadmap
 
+## In progress: on-call mode
+
+- GitHub Actions failure polling, isolated git worktrees, diagnostic/fix jobs, and local artifacts
+- `/oncall` chat commands, `nectar oncall` CLI, natural-language skill, and interruption recovery
+- Next: interactive approvals, flaky-test classification, Sentry / Prometheus triggers
+
 ## v0.8.1 complete
 
 - Session management v2: stable Nectar session ids, names, active-session pointers, per-session usage and message counts, and automatic migration from version 1 session files

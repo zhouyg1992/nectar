@@ -23,6 +23,8 @@ func Run(args []string, deps Deps) error {
 			return runUpdate(args[1:], deps.Version)
 		case "schedule":
 			return runSchedule(args[1:])
+		case "oncall":
+			return runOnCall(args[1:])
 		case "skills":
 			return runSkills(args[1:])
 		case "memory":
@@ -60,6 +62,7 @@ func printMainUsage() {
   nectar -version
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--timeout 10m]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
+  nectar oncall <watch|jobs|job|retry|cancel|report>
   nectar skills <install|uninstall>
   nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>
   nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]

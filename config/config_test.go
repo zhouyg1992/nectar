@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestLoadDefaultsAndEnv(t *testing.T) {
@@ -170,6 +172,59 @@ func TestScheduleAllowsZeroRuntimeLimits(t *testing.T) {
 	}
 	if timeout != 0 {
 		t.Fatalf("timeout = %s, want 0", timeout)
+	}
+}
+
+func TestOnCallDefaultsAndValidation(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.OnCallEnabled() {
+		t.Fatal("on-call should be enabled by default")
+	}
+	if cfg.OnCall.DefaultEvery != "5m" || cfg.OnCall.Autonomy != "diagnose" ||
+		cfg.OnCall.MaxMinutes != 20 || cfg.OnCall.MaxAttempts != 2 || cfg.OnCall.MaxConcurrent != 1 {
+		t.Fatalf("on-call defaults = %#v", cfg.OnCall)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[oncall]\ndefault_every = \"10m\"\nwindow = \"22:00-08:00\"\nautonomy = \"fix\"\nmax_minutes = 30\nmax_attempts = 3\nmax_concurrent = 2\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OnCall.DefaultEvery != "10m" || cfg.OnCall.Window != "22:00-08:00" ||
+		cfg.OnCall.Autonomy != "fix" || cfg.OnCall.MaxMinutes != 30 {
+		t.Fatalf("on-call overrides = %#v", cfg.OnCall)
+	}
+
+	invalid := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(invalid, []byte("[oncall]\nwindow = \"late\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(invalid); err == nil {
+		t.Fatal("expected invalid on-call window error")
+	}
+	if err := os.WriteFile(invalid, []byte("[oncall]\nwindow = \"09:00-09:00\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(invalid); err == nil {
+		t.Fatal("expected equal on-call window error")
+	}
+}
+
+func TestExampleConfigHasNoUndecodedKeys(t *testing.T) {
+	var cfg Config
+	meta, err := toml.DecodeFile(filepath.Join("..", "config.example.toml"), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		t.Fatalf("config.example.toml has undecoded keys: %v", undecoded)
 	}
 }
 

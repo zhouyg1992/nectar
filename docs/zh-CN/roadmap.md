@@ -1,5 +1,11 @@
 # 路线图与待实现
 
+## 进行中：值班模式
+
+- GitHub Actions 失败轮询、独立 git worktree、诊断/修复 job 和本地产物
+- `/oncall` 聊天命令、`nectar oncall` CLI、自然语言 Skill 和恢复记录
+- 后续：交互式审批、flaky test 分类、Sentry / Prometheus 触发源
+
 ## v0.8.1 已完成
 
 - 会话管理 v2：稳定的 Nectar 会话 ID、名称、当前会话指针、每会话用量和消息数，以及 version 1 会话文件自动迁移

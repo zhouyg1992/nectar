@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### 新增
+
+- 值班模式 MVP：轮询 GitHub Actions 失败，在独立 git worktree 中运行诊断或修复 job，保存报告/diff，并回传聊天结果
+- `/oncall` 聊天命令、`nectar oncall` CLI、本地 socket API、`nectar-oncall` Skill 和 AGENTS.md 托管说明
+- 可恢复的 on-call job 状态、超时、并发限制、手动重试、取消和确定性报告
+
 ## v0.8.1 — 2026-11-16
 
 ### 新增

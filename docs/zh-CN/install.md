@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 4. 从 GitHub Releases 下载对应版本，并尽量校验 `checksums.txt`。
 5. 安装二进制到 `~/.local/bin/nectar`。
 6. 写入最小配置 `~/.nectar/config.toml`。
-7. 安装 `nectar-schedule` Skill，并向工作区 `AGENTS.md` 写入托管片段。
+7. 安装 `nectar-schedule`、`nectar-memory` 和 `nectar-oncall` Skill，并向工作区 `AGENTS.md` 写入托管片段。
 8. 安装并启动后台服务。
 
 安装器默认保留已存在的 `~/.nectar/config.toml`。交互模式下会询问保留、重新配置还是退出。

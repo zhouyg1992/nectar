@@ -25,7 +25,7 @@ The installer:
 4. Downloads the matching release from GitHub and verifies `checksums.txt` when available.
 5. Installs the binary to `~/.local/bin/nectar`.
 6. Writes a minimal `~/.nectar/config.toml`.
-7. Installs the `nectar-schedule` skill and adds a managed block to the workspace `AGENTS.md`.
+7. Installs the `nectar-schedule`, `nectar-memory`, and `nectar-oncall` skills and adds managed blocks to the workspace `AGENTS.md`.
 8. Installs and starts the background service.
 
 An existing `~/.nectar/config.toml` is kept by default. In interactive mode the installer asks whether to keep it, reconfigure, or exit.

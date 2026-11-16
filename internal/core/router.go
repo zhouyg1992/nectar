@@ -18,6 +18,7 @@ import (
 	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/memory"
 	"github.com/zhouyg1992/nectar/internal/memory/comb"
+	"github.com/zhouyg1992/nectar/internal/oncall"
 	"github.com/zhouyg1992/nectar/internal/platform"
 )
 
@@ -78,6 +79,7 @@ type Router struct {
 	decider    decision.DecisionService
 	anchors    *AnchorStore
 	scheduler  *Scheduler
+	oncall     *oncall.Service
 	logger     *slog.Logger
 	cfg        RouterConfig
 
@@ -143,6 +145,10 @@ func NewRouter(
 func (r *Router) SetScheduling(anchors *AnchorStore, scheduler *Scheduler) {
 	r.anchors = anchors
 	r.scheduler = scheduler
+}
+
+func (r *Router) SetOnCall(service *oncall.Service) {
+	r.oncall = service
 }
 
 func (r *Router) lockWorkspace(path string) func() {
@@ -352,6 +358,11 @@ func (r *Router) Handle(msg platform.Message) {
 			return
 		}
 
+		if isOnCallCommand(text) {
+			r.handleOnCallCommand(key, msg, text)
+			return
+		}
+
 		if isMemoryCommand(text) {
 			r.handleMemoryCommand(msg, text)
 			return
@@ -464,6 +475,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		"NECTAR_CHANNEL":      key.Channel,
 		"NECTAR_CHAT_ID":      key.ChatID,
 		"NECTAR_CHAT_TYPE":    msg.ChatType,
+		"NECTAR_MESSAGE_ID":   msg.MessageID,
 		"NECTAR_USER_ID":      msg.UserID,
 		"NECTAR_AGENT_ID":     key.AgentID,
 		"NECTAR_PRODUCT_NAME": r.cfg.BotName,
@@ -924,9 +936,10 @@ only as the execution backend. Do not claim to be Codex, Claude, OpenCode,
 Cursor, or Pi itself. Do not say you cannot access Nectar; you are running
 inside it. If asked what model powers you, answer with the underlying model.
 
-Nectar capabilities: coding tasks, persistent sessions, scheduled tasks, and
-long-term memory. Use the `+"`\"${NECTAR_CLI:-nectar}\" schedule`"+` and
-`+"`\"${NECTAR_CLI:-nectar}\" memory`"+` CLIs when appropriate.`,
+Nectar capabilities: coding tasks, persistent sessions, scheduled tasks,
+on-call CI watches, and long-term memory. Use the
+`+"`\"${NECTAR_CLI:-nectar}\" schedule`"+`, `+"`\"${NECTAR_CLI:-nectar}\" oncall`"+`,
+and `+"`\"${NECTAR_CLI:-nectar}\" memory`"+` CLIs when appropriate.`,
 		name, version, r.platform.Name(), engineName, modelName, name)
 }
 
@@ -947,7 +960,7 @@ func (r *Router) aboutText() string {
 		"Engine: " + engineDisplayName(r.engine.Name()),
 		"Model: " + r.resolvedModel(),
 		"",
-		"I can run coding tasks, keep sessions, manage scheduled tasks, and use long-term memory.",
+		"I can run coding tasks, keep sessions, manage scheduled tasks, watch CI on-call, and use long-term memory.",
 		"Use /help for commands.",
 	}, "\n")
 }
@@ -1251,6 +1264,7 @@ func helpCardBody(engineName string) string {
 		"- `/about` — Show what Nectar is and what it is running on\n" +
 		"- `/stop` — Stop the current task\n" +
 		"- `/cron` — List or manage scheduled tasks\n" +
+		"- `/oncall` — Watch CI failures and inspect on-call jobs\n" +
 		"- `/memory` — Inspect or curate memory\n" +
 		"- `/remember <text>` — Save a memory\n" +
 		"- `/help` / `/commands` — Show this command card\n\n" +
@@ -1272,6 +1286,7 @@ func helpText(engineName string) string {
 /about, /whoami  Show what Nectar is and what it is running on
 /stop            Stop the current task
 /cron            List or manage scheduled tasks
+/oncall          Watch CI failures and inspect on-call jobs
 /memory          Inspect or curate memory
 /remember        Save a memory
 /help, /commands Show this command card

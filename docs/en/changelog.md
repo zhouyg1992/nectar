@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- On-call mode MVP: poll GitHub Actions failures, run diagnostic or fix jobs in isolated git worktrees, store reports/diffs, and send results back to chat
+- `/oncall` chat commands, `nectar oncall` CLI, local socket API, `nectar-oncall` skill, and managed AGENTS.md guidance
+- Durable on-call job state, timeouts, concurrency limits, manual retries, cancellation, and deterministic reports
+
 ## v0.8.1 — 2026-11-16
 
 ### Added

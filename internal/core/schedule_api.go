@@ -15,12 +15,14 @@ import (
 	"time"
 
 	"github.com/zhouyg1992/nectar/internal/memory"
+	"github.com/zhouyg1992/nectar/internal/oncall"
 )
 
 type ScheduleAPIOptions struct {
 	SocketPath     string
 	Scheduler      *Scheduler
 	Memory         memory.Store
+	OnCall         *oncall.Service
 	Logger         *slog.Logger
 	DefaultChannel string
 	DefaultAgent   string
@@ -34,6 +36,7 @@ type ScheduleAPI struct {
 	socketPath     string
 	scheduler      *Scheduler
 	memory         memory.Store
+	oncall         *oncall.Service
 	logger         *slog.Logger
 	defaultChannel string
 	defaultAgent   string
@@ -51,6 +54,7 @@ func NewScheduleAPI(opts ScheduleAPIOptions) *ScheduleAPI {
 		socketPath:     opts.SocketPath,
 		scheduler:      opts.Scheduler,
 		memory:         opts.Memory,
+		oncall:         opts.OnCall,
 		logger:         logger,
 		defaultChannel: opts.DefaultChannel,
 		defaultAgent:   opts.DefaultAgent,
@@ -59,8 +63,8 @@ func NewScheduleAPI(opts ScheduleAPIOptions) *ScheduleAPI {
 }
 
 func (a *ScheduleAPI) Start(ctx context.Context) error {
-	if a.scheduler == nil && a.memory == nil {
-		return errors.New("local api: scheduler and memory are nil")
+	if a.scheduler == nil && a.memory == nil && a.oncall == nil {
+		return errors.New("local api: scheduler, memory, and on-call are nil")
 	}
 	if strings.TrimSpace(a.socketPath) == "" {
 		return errors.New("schedule api: socket path is empty")
@@ -125,7 +129,224 @@ func (a *ScheduleAPI) Handler() http.Handler {
 	mux.HandleFunc("/schedule/", a.handleItem)
 	mux.HandleFunc("/memory", a.handleMemoryCollection)
 	mux.HandleFunc("/memory/", a.handleMemoryItem)
+	mux.HandleFunc("/oncall/watches", a.handleOnCallWatches)
+	mux.HandleFunc("/oncall/watches/", a.handleOnCallWatchItem)
+	mux.HandleFunc("/oncall/jobs", a.handleOnCallJobs)
+	mux.HandleFunc("/oncall/jobs/", a.handleOnCallJobItem)
+	mux.HandleFunc("/oncall/report", a.handleOnCallReport)
 	return mux
+}
+
+func (a *ScheduleAPI) handleOnCallWatches(w http.ResponseWriter, r *http.Request) {
+	if a.oncall == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("on-call is disabled"))
+		return
+	}
+	if !a.authorize(w, r) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		includePaused := r.URL.Query().Get("all") == "1" || r.URL.Query().Get("all") == "true"
+		writeJSON(w, http.StatusOK, map[string]any{"watches": a.oncall.ListWatches(includePaused)})
+	case http.MethodPost:
+		var req oncall.WatchRequest
+		if err := decodeJSON(w, r, &req); err != nil {
+			return
+		}
+		if strings.TrimSpace(req.Channel) == "" {
+			req.Channel = a.defaultChannel
+		}
+		if strings.TrimSpace(req.AgentID) == "" {
+			req.AgentID = a.defaultAgent
+		}
+		createdBy := strings.TrimSpace(r.Header.Get("X-Nectar-User-ID"))
+		if createdBy == "" {
+			createdBy = "api"
+		}
+		if strings.TrimSpace(req.UserID) == "" {
+			req.UserID = createdBy
+		}
+		watch, err := a.oncall.AddWatch(r.Context(), req, createdBy)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"watch": watch})
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+	}
+}
+
+func (a *ScheduleAPI) handleOnCallWatchItem(w http.ResponseWriter, r *http.Request) {
+	if a.oncall == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("on-call is disabled"))
+		return
+	}
+	if !a.authorize(w, r) {
+		return
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/oncall/watches/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusNotFound, errors.New("on-call watch id is required"))
+		return
+	}
+	id := parts[0]
+	action := ""
+	if len(parts) > 1 {
+		action = strings.ToLower(parts[1])
+	}
+	switch {
+	case action == "" && r.Method == http.MethodGet:
+		watch, ok := a.oncall.GetWatch(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Errorf("on-call watch %s not found", id))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"watch": watch})
+	case (action == "" || action == "delete") && r.Method == http.MethodDelete:
+		if err := a.oncall.DeleteWatch(id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
+	case action == "pause" && r.Method == http.MethodPost:
+		watch, err := a.oncall.PauseWatch(id)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"watch": watch})
+	case action == "resume" && r.Method == http.MethodPost:
+		watch, err := a.oncall.ResumeWatch(id)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"watch": watch})
+	case action == "check" && r.Method == http.MethodPost:
+		job, err := a.oncall.CheckWatchNow(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"watch_id": id, "job": job})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method or action not allowed"))
+	}
+}
+
+func (a *ScheduleAPI) handleOnCallJobs(w http.ResponseWriter, r *http.Request) {
+	if a.oncall == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("on-call is disabled"))
+		return
+	}
+	if !a.authorize(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+		return
+	}
+	limit := 50
+	if value := strings.TrimSpace(r.URL.Query().Get("limit")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": a.oncall.ListJobs(limit)})
+}
+
+func (a *ScheduleAPI) handleOnCallJobItem(w http.ResponseWriter, r *http.Request) {
+	if a.oncall == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("on-call is disabled"))
+		return
+	}
+	if !a.authorize(w, r) {
+		return
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/oncall/jobs/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusNotFound, errors.New("on-call job id is required"))
+		return
+	}
+	id := parts[0]
+	action := ""
+	if len(parts) > 1 {
+		action = strings.ToLower(parts[1])
+	}
+	switch {
+	case action == "" && r.Method == http.MethodGet:
+		job, ok := a.oncall.GetJob(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Errorf("on-call job %s not found", id))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"job": job})
+	case action == "retry" && r.Method == http.MethodPost:
+		job, err := a.oncall.RetryJob(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"job": job})
+	case action == "cancel" && r.Method == http.MethodPost:
+		if err := a.oncall.CancelJob(id); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		job, ok := a.oncall.GetJob(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, fmt.Errorf("on-call job %s not found", id))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"job": job})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method or action not allowed"))
+	}
+}
+
+func (a *ScheduleAPI) handleOnCallReport(w http.ResponseWriter, r *http.Request) {
+	if a.oncall == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("on-call is disabled"))
+		return
+	}
+	if !a.authorize(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+		return
+	}
+	since, err := parseReportSince(r.URL.Query().Get("since"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a.oncall.Report(since))
+}
+
+func parseReportSince(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if duration, err := time.ParseDuration(value); err == nil {
+		if duration <= 0 {
+			return time.Time{}, errors.New("report since duration must be positive")
+		}
+		return time.Now().Add(-duration), nil
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid since %q (use a duration or RFC3339 time)", value)
+	}
+	return parsed, nil
 }
 
 func (a *ScheduleAPI) handleCollection(w http.ResponseWriter, r *http.Request) {

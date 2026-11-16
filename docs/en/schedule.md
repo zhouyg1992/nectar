@@ -92,8 +92,9 @@ To remove only the skill and workspace hints:
 nectar skills uninstall
 ```
 
-This removes `nectar-schedule` from the Nectar, Codex, Claude, and shared Agents
-skill roots without deleting config, task data, or `skill-backups`.
+This removes Nectar-managed skills, including `nectar-schedule`, from the
+Nectar, Codex, Claude, and shared Agents skill roots without deleting config,
+task data, or `skill-backups`.
 
 ## Semantics
 

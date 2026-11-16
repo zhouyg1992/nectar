@@ -103,7 +103,7 @@ nectar skills uninstall
 ```
 
 卸载会删除 Nectar、Codex、Claude、Agents 四个 Skill 安装位置中的
-`nectar-schedule` 目录，但不会删除配置、任务数据和 `skill-backups`。
+Nectar 托管 Skill 目录（包括 `nectar-schedule`），但不会删除配置、任务数据和 `skill-backups`。
 
 ## 语义与边界
 

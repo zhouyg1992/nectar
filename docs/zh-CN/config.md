@@ -220,6 +220,23 @@ timeout = "30m"               # 单次运行默认超时；0s 关闭调度层超
 
 详细语义见 [定时任务](schedule.md)。
 
+## 值班模式
+
+值班模式默认开启，不需要在配置里添加 `[oncall]`。以下是可选覆盖项：
+
+```toml
+[oncall]
+enabled = true
+default_every = "5m"       # 新建 watch 的默认轮询间隔
+window = ""                # 例如 "22:00-08:00"；空表示全天
+autonomy = "diagnose"      # diagnose | fix
+max_minutes = 20           # 单 job 超时
+max_attempts = 2           # 最大手动重试次数
+max_concurrent = 1         # 同时执行的 job 数
+```
+
+`diagnose` 只调查、不改文件；`fix` 允许在隔离 worktree 改代码和跑测试，但不会 commit、push、开 PR、merge 或 deploy。详细语义见 [值班模式](oncall.md)。
+
 ## 环境变量
 
 环境变量会覆盖配置文件中的对应值：

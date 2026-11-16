@@ -3,7 +3,7 @@
 Nectar 有两类命令：
 
 - CLI 命令：在终端运行 `nectar ...`。
-- 聊天命令：在飞书 / 钉钉里发送 `/new`、`/cron` 等。
+- 聊天命令：在飞书 / 钉钉里发送 `/new`、`/cron`、`/oncall` 等。
 
 ## CLI 总览
 
@@ -14,6 +14,7 @@ nectar help                           查看 CLI 帮助
 nectar service <subcommand>           管理后台服务
 nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
+nectar oncall <subcommand>            管理值班 watch 和 job
 nectar skills <subcommand>            管理 Agent Skill
 nectar memory <subcommand>            管理本地记忆
 nectar uninstall                      卸载 Nectar
@@ -174,7 +175,7 @@ nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry
 
 `remove` 是 `uninstall` 的别名。
 
-安装器会同时安装 `nectar-schedule` 和 `nectar-memory` 两个 Agent Skill，并在工作区 `AGENTS.md` 中维护对应的托管块。
+安装器会同时安装 `nectar-schedule`、`nectar-memory` 和 `nectar-oncall` 三个 Agent Skill，并在工作区 `AGENTS.md` 中维护对应的托管块。
 
 ## 记忆
 
@@ -277,6 +278,38 @@ Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当
 
 定时任务默认开启。管理命令仅限 `bot.admin_users`；该列表为空时不限制管理员。详见 [定时任务](schedule.md)。
 
+### /oncall
+
+```text
+/oncall
+/oncall list
+/oncall watch [repo] [branch]
+/oncall check <watch-id>
+/oncall pause|resume|delete <watch-id>
+/oncall jobs [limit]
+/oncall job <job-id>
+/oncall retry|cancel <job-id>
+/oncall report [duration]
+/oncall help
+```
+
+`/oncall` 不带子命令时等价于 `/oncall list`。`watch` 使用当前聊天的工作区作为本地 checkout；也可以用 Agent 从自然语言创建，或直接运行 CLI 传 `--path`。
+
+```bash
+nectar oncall watch add [--repo OWNER/NAME] [--path DIR] [--branch BRANCH]
+  [--every 5m] [--window 22:00-08:00] [--autonomy diagnose|fix]
+  [--max-minutes 20] [--max-attempts 2]
+  [--channel CHANNEL] [--chat CHAT_ID] [--thread THREAD_ID] [--agent AGENT]
+nectar oncall watch list [--all] [--json]
+nectar oncall watch pause|resume|check|delete <watch-id>
+nectar oncall jobs [--limit N] [--json]
+nectar oncall job <job-id> [--json]
+nectar oncall retry|cancel <job-id>
+nectar oncall report [--since 12h] [--json]
+```
+
+CLI 通过本地 socket 与正在运行的 bot 通信。Agent 会话会自动注入目标 chat 和默认工作区。详见 [值班模式](oncall.md)。
+
 ### /memory
 
 ```text
@@ -309,6 +342,8 @@ Agent 会话中会注入：
 |---|---|
 | `NECTAR_CHANNEL` | 当前平台 |
 | `NECTAR_CHAT_ID` | 当前会话 ID |
+| `NECTAR_CHAT_TYPE` | 当前聊天类型 |
+| `NECTAR_MESSAGE_ID` | 触发本轮的消息 ID |
 | `NECTAR_THREAD_ID` | 当前话题 ID |
 | `NECTAR_AGENT_ID` | 当前引擎 |
 | `NECTAR_WORKING_DIR` | 当前工作区 |
