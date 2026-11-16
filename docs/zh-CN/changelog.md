@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.10.0 — 2026-11-16
+
+### 新增
+
+- 多 Bot：一个 Nectar 进程可同时运行多个 Bot，每个 Bot 拥有独立的平台身份、引擎、工作区、会话、记忆和权限；通过 `[bots.<id>]` 配置，重复的平台凭据会拒绝启动
+- 每个 Bot 使用独立数据目录（默认 `~/.nectar/bots/<id>`），新增或删除 Bot 不会改变已有 Bot 的路径
+- 会话级 git worktree：`workspace_mode` 新增 `per_chat`、`per_session`、`worktree`、`auto`，`worktree` 按 session 创建 `nectar/<bot>/<session>` 分支和独立目录
+- `nectar bots`、`nectar worktrees list|remove`、`nectar service status|logs --bot`、`nectar schedule --bot|--all-bots`、`nectar memory --bot`
+- 本地 Dashboard 控制台：`[dashboard]` 默认关闭，开启后使用 Token 登录，可查看 Bot 状态、检索/审核/固定/删除记忆、管理定时任务，并查看只读生效配置
+- `nectar dashboard` 输出带 Token 的登录链接并默认打开浏览器，支持 `--json` 和 `--no-browser`
+
+### 变更
+
+- Bot 记忆默认作用域从按 chat 改为 `bot`，同一个 Bot 的单聊和群聊共享；可用 `[memory] default_scope = "chat"` 或 `/remember chat` 恢复会话隔离
+- `/remember global` 现在是 `bot` 的兼容别名；Bot 级记忆的写入、审核和删除需要管理员权限
+- `/memory forget` 与 `/forget` 改为两步确认，第一次只返回确认卡片
+- Dashboard 默认只监听回环地址，Token 文件首次启动自动生成且权限为 `0600`；远程访问需 `allow_remote = true` 并放在 HTTPS 反向代理之后，`read_only = true` 可禁止控制台修改
+- 同一 workspace 的锁现在跨 Bot 共享；不同 chat 仍可并发，同一个 chat 内按会话串行
+- 多 Bot 下 `nectar uninstall --purge-data` 会同时清理 worktree，`--force-worktrees` 可强制删除有未提交改动的目录
+
 ## v0.9.0 — 2026-11-16
 
 ### 新增

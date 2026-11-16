@@ -1,5 +1,11 @@
 # Roadmap
 
+## v0.10.0 complete
+
+- Multiple bots with independent platform identities, engines, workspaces, sessions, memory, and permissions, plus per-bot service logs, schedules, and memory
+- Per-session git worktrees and `nectar bots` / `nectar worktrees list|remove` cleanup commands
+- Local dashboard with bot status, memory review, scheduled task management, and read-only config, disabled by default and bound to loopback
+
 ## v0.9.0 complete
 
 - Steering: `/steer`, `/append`, `/ps`, and `/btw` append context to a running task, while ordinary messages still queue

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.10.0 — 2026-11-16
+
+### Added
+
+- Multiple bots: one Nectar process runs several bots, each with its own platform identity, engine, workspace, sessions, memory, and permissions; configure them under `[bots.<id>]`, and duplicate platform credentials refuse to start
+- Each bot has an isolated data directory (default `~/.nectar/bots/<id>`), so adding or removing bots does not move existing ones
+- Per-session git worktrees: `workspace_mode` now supports `per_chat`, `per_session`, `worktree`, and `auto`; `worktree` creates a `nectar/<bot>/<session>` branch and separate checkout per session
+- `nectar bots`, `nectar worktrees list|remove`, `nectar service status|logs --bot`, `nectar schedule --bot|--all-bots`, and `nectar memory --bot`
+- Local dashboard console: `[dashboard]` is disabled by default; when enabled it uses token login for bot status, memory search/review/pin/delete, scheduled task management, and read-only effective config
+- `nectar dashboard` prints a tokenized login URL and opens the browser by default, with `--json` and `--no-browser`
+
+### Changed
+
+- The default memory scope changes from per-chat to `bot`, shared by every direct and group chat handled by the same bot; use `[memory] default_scope = "chat"` or `/remember chat` for per-chat isolation
+- `/remember global` is now a compatibility alias for `bot`; writing, reviewing, and deleting bot-scoped memories requires admin rights
+- `/memory forget` and `/forget` now require two-step confirmation, with the first call returning a confirmation card
+- The dashboard listens on loopback only by default and generates a `0600` token file on first start; remote access needs `allow_remote = true` behind an HTTPS reverse proxy, and `read_only = true` disables dashboard mutations
+- Workspace locks are now shared across bots; different chats still run concurrently, while runs within one chat are serialized per session
+- With multiple bots, `nectar uninstall --purge-data` also prunes worktrees, and `--force-worktrees` force-removes checkouts with uncommitted changes
+
 ## v0.9.0 — 2026-11-16
 
 ### Added
