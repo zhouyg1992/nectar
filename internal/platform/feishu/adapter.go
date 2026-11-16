@@ -15,6 +15,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/channel"
+	"github.com/larksuite/oapi-sdk-go/v3/channel/outbound"
 	channeltypes "github.com/larksuite/oapi-sdk-go/v3/channel/types"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
@@ -32,6 +33,11 @@ var (
 	imageOnlyPattern     = regexp.MustCompile(`^(?:\s*\[Image \d+\]\s*)+$`)
 )
 
+const (
+	maxFeishuImageBytes = 10 << 20
+	maxFeishuFileBytes  = 30 << 20
+)
+
 type Config struct {
 	AppID     string
 	AppSecret string
@@ -47,6 +53,7 @@ type Adapter struct {
 	client *lark.Client
 	ws     *larkws.Client
 	ch     channeltypes.Channel
+	upload outbound.Uploader
 	logger larkcore.Logger
 }
 
@@ -80,6 +87,7 @@ func New(cfg Config) (*Adapter, error) {
 		client: client,
 		ws:     wsClient,
 		ch:     channel.NewChannel(client, wsClient, channeltypes.WithPolicyConfig(policy)),
+		upload: outbound.NewUploader(client),
 		logger: larkcore.NewEventLogger(),
 	}, nil
 }
@@ -215,7 +223,11 @@ func (a *Adapter) sendThreadReply(ctx context.Context, reply platform.Reply) (st
 	}
 
 	for _, media := range reply.Media {
-		id, err := a.sendMedia(ctx, reply.ChatID, reply.ReplyTo, media)
+		msgType, content, err := a.uploadMedia(ctx, media)
+		if err != nil {
+			return firstID, fmt.Errorf("send media in thread: %w", err)
+		}
+		id, err := a.replyInThread(ctx, reply.ReplyTo, msgType, content)
 		if err != nil {
 			return firstID, fmt.Errorf("send media in thread: %w", err)
 		}
@@ -253,23 +265,92 @@ func (a *Adapter) replyInThread(ctx context.Context, messageID, msgType, content
 }
 
 func (a *Adapter) sendMedia(ctx context.Context, chatID, replyTo string, media platform.Media) (string, error) {
+	msgType, content, err := a.uploadMedia(ctx, media)
+	if err != nil {
+		return "", err
+	}
 	input := &channeltypes.SendInput{
 		ChatID:         chatID,
 		ReplyMessageID: replyTo,
+		MsgType:        msgType,
 	}
-	switch media.Type {
+	switch msgType {
 	case "image":
-		input.MsgType = "image"
-		input.ImagePath = media.Path
+		var body struct {
+			ImageKey string `json:"image_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil {
+			return "", fmt.Errorf("decode image upload: %w", err)
+		}
+		input.ImageKey = body.ImageKey
 	default:
-		input.MsgType = "file"
-		input.FilePath = media.Path
+		var body struct {
+			FileKey string `json:"file_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil {
+			return "", fmt.Errorf("decode file upload: %w", err)
+		}
+		input.FileKey = body.FileKey
 	}
 	res, err := a.ch.Send(ctx, input)
 	if err != nil {
 		return "", err
 	}
 	return res.MessageID, nil
+}
+
+func (a *Adapter) uploadMedia(ctx context.Context, media platform.Media) (string, string, error) {
+	path := strings.TrimSpace(media.Path)
+	if path == "" {
+		return "", "", errors.New("feishu media path is empty")
+	}
+	name := strings.TrimSpace(media.Name)
+	if name == "" {
+		name = filepath.Base(path)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", "", fmt.Errorf("stat feishu media: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", "", errors.New("feishu media is not a regular file")
+	}
+	if info.Size() == 0 {
+		return "", "", errors.New("feishu media is empty")
+	}
+
+	if strings.EqualFold(media.Type, "image") && feishuImageName(name) && info.Size() <= maxFeishuImageBytes {
+		imageKey, err := a.upload.UploadImagePath(ctx, "message", path)
+		if err != nil {
+			return "", "", fmt.Errorf("upload feishu image: %w", err)
+		}
+		content, err := json.Marshal(map[string]string{"image_key": imageKey})
+		if err != nil {
+			return "", "", fmt.Errorf("encode feishu image: %w", err)
+		}
+		return "image", string(content), nil
+	}
+	if info.Size() > maxFeishuFileBytes {
+		return "", "", fmt.Errorf("feishu file is %d bytes; limit is %d", info.Size(), maxFeishuFileBytes)
+	}
+	fileKey, err := a.upload.UploadFilePath(ctx, "stream", path)
+	if err != nil {
+		return "", "", fmt.Errorf("upload feishu file: %w", err)
+	}
+	content, err := json.Marshal(map[string]string{"file_key": fileKey})
+	if err != nil {
+		return "", "", fmt.Errorf("encode feishu file: %w", err)
+	}
+	return "file", string(content), nil
+}
+
+func feishuImageName(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.Reply) error {

@@ -99,6 +99,12 @@ Images and files are downloaded to `.nectar/attachments/` under the current chat
 
 GFM tables inside cards are parsed into DingTalk's native `Table` component; older clients fall back to raw table text.
 
+Outbound images and files are supported: the agent copies files into
+`.nectar/outbox/` under the current workspace (`NECTAR_OUTBOX_DIR`). Nectar
+uploads and sends them after the turn, then removes each file once delivery
+succeeds. Up to 10 files, 50 MiB each; the DingTalk adapter further limits one
+upload to 20 MiB. Images use `sampleImageMsg`; other files use `sampleFile`.
+
 Outbound images, files, and audio are not supported in the current version.
 
 ## Group and direct chats

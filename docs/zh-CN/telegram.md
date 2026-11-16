@@ -79,7 +79,9 @@ Telegram 单条消息上限 4096 个 UTF-16 单元。超长输出会自动分片
 
 附件会下载到当前聊天工作目录下的 `.nectar/attachments/`，Agent 运行结束后自动清理。相册（media group）会短暂聚合，避免一次发多张图触发多轮 Agent。
 
-云 Bot API 的下载上限是 20MB，附件下载还受核心 30 秒超时限制；超过限制时需要在 Telegram 客户端压缩/拆分，或自建 Bot API Server。当前版本暂不支持出站图片、文件和音频。
+云 Bot API 的下载上限是 20MB，附件下载还受核心 30 秒超时限制；超过限制时需要在 Telegram 客户端压缩/拆分，或自建 Bot API Server。
+
+出站支持图片和文件：Agent 把文件复制到当前工作区的 `.nectar/outbox/`（环境变量 `NECTAR_OUTBOX_DIR`），本轮结束后自动发送并在成功后删除。最多 10 个、单文件 50 MiB；其中 JPG/PNG 图片在 10 MiB 以内按图片发送，其他内容按文件发送。
 
 频道（channel）消息暂不支持；请使用单聊、群聊或论坛话题。
 

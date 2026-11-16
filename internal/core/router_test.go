@@ -39,6 +39,8 @@ type fakePlatform struct {
 	downloads       []attachment.Resource
 	downloadDirs    []string
 	downloadErr     error
+	media           []platform.Media
+	mediaErr        error
 }
 
 func (f *fakePlatform) Name() string {
@@ -59,6 +61,15 @@ func (f *fakePlatform) Send(_ context.Context, reply platform.Reply) (string, er
 	f.replyTargets = append(f.replyTargets, reply.ReplyTo)
 	f.replyThreads = append(f.replyThreads, reply.ReplyInThread)
 	f.threadIDs = append(f.threadIDs, reply.ThreadID)
+	if len(reply.Media) > 0 {
+		f.media = append(f.media, reply.Media...)
+		if f.mediaErr != nil {
+			return "", f.mediaErr
+		}
+		if reply.Text == "" && reply.Card == nil {
+			return "media", nil
+		}
+	}
 	if reply.Card != nil {
 		f.sentCards = append(f.sentCards, *reply.Card)
 		return "card-1", nil
@@ -130,6 +141,18 @@ func (f *fakePlatform) cardSendCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.sentCards)
+}
+
+func (f *fakePlatform) mediaCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.media)
+}
+
+func (f *fakePlatform) mediaSnapshot() []platform.Media {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]platform.Media(nil), f.media...)
 }
 
 func (f *fakePlatform) lastUpdate() platform.Card {
@@ -363,6 +386,18 @@ func waitForReplies(t *testing.T, plat *fakePlatform, want int) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("got %d replies, want %d", plat.replyCount(), want)
+}
+
+func waitForMedia(t *testing.T, plat *fakePlatform, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if plat.mediaCount() >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("got %d media, want %d", plat.mediaCount(), want)
 }
 
 func waitForCardUpdates(t *testing.T, plat *fakePlatform, want int) {
@@ -660,6 +695,60 @@ func TestRouterAttachmentOnlyMessageUsesDefaultPrompt(t *testing.T) {
 	}
 	if len(opts.Attachments) != 1 || opts.Attachments[0].Kind != attachment.KindImage {
 		t.Fatalf("attachments = %#v", opts.Attachments)
+	}
+}
+
+func TestRouterSendsOutboxMedia(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	workdir, err := router.workspaces.ForChat("c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outbox := outboundDir(workdir)
+	if err := os.MkdirAll(outbox, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	imagePath := filepath.Join(outbox, "chart.png")
+	if err := os.WriteFile(imagePath, []byte("\x89PNG\r\n\x1a\nchart"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(outbox, "report.txt")
+	if err := os.WriteFile(filePath, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	router.Handle(platform.Message{
+		Channel:   "feishu",
+		ChatID:    "c1",
+		MessageID: "m-outbox",
+		Text:      "生成图表和报告",
+	})
+	waitForReplies(t, plat, 1)
+	waitForMedia(t, plat, 2)
+
+	media := plat.mediaSnapshot()
+	if len(media) != 2 {
+		t.Fatalf("media = %#v", media)
+	}
+	if media[0].Type != "image" || media[0].Name != "chart.png" ||
+		media[1].Type != "file" || media[1].Name != "report.txt" {
+		t.Fatalf("media = %#v", media)
+	}
+	for _, item := range media {
+		if _, err := os.Stat(item.Path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("sent media was not removed: %q (%v)", item.Path, err)
+		}
+	}
+
+	prompt, opts := eng.lastRequest()
+	if opts.Env["NECTAR_OUTBOX_DIR"] != outbox {
+		t.Fatalf("NECTAR_OUTBOX_DIR = %q, want %q", opts.Env["NECTAR_OUTBOX_DIR"], outbox)
+	}
+	if !strings.Contains(prompt, outbox) || !strings.Contains(prompt, "Outbound files") {
+		t.Fatalf("prompt missing outbox instructions: %q", prompt)
 	}
 }
 
