@@ -17,6 +17,7 @@ nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
 nectar skills <subcommand>            管理 Agent Skill
 nectar memory <subcommand>            管理本地记忆
+nectar dashboard [--config PATH]      打开本地控制台登录链接
 nectar uninstall                      卸载 Nectar
 ```
 
@@ -29,6 +30,24 @@ nectar uninstall                      卸载 Nectar
 | `-h` / `--help` | 显示帮助 |
 
 > 安装脚本默认已经启动后台服务。手动前台运行时先执行 `nectar service stop`，避免多个实例同时连接平台。
+
+## 本地控制台
+
+```bash
+nectar dashboard [--config PATH] [--json] [--no-browser]
+```
+
+先启用配置：
+
+```toml
+[dashboard]
+enabled = true
+listen = "127.0.0.1:8787"
+```
+
+重启 Nectar 后运行 `nectar dashboard`，命令会打印带 Token 的登录 URL，并默认直接打开浏览器。`--no-browser` 只打印链接，适合脚本或远程终端；`--json` 输出 `url`、`listen` 和 `token_file`，且不会打开浏览器。Token 文件首次启动时自动生成（权限 `0600`）；Dashboard 默认只监听回环地址，远程访问需要显式设置 `allow_remote = true` 并放在 HTTPS 反向代理后面。
+
+控制台支持 Bot 状态总览、记忆检索/审核/固定/删除、定时任务 CRUD/暂停/恢复/立即运行，以及只读生效配置。配置修改仍以 `config.toml` 为准，改完需要重启服务。
 
 ## 多 Bot
 

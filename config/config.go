@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,19 +13,20 @@ import (
 )
 
 type Config struct {
-	Feishu   FeishuConfig        `toml:"feishu"`
-	DingTalk DingTalkConfig      `toml:"dingtalk"`
-	Telegram TelegramConfig      `toml:"telegram"`
-	Codex    CodexConfig         `toml:"codex"`
-	OpenCode OpenCodeConfig      `toml:"opencode"`
-	Cursor   CursorConfig        `toml:"cursor"`
-	Claude   ClaudeConfig        `toml:"claude"`
-	Pi       PiConfig            `toml:"pi"`
-	Bot      BotConfig           `toml:"bot"`
-	Bots     map[string]BotEntry `toml:"bots"`
-	Storage  StorageConfig       `toml:"storage"`
-	Memory   MemoryConfig        `toml:"memory"`
-	Schedule ScheduleConfig      `toml:"schedule"`
+	Feishu    FeishuConfig        `toml:"feishu"`
+	DingTalk  DingTalkConfig      `toml:"dingtalk"`
+	Telegram  TelegramConfig      `toml:"telegram"`
+	Codex     CodexConfig         `toml:"codex"`
+	OpenCode  OpenCodeConfig      `toml:"opencode"`
+	Cursor    CursorConfig        `toml:"cursor"`
+	Claude    ClaudeConfig        `toml:"claude"`
+	Pi        PiConfig            `toml:"pi"`
+	Bot       BotConfig           `toml:"bot"`
+	Bots      map[string]BotEntry `toml:"bots"`
+	Storage   StorageConfig       `toml:"storage"`
+	Memory    MemoryConfig        `toml:"memory"`
+	Schedule  ScheduleConfig      `toml:"schedule"`
+	Dashboard DashboardConfig     `toml:"dashboard"`
 }
 
 type FeishuConfig struct {
@@ -169,6 +171,17 @@ type ScheduleConfig struct {
 	Timeout       string `toml:"timeout"`
 }
 
+// DashboardConfig controls the optional local web console. It is disabled by
+// default and binds to loopback unless the operator explicitly opts in to a
+// remote listener.
+type DashboardConfig struct {
+	Enabled     *bool  `toml:"enabled"`
+	Listen      string `toml:"listen"`
+	TokenFile   string `toml:"token_file"`
+	AllowRemote bool   `toml:"allow_remote"`
+	ReadOnly    bool   `toml:"read_only"`
+}
+
 func defaults() Config {
 	home := homeDir()
 	return Config{
@@ -228,6 +241,9 @@ func defaults() Config {
 			MaxConcurrent: 4,
 			Jitter:        "0s",
 			Timeout:       "30m",
+		},
+		Dashboard: DashboardConfig{
+			Listen: "127.0.0.1:8787",
 		},
 	}
 }
@@ -304,6 +320,17 @@ func (c Config) MemoryEnabled() bool {
 
 func (c Config) MemoryAutoLearnFailures() bool {
 	return c.Memory.AutoLearnFailures == nil || *c.Memory.AutoLearnFailures
+}
+
+func (c Config) DashboardEnabled() bool {
+	return c.Dashboard.Enabled != nil && *c.Dashboard.Enabled
+}
+
+func (c Config) DashboardTokenPath() string {
+	if value := strings.TrimSpace(c.Dashboard.TokenFile); value != "" {
+		return value
+	}
+	return filepath.Join(c.Storage.DataDir, "run", "dashboard.token")
 }
 
 func (c Config) MemoryDefaultScope() string {
@@ -464,6 +491,22 @@ func normalize(cfg *Config) error {
 	cfg.Memory.DefaultScope = strings.ToLower(strings.TrimSpace(cfg.Memory.DefaultScope))
 	if cfg.Memory.DefaultScope == "" {
 		cfg.Memory.DefaultScope = "bot"
+	}
+	cfg.Dashboard.Listen = strings.TrimSpace(cfg.Dashboard.Listen)
+	if cfg.Dashboard.Listen == "" {
+		cfg.Dashboard.Listen = "127.0.0.1:8787"
+	}
+	host, _, err := net.SplitHostPort(cfg.Dashboard.Listen)
+	if err != nil {
+		return fmt.Errorf("invalid dashboard.listen %q: %w", cfg.Dashboard.Listen, err)
+	}
+	if strings.TrimSpace(cfg.Dashboard.TokenFile) != "" {
+		if cfg.Dashboard.TokenFile, err = expandHome(cfg.Dashboard.TokenFile); err != nil {
+			return fmt.Errorf("dashboard.token_file: %w", err)
+		}
+	}
+	if !cfg.Dashboard.AllowRemote && !isLoopbackHost(host) {
+		return fmt.Errorf("dashboard.listen %q is not loopback; set dashboard.allow_remote = true to allow it", cfg.Dashboard.Listen)
 	}
 	switch cfg.Memory.DefaultScope {
 	case "bot", "chat", "project":
@@ -629,6 +672,18 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.TrimSpace(strings.Trim(host, "[]"))
+	if host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func normalizePlatform(cfg *Config) error {

@@ -278,6 +278,42 @@ timeout = "30m"               # default per-run timeout; 0s disables it
 
 See [Scheduled tasks](schedule.md) for the semantics.
 
+## Local console
+
+The dashboard is disabled by default. When enabled it binds to loopback and
+requires token authentication:
+
+```toml
+[dashboard]
+enabled = true
+listen = "127.0.0.1:8787"
+# Defaults to ~/.nectar/run/dashboard.token; generated with 0600 on first start.
+token_file = "~/.nectar/run/dashboard.token"
+# Allow a non-loopback listener; put it behind a TLS reverse proxy if enabled.
+allow_remote = false
+# true exposes the console in read-only mode.
+read_only = false
+```
+
+After Nectar starts, run:
+
+```bash
+nectar dashboard
+```
+
+The command prints a one-time login URL with a token. The console provides bot
+status overview, memory search and review, scheduled-task management, and a
+read-only view of effective configuration. Platform credentials and engine
+secrets are never returned to the browser. The console does not edit the config
+file; restart the service after changing `config.toml`.
+
+The console defaults to English. Use the Language selector in the top bar to
+switch to Chinese; the choice is remembered in the current browser.
+
+The listener is restricted to `127.0.0.1` / `localhost` / loopback IPs by
+default. Set `allow_remote = true` only when you have an HTTPS reverse proxy.
+The dashboard token is equivalent to an admin password.
+
 ## Environment overrides
 
 Environment variables override the corresponding config values:
