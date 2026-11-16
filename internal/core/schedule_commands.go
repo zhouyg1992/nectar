@@ -203,6 +203,14 @@ func (r *Router) handleScheduleUpdate(msg platform.Message, args []string) {
 }
 
 func (r *Router) addScheduledTask(msg platform.Message, req ScheduleRequest) {
+	if strings.TrimSpace(req.SessionID) == "" {
+		req.SessionID = r.sessions.ActiveID(SessionKey{
+			Channel:  req.Channel,
+			ChatID:   req.ChatID,
+			ThreadID: req.ThreadID,
+			AgentID:  req.AgentID,
+		})
+	}
 	task, err := r.scheduler.Add(req, msg.UserID)
 	if err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Schedule Error", err.Error())
@@ -234,6 +242,9 @@ func formatScheduleTask(task ScheduledTask) string {
 	lines := []string{
 		fmt.Sprintf("`%s` · %s · %s", task.ID, status, scheduleWindow(task)),
 		fmt.Sprintf("Prompt: %s", task.Prompt),
+	}
+	if task.SessionID != "" {
+		lines = append(lines, "Session: `"+shortSessionID(task.SessionID)+"`")
 	}
 	if !task.NextRun.IsZero() {
 		lines = append(lines, "Next: "+formatScheduleTime(task.NextRun, task.Timezone))

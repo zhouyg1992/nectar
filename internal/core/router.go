@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zhouyg1992/nectar/internal/core/decision"
@@ -35,6 +36,7 @@ type RouterConfig struct {
 	ModelName              string
 	ContextWindow          int
 	CardUpdateInterval     time.Duration
+	QueueNoticeDelay       time.Duration
 	EngineOptions          engine.EngineOptions
 	AdminUsers             []string
 	DataDir                string
@@ -42,6 +44,25 @@ type RouterConfig struct {
 	MemoryMaxItems         int
 	MemoryMaxChars         int
 	DisableMemoryAutoLearn bool
+}
+
+type sessionRun struct {
+	sessionID       string
+	key             SessionKey
+	cancel          context.CancelFunc
+	engineSessionID string
+	notice          *queuedRunNotice
+}
+
+type queuedRunNotice struct {
+	mu        sync.Mutex
+	msg       platform.Message
+	ahead     int
+	cardID    string
+	sent      bool
+	started   bool
+	canceled  bool
+	startedCh chan struct{}
 }
 
 type Router struct {
@@ -59,6 +80,11 @@ type Router struct {
 	scheduler  *Scheduler
 	logger     *slog.Logger
 	cfg        RouterConfig
+
+	runMu          sync.Mutex
+	runs           map[string]*sessionRun
+	runSeq         atomic.Uint64
+	workspaceLocks sync.Map
 }
 
 func NewRouter(
@@ -86,6 +112,9 @@ func NewRouter(
 	if cfg.CardUpdateInterval <= 0 {
 		cfg.CardUpdateInterval = 2 * time.Second
 	}
+	if cfg.QueueNoticeDelay <= 0 {
+		cfg.QueueNoticeDelay = 800 * time.Millisecond
+	}
 	if cfg.MemoryMaxItems <= 0 {
 		cfg.MemoryMaxItems = 6
 	}
@@ -107,12 +136,169 @@ func NewRouter(
 		decider:    decider,
 		logger:     logger,
 		cfg:        cfg,
+		runs:       make(map[string]*sessionRun),
 	}
 }
 
 func (r *Router) SetScheduling(anchors *AnchorStore, scheduler *Scheduler) {
 	r.anchors = anchors
 	r.scheduler = scheduler
+}
+
+func (r *Router) lockWorkspace(path string) func() {
+	value, _ := r.workspaceLocks.LoadOrStore(path, &sync.Mutex{})
+	lock := value.(*sync.Mutex)
+	lock.Lock()
+	return lock.Unlock
+}
+
+func (r *Router) newRunID(sessionID string) string {
+	return fmt.Sprintf("%s:%d", sessionID, r.runSeq.Add(1))
+}
+
+func (r *Router) trackRun(runID, sessionID string, key SessionKey, cancel context.CancelFunc, notice *queuedRunNotice) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	r.runs[runID] = &sessionRun{sessionID: sessionID, key: key, cancel: cancel, notice: notice}
+}
+
+func (r *Router) untrackRun(runID string) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	delete(r.runs, runID)
+}
+
+func (r *Router) setRunEngineSession(runID, engineSessionID string) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	if run := r.runs[runID]; run != nil {
+		run.engineSessionID = engineSessionID
+	}
+}
+
+func (r *Router) runningForKey(key SessionKey) []sessionRun {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	out := make([]sessionRun, 0, len(r.runs))
+	for _, run := range r.runs {
+		if run.key == key {
+			out = append(out, *run)
+		}
+	}
+	return out
+}
+
+func (r *Router) isSessionRunning(sessionID string) bool {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	for _, run := range r.runs {
+		if run.sessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+func newQueuedRunNotice(msg platform.Message) *queuedRunNotice {
+	return &queuedRunNotice{
+		msg:       msg,
+		startedCh: make(chan struct{}),
+	}
+}
+
+func (n *queuedRunNotice) setAhead(ahead int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.ahead = ahead
+}
+
+func (n *queuedRunNotice) markStarted() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.started {
+		return n.cardID
+	}
+	n.started = true
+	close(n.startedCh)
+	return n.cardID
+}
+
+func (r *Router) sendQueuedNoticeAfter(ctx context.Context, notice *queuedRunNotice) {
+	timer := time.NewTimer(r.cfg.QueueNoticeDelay)
+	defer timer.Stop()
+	select {
+	case <-notice.startedCh:
+		return
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
+
+	notice.mu.Lock()
+	defer notice.mu.Unlock()
+	if notice.started || notice.canceled || notice.sent {
+		return
+	}
+	noun := "tasks"
+	if notice.ahead == 1 {
+		noun = "task"
+	}
+	card := &platform.Card{
+		Status: platform.CardThinking,
+		Title:  r.queuedCardTitle(),
+		Body:   fmt.Sprintf("%d %s ahead. I'll start after the current run finishes.", notice.ahead, noun),
+	}
+	id, err := r.sendCardReply(notice.msg, card)
+	if err != nil {
+		r.logger.Debug("send queued notice failed", "error", err)
+		return
+	}
+	notice.sent = true
+	notice.cardID = id
+}
+
+func (r *Router) queuedCardTitle() string {
+	if r.platform.Name() == "dingtalk" {
+		return "🕒 Queued"
+	}
+	return "⏳ Queued"
+}
+
+func (r *Router) cancelQueuedNotice(notice *queuedRunNotice) {
+	if notice == nil {
+		return
+	}
+	notice.mu.Lock()
+	if notice.started || notice.canceled {
+		notice.mu.Unlock()
+		return
+	}
+	notice.canceled = true
+	cardID := notice.cardID
+	msg := notice.msg
+	notice.mu.Unlock()
+	if cardID == "" {
+		return
+	}
+	reply := replyTarget(msg)
+	reply.Card = &platform.Card{
+		Status: platform.CardError,
+		Title:  "⚠️ Cancelled",
+		Body:   "Cancelled while queued.",
+	}
+	if err := r.platform.Update(r.ctx, cardID, reply); err != nil {
+		r.logger.Debug("cancel queued notice failed", "error", err)
+	}
+}
+
+func (r *Router) sendCardReply(msg platform.Message, card *platform.Card) (string, error) {
+	if caps := r.platform.Capabilities(); caps.Card {
+		reply := replyTarget(msg)
+		reply.Card = card
+		return r.platform.Send(r.ctx, reply)
+	}
+	fallback := strings.TrimSpace(card.Title + "\n\n" + card.Body)
+	return "", r.reply(msg, fallback)
 }
 
 func (r *Router) Handle(msg platform.Message) {
@@ -138,20 +324,26 @@ func (r *Router) Handle(msg platform.Message) {
 
 	if msg.Origin != "schedule" {
 		switch text {
-		case "/new", "/reset":
-			if err := r.sessions.Delete(key); err != nil {
-				r.logger.Warn("could not persist session reset", "error", err)
-			}
-			r.sendCommandResult(msg, platform.CardInfo, "🌱 New Session", "Started a new session.")
-			return
 		case "/status":
+			if !r.canManageSessions(msg) {
+				r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can inspect sessions in group chats.")
+				return
+			}
 			r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
 			return
 		case "/about", "/whoami":
 			r.sendCommandResult(msg, platform.CardInfo, "🍯 About "+r.cfg.BotName, r.aboutText())
 			return
 		case "/stop":
+			if !r.canManageSessions(msg) {
+				r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can stop runs in group chats.")
+				return
+			}
 			r.stop(key, msg)
+			return
+		}
+
+		if r.handleSessionCommand(key, msg, text) {
 			return
 		}
 
@@ -177,17 +369,32 @@ func (r *Router) Handle(msg platform.Message) {
 	}
 
 	// Platform callbacks must return fast (Feishu retries after ~3s), so the
-	// actual agent run is queued and serialized per session key.
-	r.queue.Do(key.String(), func() {
-		r.execute(r.ctx, key, msg, text)
+	// actual agent run is queued and serialized per Nectar session.
+	session, err := r.sessions.EnsureActive(key, "")
+	if err != nil {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Session Error", "Could not start a session: "+err.Error())
+		return
+	}
+	runCtx, cancel := context.WithCancel(r.ctx)
+	runID := r.newRunID(session.ID)
+	notice := newQueuedRunNotice(msg)
+	r.trackRun(runID, session.ID, key, cancel, notice)
+	ahead := r.queue.Do(session.ID, func() {
+		defer cancel()
+		defer r.untrackRun(runID)
+		r.execute(runCtx, key, session.ID, runID, msg, text, notice)
 	})
+	if ahead > 0 {
+		notice.setAhead(ahead)
+		go r.sendQueuedNoticeAfter(runCtx, notice)
+	}
 }
 
 // ExecuteScheduled runs a scheduler-owned prompt through the same per-session
 // queue as chat messages and waits until that turn finishes. The scheduler uses
 // the returned error to report the actual agent result instead of merely
 // whether the prompt was enqueued.
-func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) error {
+func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, sessionIDs ...string) error {
 	msg.Origin = "schedule"
 	text := strings.TrimSpace(msg.Text)
 	if text == "" && len(msg.Attachments) == 0 {
@@ -199,13 +406,32 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) err
 		ThreadID: msg.ThreadID,
 		AgentID:  r.cfg.AgentID,
 	}
+	var session Session
+	var err error
+	if len(sessionIDs) > 0 && strings.TrimSpace(sessionIDs[0]) != "" {
+		var ok bool
+		session, ok = r.sessions.GetSession(strings.TrimSpace(sessionIDs[0]))
+		if !ok || session.Status == SessionStatusArchived || !session.matchesKey(key) {
+			return fmt.Errorf("scheduled session %q is not available", sessionIDs[0])
+		}
+	} else {
+		session, err = r.sessions.EnsureActive(key, "")
+		if err != nil {
+			return fmt.Errorf("start scheduled session: %w", err)
+		}
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	runID := r.newRunID(session.ID)
+	r.trackRun(runID, session.ID, key, cancel, nil)
 	done := make(chan error, 1)
-	r.queue.Do(key.String(), func() {
-		if err := ctx.Err(); err != nil {
+	r.queue.Do(session.ID, func() {
+		defer cancel()
+		defer r.untrackRun(runID)
+		if err := runCtx.Err(); err != nil {
 			done <- err
 			return
 		}
-		done <- r.execute(ctx, key, msg, text)
+		done <- r.execute(runCtx, key, session.ID, runID, msg, text, nil)
 	})
 	select {
 	case err := <-done:
@@ -215,9 +441,16 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message) err
 	}
 }
 
-func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Message, prompt string) error {
+func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string, notice *queuedRunNotice) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	session, ok := r.sessions.GetSession(sessionID)
+	if !ok {
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+	if err := r.sessions.BeginTurn(sessionID, prompt); err != nil {
+		r.logger.Warn("could not begin session turn", "error", err)
 	}
 	workdir, err := r.workspaces.ForChat(msg.ChatID)
 	if err != nil {
@@ -250,6 +483,10 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
 
+	initialCardID := ""
+	if notice != nil {
+		initialCardID = notice.markStarted()
+	}
 	cardID := ""
 	caps := r.platform.Capabilities()
 	stopTyping := func() {}
@@ -260,7 +497,21 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	}
 	defer stopTyping()
 
-	if caps.Card && caps.Streaming {
+	if initialCardID != "" {
+		initial := &platform.Card{
+			Status: platform.CardThinking,
+			Title:  cardTitleThinking,
+			Body:   initialCardBody(len(msg.Attachments) > 0),
+		}
+		reply := replyTarget(msg)
+		reply.Card = initial
+		if err := r.platform.Update(r.ctx, initialCardID, reply); err != nil {
+			r.logger.Warn("update queued card failed", "error", err)
+		} else {
+			cardID = initialCardID
+		}
+	}
+	if cardID == "" && caps.Card && caps.Streaming {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
@@ -296,12 +547,25 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	prompt = r.withIdentity(prompt)
 	opts.Attachments = attachments
 
-	sessionID, hasSession := r.sessions.Get(key)
-	prompt = r.withMemory(ctx, msg, workdir, prompt, key, hasSession)
+	engineSessionID := session.EngineSessionID
+	hasSession := engineSessionID != ""
+	prompt = r.withMemory(ctx, msg, workdir, prompt, sessionID, hasSession)
+	unlockWorkspace := r.lockWorkspace(workdir)
+	defer unlockWorkspace()
+	if err := ctx.Err(); err != nil {
+		answer := "❌ Run stopped: " + err.Error()
+		finishErr := r.finish(msg, cardID, &platform.Card{
+			Status: platform.CardError,
+			Title:  cardTitleFailed,
+			Body:   answer,
+			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
+		}, answer)
+		return errors.Join(err, finishErr)
+	}
 	var events <-chan engine.Event
 	sessionNotice := ""
 	if hasSession {
-		events, err = r.engine.Resume(ctx, sessionID, prompt, opts)
+		events, err = r.engine.Resume(ctx, engineSessionID, prompt, opts)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				answer := "❌ Run stopped: " + ctxErr.Error()
@@ -314,9 +578,9 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 				return errors.Join(ctxErr, finishErr)
 			}
 			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
-			r.logger.Warn("resume failed; starting a new session", "session", sessionID, "error", err)
-			if deleteErr := r.sessions.Delete(key); deleteErr != nil {
-				r.logger.Warn("could not remove stale session", "error", deleteErr)
+			r.logger.Warn("resume failed; starting a new session", "session", engineSessionID, "error", err)
+			if markErr := r.sessions.MarkStale(sessionID); markErr != nil {
+				r.logger.Warn("could not mark stale session", "error", markErr)
 			}
 			events, err = r.engine.Start(ctx, prompt, opts)
 		}
@@ -347,7 +611,65 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 	contextWindow := r.cfg.ContextWindow
 	toolCount := 0
 	displayBody := ""
+	sawReasoning := false
+	sawIntermediateText := false
 	var lastCardUpdate time.Time
+	finalizing := false
+
+	answerText := func() string {
+		answer := strings.TrimSpace(explicitFinal)
+		if answer == "" {
+			answer = strings.TrimSpace(finalMessage)
+		}
+		if answer == "" {
+			answer = strings.TrimSpace(stream.String())
+		}
+		if answer == "" {
+			answer = strings.TrimSpace(lastAgentMessage)
+		}
+		if answer == "" {
+			if len(errTexts) > 0 {
+				answer = "❌ " + strings.Join(errTexts, "\n")
+			} else if len(toolErrors) > 0 {
+				answer = "❌ " + strings.Join(toolErrors, "\n")
+			} else {
+				answer = "(Agent returned no text output)"
+			}
+		} else if len(errTexts) > 0 {
+			answer += "\n\n⚠️ " + strings.Join(errTexts, "\n")
+		}
+		if sessionNotice != "" {
+			answer = sessionNotice + "\n\n" + answer
+		}
+		if len(answer) > maxReplyBytes {
+			answer = execguard.Truncate(answer, maxReplyBytes) + "\n\n… (output truncated)"
+		}
+		return answer
+	}
+
+	hasAnswer := func() bool {
+		return strings.TrimSpace(explicitFinal) != "" ||
+			strings.TrimSpace(finalMessage) != "" ||
+			stream.Len() > 0 ||
+			strings.TrimSpace(lastAgentMessage) != ""
+	}
+
+	updateFinalizingCard := func() {
+		if cardID == "" || !hasAnswer() || len(errTexts) > 0 {
+			return
+		}
+		finalizing = true
+		reply := replyTarget(msg)
+		reply.Card = &platform.Card{
+			Status: platform.CardFinalizing,
+			Title:  cardTitleComplete,
+			Body:   answerText(),
+			Footer: cardFooter(modelName, time.Since(startedAt), usage, contextWindow),
+		}
+		if err := r.platform.Update(r.ctx, cardID, reply); err != nil {
+			r.logger.Debug("update finalizing card failed", "error", err)
+		}
+	}
 
 	updateProgress := func(body string, force bool) {
 		if cardID == "" {
@@ -384,11 +706,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 		switch ev.Type {
 		case engine.EventSessionStarted:
 			if ev.SessionID != "" {
-				if err := r.sessions.Set(key, ev.SessionID); err != nil {
+				if err := r.sessions.SetEngineSession(sessionID, ev.SessionID); err != nil {
 					r.logger.Warn("could not persist session", "error", err)
 				}
+				r.setRunEngineSession(runID, ev.SessionID)
 			}
 		case engine.EventMessage:
+			sawIntermediateText = true
 			lastAgentMessage = ev.Text
 			phase, _ := ev.Meta["phase"].(string)
 			if phase == "final_answer" {
@@ -399,7 +723,14 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 			}
 			displayBody = ev.Text
 			updateProgress(displayBody, true)
+		case engine.EventReasoning:
+			sawReasoning = true
+			if !sawIntermediateText {
+				displayBody = "Thinking through the task…"
+				updateProgress(displayBody, true)
+			}
 		case engine.EventTextDelta:
+			sawIntermediateText = true
 			stream.WriteString(ev.Text)
 			lastAgentMessage = stream.String()
 			displayBody = stream.String()
@@ -407,6 +738,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 		case engine.EventToolCall:
 			r.logger.Debug("agent tool call", "chat", msg.ChatID, "command", ev.Text)
 			toolCount++
+			if !sawIntermediateText {
+				if sawReasoning {
+					displayBody = "Thinking through the task…"
+				} else {
+					displayBody = "Gathering results…"
+				}
+			}
 			updateProgress(displayBody, true)
 		case engine.EventToolResult:
 			r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)
@@ -418,49 +756,33 @@ func (r *Router) execute(ctx context.Context, key SessionKey, msg platform.Messa
 				errTexts = append(errTexts, ev.Text)
 			}
 		case engine.EventDone:
-			usage = parseUsage(ev.Meta)
+			if parsed := parseUsage(ev.Meta); parsed != nil {
+				usage = parsed
+			}
 			if value := metaInt(ev.Meta, "context_window"); value > 0 {
 				contextWindow = value
+			}
+			updateFinalizingCard()
+		case engine.EventUsage:
+			if parsed := parseUsage(ev.Meta); parsed != nil {
+				usage = parsed
+			}
+			if value := metaInt(ev.Meta, "context_window"); value > 0 {
+				contextWindow = value
+			}
+			if finalizing {
+				updateFinalizingCard()
 			}
 		}
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		errTexts = append(errTexts, ctxErr.Error())
 	}
-	if err := r.sessions.SetUsage(key, usage, contextWindow); err != nil {
-		r.logger.Warn("could not persist session usage", "error", err)
+	if err := r.sessions.FinishTurn(sessionID, usage, contextWindow); err != nil {
+		r.logger.Warn("could not finish session turn", "error", err)
 	}
 
-	// Codex exec does not reliably mark the final answer in JSONL. Prefer an
-	// explicit final_answer phase, then the last non-commentary message, then
-	// the last streamed/received message.
-	answer := strings.TrimSpace(explicitFinal)
-	if answer == "" {
-		answer = strings.TrimSpace(finalMessage)
-	}
-	if answer == "" {
-		answer = strings.TrimSpace(stream.String())
-	}
-	if answer == "" {
-		answer = strings.TrimSpace(lastAgentMessage)
-	}
-	if answer == "" {
-		if len(errTexts) > 0 {
-			answer = "❌ " + strings.Join(errTexts, "\n")
-		} else if len(toolErrors) > 0 {
-			answer = "❌ " + strings.Join(toolErrors, "\n")
-		} else {
-			answer = "(Agent returned no text output)"
-		}
-	} else if len(errTexts) > 0 {
-		answer += "\n\n⚠️ " + strings.Join(errTexts, "\n")
-	}
-	if sessionNotice != "" {
-		answer = sessionNotice + "\n\n" + answer
-	}
-	if len(answer) > maxReplyBytes {
-		answer = execguard.Truncate(answer, maxReplyBytes) + "\n\n… (output truncated)"
-	}
+	answer := answerText()
 
 	elapsed := time.Since(startedAt)
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
@@ -525,37 +847,53 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 }
 
 func (r *Router) stop(key SessionKey, msg platform.Message) {
-	sessionID, ok := r.sessions.Get(key)
-	if !ok {
+	runs := r.runningForKey(key)
+	if len(runs) == 0 {
 		r.sendCommandResult(msg, platform.CardInfo, "✋ Stop", "No agent is running in this session.")
 		return
 	}
-	if err := r.engine.Cancel(r.ctx, sessionID); err != nil {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Stop Failed", "Failed to stop: "+err.Error())
-		return
+	for _, run := range runs {
+		if run.cancel != nil {
+			run.cancel()
+		}
+		r.cancelQueuedNotice(run.notice)
+		if run.engineSessionID != "" {
+			_ = r.engine.Cancel(r.ctx, run.engineSessionID)
+		}
 	}
-	r.sendCommandResult(msg, platform.CardInfo, "✋ Stop Requested", "Stop requested.")
+	body := "Stop requested."
+	if len(runs) > 1 {
+		body = fmt.Sprintf("Stop requested for %d running sessions.", len(runs))
+	}
+	r.sendCommandResult(msg, platform.CardInfo, "✋ Stop Requested", body)
 }
 
 func (r *Router) status(key SessionKey) string {
-	sessionID, ok := r.sessions.Get(key)
+	rows := [][2]string{
+		{"Engine", r.engine.Name()},
+		{"Model", r.resolvedModel()},
+	}
+	session, ok := r.sessions.Active(key)
 	if !ok {
-		sessionID = "New session (not started)"
+		rows = append(rows, [2]string{"Session", "New session (not started)"})
+		return markdownKeyValue(rows)
 	}
-	lines := []string{
-		fmt.Sprintf("Engine: %s", r.engine.Name()),
-		fmt.Sprintf("Model: %s", r.resolvedModel()),
-		fmt.Sprintf("Session: %s", sessionID),
+	engineSession := session.EngineSessionID
+	if engineSession == "" {
+		rows = append(rows, [2]string{"Session", "New session (not started)"})
+	} else {
+		rows = append(rows, [2]string{"Session", engineSession})
 	}
-	if usage, contextWindow, ok := r.sessions.Usage(key); ok {
+	rows = append(rows, [2]string{"Nectar session", "`" + session.ID + "` (" + session.DisplayName() + ")"})
+	if usage, contextWindow, ok := r.sessions.UsageByID(session.ID); ok {
 		if line := formatContextUsage(&usage, contextWindow); line != "" {
-			lines = append(lines, "Context: "+line)
+			rows = append(rows, [2]string{"Context", line})
 		}
 		if line := formatTurnUsage(&usage); line != "" {
-			lines = append(lines, "Last turn: "+line)
+			rows = append(rows, [2]string{"Last turn", line})
 		}
 	}
-	return strings.Join(lines, "\n")
+	return markdownKeyValue(rows)
 }
 
 func (r *Router) withIdentity(prompt string) string {
@@ -902,7 +1240,13 @@ func isTransientError(text string) bool {
 
 func helpCardBody(engineName string) string {
 	return "**Session**\n" +
-		"- `/new` / `/reset` — Start a new session\n" +
+		"- `/new [name]` / `/reset` — Start a new session; previous sessions stay available\n" +
+		"- `/list [all] [limit]` — List sessions for this chat\n" +
+		"- `/switch <id|#|name>` — Switch the active session\n" +
+		"- `/current` — Show the active session\n" +
+		"- `/rename <name>` — Rename the active session\n" +
+		"- `/archive [id]` — Archive a session\n" +
+		"- `/unarchive <id|name>` — Restore an archived session\n" +
 		"- `/status` — Show engine, model, and session\n" +
 		"- `/about` — Show what Nectar is and what it is running on\n" +
 		"- `/stop` — Stop the current task\n" +
@@ -917,7 +1261,13 @@ func helpCardBody(engineName string) string {
 
 func helpText(engineName string) string {
 	return `Nectar commands:
-/new, /reset     Start a new session
+/new [name]      Start a new session (previous sessions stay available)
+/list [all] [N]  List sessions (default limit 50)
+/switch ID|#|NAME  Switch active session
+/current         Show the active session
+/rename NAME     Rename the active session
+/archive ID|NAME Archive a session
+/unarchive ID|NAME Restore an archived session
 /status          Show engine, model, and session
 /about, /whoami  Show what Nectar is and what it is running on
 /stop            Stop the current task

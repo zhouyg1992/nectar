@@ -444,6 +444,8 @@ func cardFlowStatus(status platform.CardStatus, creating bool) string {
 	switch status {
 	case platform.CardComplete, platform.CardInfo:
 		return "FINISH"
+	case platform.CardFinalizing:
+		return "PROCESSING"
 	case platform.CardError:
 		return "ERROR"
 	case platform.CardThinking:
@@ -458,7 +460,7 @@ func cardFlowStatus(status platform.CardStatus, creating bool) string {
 
 func cardTheme(status platform.CardStatus) string {
 	switch status {
-	case platform.CardComplete:
+	case platform.CardComplete, platform.CardFinalizing:
 		return "green"
 	case platform.CardError:
 		return "red"

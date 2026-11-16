@@ -182,8 +182,13 @@ func (a *Adapter) run(parent context.Context, sessionID, prompt string, opts eng
 		if doneEvent == nil {
 			doneEvent = &engine.Event{Type: engine.EventDone}
 		}
-		applyCodexSessionUsage(doneEvent, trackedSession)
 		events <- *doneEvent
+
+		usageEvent := engine.Event{Type: engine.EventUsage}
+		applyCodexSessionUsage(&usageEvent, trackedSession)
+		if usageEvent.Meta != nil {
+			events <- usageEvent
+		}
 	}()
 
 	return events, nil

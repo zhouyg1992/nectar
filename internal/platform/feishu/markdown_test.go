@@ -115,6 +115,15 @@ func TestSanitizeMarkdownTextLeavesPlainTextAlone(t *testing.T) {
 	}
 }
 
+func TestSanitizeSessionListIsPlatformSafe(t *testing.T) {
+	body := "1:  hello  ·  ses_bca6ee20  ·  codex  ·  ctx 18.7k/996.1k (1.9%)  ·  just now  ·  active\n" +
+		"2:  Session Nov 15 16:58  ·  ses_04a8d5d7  ·  codex  ·  ctx 19.2k/996.1k (2.0%)  ·  just now\n\n" +
+		"Use /switch 1, /switch ID, or /switch NAME. /list all includes archived sessions."
+	if got := sanitizeMarkdownText(body); got != body {
+		t.Fatalf("session list changed by feishu sanitizer:\\n%s", got)
+	}
+}
+
 func TestTruncateCardBodyClosesFence(t *testing.T) {
 	body := "text\n```\n" + strings.Repeat("x", maxCardBodyBytes)
 	got := truncateCardBody(body)

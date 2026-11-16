@@ -324,7 +324,7 @@ func memoryVisible(item memory.Memory, scopeIDs []string) bool {
 	return false
 }
 
-func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, prompt string, key SessionKey, hasSession bool) string {
+func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, prompt, sessionID string, hasSession bool) string {
 	if r.memories == nil {
 		return prompt
 	}
@@ -343,13 +343,13 @@ func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, 
 		return prompt
 	}
 	if len(items) == 0 {
-		r.memorySeen.Store(key.String(), memory.BriefHash(nil))
+		r.memorySeen.Store(sessionID, memory.BriefHash(nil))
 		return prompt
 	}
 	items = selectMemoryBrief(items, r.cfg.MemoryMaxItems)
 	hash := memory.BriefHash(items)
 	if hasSession {
-		if previous, ok := r.memorySeen.Load(key.String()); ok && previous.(string) == hash {
+		if previous, ok := r.memorySeen.Load(sessionID); ok && previous.(string) == hash {
 			return prompt
 		}
 	}
@@ -377,7 +377,7 @@ func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, 
 	if limit > 0 {
 		block = execguard.Truncate(block, limit)
 	}
-	r.memorySeen.Store(key.String(), hash)
+	r.memorySeen.Store(sessionID, hash)
 	if err := r.memories.Touch(ctx, ids); err != nil {
 		r.logger.Warn("memory touch failed", "error", err)
 	}

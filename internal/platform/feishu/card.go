@@ -16,7 +16,7 @@ func renderCard(card *platform.Card) (string, error) {
 	switch card.Status {
 	case platform.CardInfo:
 		template = "wathet"
-	case platform.CardComplete:
+	case platform.CardComplete, platform.CardFinalizing:
 		template = "green"
 	case platform.CardError:
 		template = "red"

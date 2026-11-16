@@ -17,13 +17,18 @@ func NewQueue() *Queue {
 	return &Queue{chains: make(map[string]*chain)}
 }
 
-// Do runs fn asynchronously. Jobs with the same key run in submission order.
-func (q *Queue) Do(key string, fn func()) {
+// Do runs fn asynchronously and returns how many jobs were already ahead of it
+// in the same key's chain. Jobs with the same key run in submission order.
+func (q *Queue) Do(key string, fn func()) int {
 	q.mu.Lock()
 	c := q.chains[key]
 	if c == nil {
 		c = &chain{}
 		q.chains[key] = c
+	}
+	ahead := len(c.jobs)
+	if c.running {
+		ahead++
 	}
 	c.jobs = append(c.jobs, fn)
 	if !c.running {
@@ -31,6 +36,7 @@ func (q *Queue) Do(key string, fn func()) {
 		go q.run(key, c)
 	}
 	q.mu.Unlock()
+	return ahead
 }
 
 func (q *Queue) run(key string, c *chain) {

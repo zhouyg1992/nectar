@@ -454,6 +454,45 @@ func TestUpdateUsesChatContext(t *testing.T) {
 	}
 }
 
+func TestUpdateQueuedCardTransitionsToFinal(t *testing.T) {
+	adapter, fake := newFakeAdapter(t, func(method string, _ map[string]any) any {
+		if method == "editMessageText" {
+			return true
+		}
+		return nil
+	})
+
+	if err := adapter.Update(context.Background(), "99", platform.Reply{
+		ChatID: "42",
+		Card: &platform.Card{
+			Status: platform.CardThinking,
+			Title:  "Queued",
+			Body:   "1 task ahead. I'll start after the current run finishes.",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Update(context.Background(), "99", platform.Reply{
+		ChatID: "42",
+		Card: &platform.Card{
+			Status: platform.CardComplete,
+			Title:  "Complete",
+			Body:   "done",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	calls := fake.callsFor("editMessageText")
+	if len(calls) != 2 {
+		t.Fatalf("edit calls = %d, want 2", len(calls))
+	}
+	first, _ := calls[0].Payload["text"].(string)
+	second, _ := calls[1].Payload["text"].(string)
+	if !strings.Contains(first, "Queued") || !strings.Contains(second, "<b>Complete</b>") {
+		t.Fatalf("edit texts = %q / %q", first, second)
+	}
+}
+
 func TestUpdateIgnoresNotModified(t *testing.T) {
 	adapter, _ := newFakeAdapter(t, func(method string, _ map[string]any) any {
 		if method == "editMessageText" {

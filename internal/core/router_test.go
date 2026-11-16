@@ -25,6 +25,7 @@ import (
 
 type fakePlatform struct {
 	mu              sync.Mutex
+	name            string
 	cards           bool
 	replies         []string
 	sentCards       []platform.Card
@@ -40,7 +41,12 @@ type fakePlatform struct {
 	downloadErr     error
 }
 
-func (f *fakePlatform) Name() string { return "fake" }
+func (f *fakePlatform) Name() string {
+	if f.name != "" {
+		return f.name
+	}
+	return "fake"
+}
 func (f *fakePlatform) Capabilities() platform.Capabilities {
 	return platform.Capabilities{Card: f.cards, Streaming: f.cards}
 }
@@ -692,12 +698,19 @@ func TestRouterRecordsLessonOnError(t *testing.T) {
 	if got := plat.lastReply(); got == "" {
 		t.Fatal("empty error reply")
 	}
-	pending, err := lessons.ListPending(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pending) != 1 {
-		t.Fatalf("pending lessons = %d, want 1", len(pending))
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := lessons.ListPending(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(pending) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pending lessons = %d, want 1", len(pending))
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -996,7 +1009,7 @@ func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
 	plat.mu.Lock()
 	body := plat.sentCards[0].Body
 	plat.mu.Unlock()
-	for _, want := range []string{"Engine: fake", "Model: gpt-5.2-codex", "Session: session-123"} {
+	for _, want := range []string{"| Engine | fake |", "| Model | gpt-5.2-codex |", "| Session | session-123 |"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("status body = %q, want %q", body, want)
 		}
@@ -1139,6 +1152,41 @@ func TestRouterStreamsProgressAndFinalOnly(t *testing.T) {
 	}
 }
 
+func TestRouterMarksCompleteBeforeUsage(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventMessage, Text: "answer"},
+		{Type: engine.EventDone},
+		{Type: engine.EventUsage, Meta: map[string]any{
+			"usage":          `{"input_tokens":10,"output_tokens":5,"context_tokens":15}`,
+			"context_window": 100,
+		}},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "run"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	plat.mu.Lock()
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+	foundFinalizing := false
+	for _, card := range updates {
+		if card.Status == platform.CardFinalizing && card.Title == cardTitleComplete && card.Body == "answer" {
+			foundFinalizing = true
+			break
+		}
+	}
+	if !foundFinalizing {
+		t.Fatalf("missing finalizing card before usage: %#v", updates)
+	}
+	final := plat.lastUpdate()
+	if final.Status != platform.CardComplete || !strings.Contains(final.Footer, "ctx: 15/100 (15.0%)") {
+		t.Fatalf("final card = %#v", final)
+	}
+}
+
 func TestInitialCardBody(t *testing.T) {
 	if got := initialCardBody(false); got != "Hold on, warming up the hive…" {
 		t.Fatalf("initialCardBody(false) = %q", got)
@@ -1191,6 +1239,46 @@ func TestRouterShowsToolCountAndReplacesIntermediateOutput(t *testing.T) {
 	}
 }
 
+func TestRouterShowsReasoningAndToolFallback(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &scriptedEngine{events: []engine.Event{
+		{Type: engine.EventSessionStarted, SessionID: "s1"},
+		{Type: engine.EventToolCall, Text: "ls"},
+		{Type: engine.EventReasoning, Text: "Reading files before answering."},
+		{Type: engine.EventToolCall, Text: "cat a.txt"},
+		{Type: engine.EventMessage, Text: "final answer"},
+		{Type: engine.EventDone},
+	}}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.CardUpdateInterval = time.Nanosecond
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "inspect"})
+	waitForCardStatus(t, plat, platform.CardComplete)
+
+	plat.mu.Lock()
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+	foundFallback := false
+	foundReasoning := false
+	for _, card := range updates {
+		if card.Status == platform.CardThinking && card.Body == "Gathering results…" {
+			foundFallback = true
+		}
+		if card.Status == platform.CardThinking && card.Body == "Thinking through the task…" {
+			foundReasoning = true
+		}
+		if strings.Contains(card.Body, "Reading files before answering.") {
+			t.Fatalf("raw reasoning leaked into card: %#v", card)
+		}
+	}
+	if !foundFallback || !foundReasoning {
+		t.Fatalf("missing reasoning/fallback updates: %#v", updates)
+	}
+	if final := plat.lastUpdate(); final.Status != platform.CardComplete || final.Body != "final answer" {
+		t.Fatalf("final card = %#v", final)
+	}
+}
+
 func TestRouterRendersEngineUsage(t *testing.T) {
 	plat := &fakePlatform{cards: true}
 	eng := &scriptedEngine{events: []engine.Event{
@@ -1223,7 +1311,7 @@ func TestRouterRendersEngineUsage(t *testing.T) {
 	plat.mu.Lock()
 	statusBody := plat.sentCards[1].Body
 	plat.mu.Unlock()
-	for _, want := range []string{"Context: 180/1k (18.0%)", "Last turn: ↑120 ↓30"} {
+	for _, want := range []string{"| Context | 180/1k (18.0%) |", "| Last turn | ↑120 ↓30 |"} {
 		if !strings.Contains(statusBody, want) {
 			t.Fatalf("status body = %q, want %q", statusBody, want)
 		}

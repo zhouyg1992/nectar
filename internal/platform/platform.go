@@ -12,7 +12,10 @@ const (
 	CardThinking CardStatus = "thinking"
 	CardInfo     CardStatus = "info"
 	CardComplete CardStatus = "complete"
-	CardError    CardStatus = "error"
+	// CardFinalizing is a visually complete, still-updatable state used while
+	// usage metadata is collected after the answer is ready.
+	CardFinalizing CardStatus = "finalizing"
+	CardError      CardStatus = "error"
 )
 
 // Card is a platform-neutral status card rendered by each adapter.

@@ -32,6 +32,43 @@ func TestNormalizeA2UIMarkdownBalancesFence(t *testing.T) {
 	}
 }
 
+func TestNormalizeA2UIMarkdownKeepsSingleLineBreaks(t *testing.T) {
+	got := normalizeA2UIMarkdown("1: first\n2: second\n\nUse /switch")
+	if !strings.Contains(got, "1: first  \n2: second") {
+		t.Fatalf("line breaks were collapsed: %q", got)
+	}
+	if strings.Contains(got, "```") {
+		t.Fatalf("unexpected code fence: %q", got)
+	}
+}
+
+func TestCommandCardBodiesKeepLineBreaks(t *testing.T) {
+	bodies := map[string]string{
+		"help":   "**Session**\n- `/new` — new\n- `/list` — list\n\nUse /help",
+		"status": "Engine: codex\nModel: deepseek\nSession: ses_1",
+		"list":   "1: first\n2: second\n\nUse /switch 1",
+		"cron":   "`task-1` · active\nPrompt: check CI\nNext: 2026-11-16 09:00",
+		"memory": "Memory\n- id: m1\n- kind: fact",
+	}
+	for name, body := range bodies {
+		got := normalizeA2UIMarkdown(body)
+		if !strings.Contains(got, "  \n") {
+			t.Fatalf("%s card lost hard line breaks: %q", name, got)
+		}
+	}
+}
+
+func TestNormalizedTableStillBecomesTableBlock(t *testing.T) {
+	body := normalizeA2UIMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
+	blocks := parseCardBlocks(body)
+	if len(blocks) != 1 || blocks[0].Table == nil {
+		t.Fatalf("normalized table was not parsed as a table: %#v", blocks)
+	}
+	if len(blocks[0].Table.Rows) != 1 || blocks[0].Table.Rows[0][1] != "2" {
+		t.Fatalf("normalized table rows = %#v", blocks[0].Table.Rows)
+	}
+}
+
 func TestPreprocessDingTalkMarkdownConvertsTable(t *testing.T) {
 	got := preprocessDingTalkMarkdown("| a | b |\n|---|---|\n| 1 | 2 |")
 	if !strings.Contains(got, "```text") {
@@ -74,6 +111,21 @@ func TestEscapeHTMLOutsideCode(t *testing.T) {
 	}
 	if !strings.Contains(got, "<https://example.com>") {
 		t.Fatalf("autolink was escaped: %q", got)
+	}
+}
+
+func TestNormalizeSessionListIsPlatformSafe(t *testing.T) {
+	body := "1:  hello  ·  ses_bca6ee20  ·  codex  ·  ctx 18.7k/996.1k (1.9%)  ·  just now  ·  active\n" +
+		"2:  Session Nov 15 16:58  ·  ses_04a8d5d7  ·  codex  ·  ctx 19.2k/996.1k (2.0%)  ·  just now\n\n" +
+		"Use /switch 1, /switch ID, or /switch NAME. /list all includes archived sessions."
+	if got := normalizeA2UIMarkdown(body); !strings.Contains(got, "1:  hello") || !strings.Contains(got, "  \n2:  Session") {
+		t.Fatalf("session list lost line breaks or content:\\n%s", got)
+	}
+	fallback := preprocessDingTalkMarkdown(body)
+	for _, want := range []string{"1:", "active", "Use /switch 1"} {
+		if !strings.Contains(fallback, want) {
+			t.Fatalf("dingtalk fallback = %q, want %q", fallback, want)
+		}
 	}
 }
 

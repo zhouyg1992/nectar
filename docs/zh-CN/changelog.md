@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### 新增
+
+- 会话管理 v2：稳定的 Nectar 会话 ID、名称、当前会话指针、每会话用量和消息数，并从 version 1 会话文件自动迁移
+- 新增 `/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive` 聊天命令；`/new [name]` 现在新建会话，不再删除旧会话
+- 按会话的 FIFO 队列，并对共享同一 workspace 的运行做串行化
+
+### 变更
+
+- `/status` 同时显示底层引擎会话 ID 和 Nectar 会话 ID
+- 会话会使用第一条用户消息自动命名；归档会话可通过 `/list all` 查看
+- 共享同一 workspace 的运行会串行化，避免多个 Agent 同时修改同一批文件
+- `/stop` 会取消当前聊天内的所有运行，包括已经切换走的非 active 会话
+- 群聊会话管理仅限 `bot.admin_users`；单聊行为不变
+- 定时任务绑定创建时的当前会话；如果该会话被归档，任务会失败而不是静默切换
+- 归档会话不会被迟到的引擎事件复活；新增 `/unarchive` 恢复会话
+- `/list` 的数字快捷方式只统计未归档会话；归档条目使用 `archived:` 前缀
+- 会话名会移除 Markdown/HTML 元字符；自动命名会先做凭据脱敏
+- 排在其它运行后面的消息会使用同一张卡片，从 Queued 原地变为 Working 和 Complete
+- 钉钉 AI 卡片 Markdown 现在会保留单换行
+- 会话列表、状态和会话详情卡片改用 Markdown 表格对齐
+- 聊天卡片在答案就绪后先进入可更新的 Complete/Finalizing 状态，usage 到达后再补页脚
+- Codex 的 `reasoning` 只作为信号，不展示原文；Working 卡片显示 Thinking through the task 占位文案，只有工具调用时显示 Gathering results 兜底文案
+
 ## v0.8.0 — 2026-11-14
 
 ### 新增
