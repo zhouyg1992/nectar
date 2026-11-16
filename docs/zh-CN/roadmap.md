@@ -1,5 +1,11 @@
 # 路线图与待实现
 
+## v0.9.0 已完成
+
+- 运行中插话：`/steer`、`/append`、`/ps`、`/btw` 向进行中的任务追加补充信息，普通消息仍按队列排队
+- Codex app-server、Claude stream-json、Pi rpc 和 OpenCode 共享 server 插话后端，并默认启用
+- 出站媒体：Agent 将图片和文件写入工作区的 `.nectar/outbox/`，本轮结束后自动发送到飞书、钉钉和 Telegram
+
 ## v0.8.1 已完成
 
 - 会话管理 v2：稳定的 Nectar 会话 ID、名称、当前会话指针、每会话用量和消息数，以及 version 1 会话文件自动迁移

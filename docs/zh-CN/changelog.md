@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.9.0 — 2026-11-16
+
+### 新增
+
+- 任务运行中插话：`/steer`、`/append`、`/ps`、`/btw` 向正在运行的任务追加补充信息；只有显式命令会插话，普通消息仍然进入队列
+- Codex app-server backend，通过 `turn/start`、`turn/steer` 和 `turn/interrupt` 支持插话
+- Claude `stream-json`、Pi `rpc` 和 OpenCode 共享 server 的插话后端
+- 出站媒体：Agent 把图片或文件写入工作区的 `.nectar/outbox/`（`NECTAR_OUTBOX_DIR`），本轮结束后自动发送到飞书、钉钉和 Telegram，成功后删除
+
+### 变更
+
+- 支持插话的引擎默认启用对应 backend：Codex `app-server`、Claude `stream-json`、Pi `rpc`，OpenCode 默认使用共享 server
+- OpenCode 插话依赖共享 server：`standalone = false`，或通过 `server_url` 指向已有 server
+- 出站每轮最多 10 个文件、单文件 50 MiB；飞书另限图片 10 MiB / 文件 30 MiB，钉钉上传 20 MiB，Telegram 图片 10 MiB
+- 出站图片以独立图片消息发送，其他文件以文件消息发送；飞书话题消息使用 `reply_in_thread=true` 回到原话题
+- 群聊中的插话命令仅限 `bot.admin_users`
+
 ## v0.8.1 — 2026-11-16
 
 ### 新增

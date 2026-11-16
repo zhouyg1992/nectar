@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.9.0 — 2026-11-16
+
+### Added
+
+- Steering during a running task: `/steer`, `/append`, `/ps`, and `/btw` append extra context to the active run; only explicit commands steer, while ordinary messages still queue
+- Codex app-server backend using `turn/start`, `turn/steer`, and `turn/interrupt` for steering
+- Steering backends for Claude `stream-json`, Pi `rpc`, and OpenCode shared servers
+- Outbound media: agents write images or files to `.nectar/outbox/` (`NECTAR_OUTBOX_DIR`) in the workspace, and Nectar sends them to Feishu, DingTalk, and Telegram after the run completes, deleting each file on success
+
+### Changed
+
+- Engines default to their steering backend: Codex `app-server`, Claude `stream-json`, Pi `rpc`, and OpenCode shared server
+- OpenCode steering requires a shared server: `standalone = false`, or `server_url` pointing at an existing server
+- Outbound limits are 10 files per run and 50 MiB per file; adapters apply tighter caps of 10 MiB per image / 30 MiB per file on Feishu, 20 MiB per upload on DingTalk, and 10 MiB per image on Telegram
+- Images are sent as standalone image messages and other files as file messages; Feishu topic replies use `reply_in_thread=true`
+- Steering commands in group chats are limited to `bot.admin_users`
+
 ## v0.8.1 — 2026-11-16
 
 ### Added

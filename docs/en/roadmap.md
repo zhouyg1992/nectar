@@ -1,5 +1,11 @@
 # Roadmap
 
+## v0.9.0 complete
+
+- Steering: `/steer`, `/append`, `/ps`, and `/btw` append context to a running task, while ordinary messages still queue
+- Steering backends for Codex app-server, Claude stream-json, Pi rpc, and OpenCode shared servers, enabled by default
+- Outbound media: agents write images and files to `.nectar/outbox/`, and Nectar delivers them to Feishu, DingTalk, and Telegram after the run
+
 ## v0.8.1 complete
 
 - Session management v2: stable Nectar session ids, names, active-session pointers, per-session usage and message counts, and automatic migration from version 1 session files
