@@ -41,6 +41,35 @@ func TestLoadRejectsInvalidTimeout(t *testing.T) {
 	}
 }
 
+func TestCodexBackendDefaultsAndValidation(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Codex.Backend != "exec" {
+		t.Fatalf("default codex backend = %q, want exec", cfg.Codex.Backend)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[codex]\nbackend = \"app_server\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Codex.Backend != "app-server" {
+		t.Fatalf("normalized codex backend = %q, want app-server", cfg.Codex.Backend)
+	}
+
+	if err := os.WriteFile(path, []byte("[codex]\nbackend = \"other\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid codex backend error")
+	}
+}
+
 func TestScheduleDefaults(t *testing.T) {
 	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
 	if err != nil {

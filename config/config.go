@@ -51,6 +51,7 @@ type TelegramConfig struct {
 
 type CodexConfig struct {
 	Path             string `toml:"path"`
+	Backend          string `toml:"backend"`
 	Model            string `toml:"model"`
 	Effort           string `toml:"effort"`
 	Sandbox          string `toml:"sandbox"`
@@ -153,6 +154,7 @@ func defaults() Config {
 		Telegram: TelegramConfig{LogLevel: "info"},
 		Codex: CodexConfig{
 			Path:           "codex",
+			Backend:        "exec",
 			Sandbox:        "workspace-write",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
@@ -426,6 +428,14 @@ func normalize(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Codex.Path) == "" {
 		cfg.Codex.Path = "codex"
+	}
+	switch backend := strings.ToLower(strings.TrimSpace(cfg.Codex.Backend)); backend {
+	case "", "exec":
+		cfg.Codex.Backend = "exec"
+	case "app-server", "app_server", "appserver":
+		cfg.Codex.Backend = "app-server"
+	default:
+		return fmt.Errorf("unsupported codex.backend %q (supported: exec, app-server)", cfg.Codex.Backend)
 	}
 	if strings.TrimSpace(cfg.OpenCode.Path) == "" {
 		cfg.OpenCode.Path = "opencode"

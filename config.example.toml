@@ -62,6 +62,9 @@ log_level = "info"
 [codex]
 # Executable name or absolute path. Default: codex.
 path = "codex"
+# Codex transport: exec | app-server. Default: exec.
+# Set app-server to enable /steer, /append, /ps, and /btw.
+backend = "exec"
 # Model name. Empty = Codex default.
 # model = "gpt-5.2-codex"
 # Reasoning effort (e.g. minimal, low, medium, high). Empty = Codex default.

@@ -93,6 +93,7 @@ Every section below can be omitted; defaults apply.
 ```toml
 [codex]
 path = "codex"
+backend = "exec"               # exec | app-server; app-server enables /steer
 model = ""                    # empty = model from Codex's own config
 effort = ""                   # e.g. high; passed as model_reasoning_effort
 sandbox = "workspace-write"   # read-only / workspace-write / danger-full-access

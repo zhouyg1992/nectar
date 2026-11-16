@@ -308,17 +308,22 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 		if err != nil {
 			return engineSetup{}, err
 		}
+		codexConfig := codex.Config{
+			Executable:      cfg.Codex.Path,
+			Model:           cfg.Codex.Model,
+			Effort:          cfg.Codex.Effort,
+			Sandbox:         cfg.Codex.Sandbox,
+			WorkingDir:      cfg.Codex.WorkingDir,
+			Timeout:         timeout,
+			MaxOutputBytes:  cfg.Codex.MaxOutputBytes,
+			BypassApprovals: cfg.Codex.BypassApprovals,
+		}
+		var adapter engine.EngineAdapter = codex.NewAdapter(codexConfig)
+		if cfg.Codex.Backend == "app-server" {
+			adapter = codex.NewAppServerAdapter(codexConfig)
+		}
 		return engineSetup{
-			adapter: codex.NewAdapter(codex.Config{
-				Executable:      cfg.Codex.Path,
-				Model:           cfg.Codex.Model,
-				Effort:          cfg.Codex.Effort,
-				Sandbox:         cfg.Codex.Sandbox,
-				WorkingDir:      cfg.Codex.WorkingDir,
-				Timeout:         timeout,
-				MaxOutputBytes:  cfg.Codex.MaxOutputBytes,
-				BypassApprovals: cfg.Codex.BypassApprovals,
-			}),
+			adapter: adapter,
 			options: engine.EngineOptions{
 				Model:          cfg.Codex.Model,
 				Effort:         cfg.Codex.Effort,

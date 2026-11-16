@@ -93,6 +93,7 @@ allowed_chats = []
 ```toml
 [codex]
 path = "codex"
+backend = "exec"               # exec | app-server；app-server 才支持 /steer
 model = ""                    # 空则使用 Codex 自身配置的模型
 effort = ""                   # 例如 high，透传为 model_reasoning_effort
 sandbox = "workspace-write"   # read-only / workspace-write / danger-full-access

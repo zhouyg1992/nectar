@@ -35,7 +35,16 @@ Install Codex CLI and log in, then verify:
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
-Nectar runs `codex exec --json` and resumes sessions with `resume`. Model, reasoning effort, sandbox, and workspace are configured in `[codex]`.
+Nectar runs `codex exec --json` by default and resumes sessions with `resume`. Model, reasoning effort, sandbox, and workspace are configured in `[codex]`.
+
+To steer a running turn (`/steer`, `/append`, `/ps`, `/btw`), switch Codex to the app-server backend:
+
+```toml
+[codex]
+backend = "app-server"
+```
+
+The app-server backend uses Codex's `turn/start`, `turn/steer`, and `turn/interrupt` APIs. The protocol is still experimental; pin a known-good Codex version. The default `exec` backend does not support steering; the commands return an explicit unsupported message.
 
 If the service environment cannot find `codex`, set `[codex].path` to an absolute path.
 

@@ -343,6 +343,10 @@ func (r *Router) Handle(msg platform.Message) {
 			return
 		}
 
+		if r.handleSteerCommand(key, msg, text) {
+			return
+		}
+
 		if r.handleSessionCommand(key, msg, text) {
 			return
 		}
@@ -873,6 +877,11 @@ func (r *Router) status(key SessionKey) string {
 		{"Engine", r.engine.Name()},
 		{"Model", r.resolvedModel()},
 	}
+	if _, ok := r.engine.(engine.Steerer); ok {
+		rows = append(rows, [2]string{"Steer", "supported"})
+	} else {
+		rows = append(rows, [2]string{"Steer", "unsupported"})
+	}
 	session, ok := r.sessions.Active(key)
 	if !ok {
 		rows = append(rows, [2]string{"Session", "New session (not started)"})
@@ -1250,6 +1259,7 @@ func helpCardBody(engineName string) string {
 		"- `/status` — Show engine, model, and session\n" +
 		"- `/about` — Show what Nectar is and what it is running on\n" +
 		"- `/stop` — Stop the current task\n" +
+		"- `/steer <text>` — Insert text into the running task (aliases: `/append`, `/ps`, `/btw`)\n" +
 		"- `/cron` — List or manage scheduled tasks\n" +
 		"- `/memory` — Inspect or curate memory\n" +
 		"- `/remember <text>` — Save a memory\n" +
@@ -1271,6 +1281,8 @@ func helpText(engineName string) string {
 /status          Show engine, model, and session
 /about, /whoami  Show what Nectar is and what it is running on
 /stop            Stop the current task
+/steer TEXT      Insert text into the running task
+                 Aliases: /append, /ps, /btw
 /cron            List or manage scheduled tasks
 /memory          Inspect or curate memory
 /remember        Save a memory

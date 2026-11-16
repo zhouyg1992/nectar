@@ -231,12 +231,15 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 | `/status` | Show the current engine, model, and session |
 | `/about`, `/whoami` | Show the Nectar version, platform, underlying engine, and model |
 | `/stop` | Cancel the current run |
+| `/steer <text>`, `/append <text>`, `/ps <text>`, `/btw <text>` | Insert text into a running turn; requires engine support |
 | `/cron`, `/schedule` | Scheduled task entry point |
 | `/memory` | Inspect, review, pin, or forget memories |
 | `/remember` | Explicitly save a memory |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 `/help`, `/commands`, and short questions such as "what commands are available" return the command card without invoking the engine.
+
+Steering only applies to the explicit commands. Ordinary messages still queue while a task is running. Codex requires `[codex].backend = "app-server"`; unsupported engines return an explicit error instead of silently queueing.
 
 ### Sessions
 

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -103,4 +104,15 @@ type EngineAdapter interface {
 	Start(ctx context.Context, prompt string, opts EngineOptions) (<-chan Event, error)
 	Resume(ctx context.Context, sessionID string, prompt string, opts EngineOptions) (<-chan Event, error)
 	Cancel(ctx context.Context, sessionID string) error
+}
+
+// ErrNoActiveTurn means the engine was asked to steer a session that no longer
+// has a turn accepting input. It is a normal race, not a transport failure.
+var ErrNoActiveTurn = errors.New("no active turn")
+
+// Steerer is an optional capability for engines that can inject input into a
+// turn that is already running. Engines without it simply do not support
+// interactive steering.
+type Steerer interface {
+	Steer(ctx context.Context, sessionID string, text string) error
 }

@@ -35,7 +35,16 @@ nectar service restart
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
-Nectar 通过 `codex exec --json` 执行任务，并用 `resume` 续接会话。模型、推理强度、sandbox 和工作目录在 `[codex]` 中配置。
+Nectar 默认通过 `codex exec --json` 执行任务，并用 `resume` 续接会话。模型、推理强度、sandbox 和工作目录在 `[codex]` 中配置。
+
+如果需要在任务运行中插话（`/steer`、`/append`、`/ps`、`/btw`），把 Codex backend 切换为 app-server：
+
+```toml
+[codex]
+backend = "app-server"
+```
+
+app-server backend 通过 Codex 的 `turn/start`、`turn/steer` 和 `turn/interrupt` 接口工作。该协议目前仍标记为 experimental，建议锁定可用的 Codex 版本。默认 `exec` backend 不支持插话，四个命令会明确提示不支持。
 
 如果服务环境找不到 `codex`，把 `[codex].path` 设置为绝对路径。
 
