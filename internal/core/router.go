@@ -30,6 +30,7 @@ const (
 )
 
 type RouterConfig struct {
+	BotID                  string
 	AgentID                string
 	BotName                string
 	Version                string
@@ -41,8 +42,10 @@ type RouterConfig struct {
 	AdminUsers             []string
 	DataDir                string
 	APISocket              string
+	WorkspaceLocks         *execguard.WorkspaceLocks
 	MemoryMaxItems         int
 	MemoryMaxChars         int
+	MemoryDefaultScope     string
 	DisableMemoryAutoLearn bool
 }
 
@@ -81,10 +84,9 @@ type Router struct {
 	logger     *slog.Logger
 	cfg        RouterConfig
 
-	runMu          sync.Mutex
-	runs           map[string]*sessionRun
-	runSeq         atomic.Uint64
-	workspaceLocks sync.Map
+	runMu  sync.Mutex
+	runs   map[string]*sessionRun
+	runSeq atomic.Uint64
 }
 
 func NewRouter(
@@ -103,6 +105,12 @@ func NewRouter(
 	if cfg.AgentID == "" {
 		cfg.AgentID = "codex"
 	}
+	if cfg.BotID == "" {
+		cfg.BotID = cfg.AgentID
+	}
+	if cfg.WorkspaceLocks == nil {
+		cfg.WorkspaceLocks = execguard.NewWorkspaceLocks()
+	}
 	if cfg.BotName == "" {
 		cfg.BotName = "Nectar"
 	}
@@ -120,6 +128,9 @@ func NewRouter(
 	}
 	if cfg.MemoryMaxChars <= 0 {
 		cfg.MemoryMaxChars = 1500
+	}
+	if strings.TrimSpace(cfg.MemoryDefaultScope) == "" {
+		cfg.MemoryDefaultScope = "bot"
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -145,11 +156,9 @@ func (r *Router) SetScheduling(anchors *AnchorStore, scheduler *Scheduler) {
 	r.scheduler = scheduler
 }
 
-func (r *Router) lockWorkspace(path string) func() {
-	value, _ := r.workspaceLocks.LoadOrStore(path, &sync.Mutex{})
-	lock := value.(*sync.Mutex)
-	lock.Lock()
-	return lock.Unlock
+func (r *Router) lockWorkspace(path string, msg platform.Message) func() {
+	key := path + "\x00" + msg.Channel + "/" + msg.ChatID + "/" + msg.ThreadID
+	return r.cfg.WorkspaceLocks.Lock(key)
 }
 
 func (r *Router) newRunID(sessionID string) string {
@@ -303,11 +312,12 @@ func (r *Router) sendCardReply(msg platform.Message, card *platform.Card) (strin
 
 func (r *Router) Handle(msg platform.Message) {
 	key := SessionKey{
+		BotID:    r.cfg.BotID,
 		Channel:  msg.Channel,
 		ChatID:   msg.ChatID,
 		ThreadID: msg.ThreadID,
 		AgentID:  r.cfg.AgentID,
-	}
+	}.normalized()
 	if r.anchors != nil && msg.Origin != "schedule" {
 		if err := r.anchors.Set(key, SessionAnchor{
 			MessageID: msg.MessageID,
@@ -405,11 +415,12 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 		return errors.New("scheduled prompt is empty")
 	}
 	key := SessionKey{
+		BotID:    r.cfg.BotID,
 		Channel:  msg.Channel,
 		ChatID:   msg.ChatID,
 		ThreadID: msg.ThreadID,
 		AgentID:  r.cfg.AgentID,
-	}
+	}.normalized()
 	var session Session
 	var err error
 	if len(sessionIDs) > 0 && strings.TrimSpace(sessionIDs[0]) != "" {
@@ -456,11 +467,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	if err := r.sessions.BeginTurn(sessionID, prompt); err != nil {
 		r.logger.Warn("could not begin session turn", "error", err)
 	}
-	workdir, err := r.workspaces.ForChat(msg.ChatID)
+	sessionWorkspace, err := r.workspaces.ForSession(session.ID, msg.ChatID)
 	if err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ Failed to create workspace: "+err.Error())
 		return err
 	}
+	workdir := sessionWorkspace.Path
+	projectRoot := sessionWorkspace.ProjectRoot
 
 	opts := r.cfg.EngineOptions
 	opts.WorkingDir = workdir
@@ -477,6 +490,8 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		"NECTAR_DATA_DIR":     r.cfg.DataDir,
 		"NECTAR_API_SOCKET":   r.cfg.APISocket,
 		"NECTAR_WORKING_DIR":  workdir,
+		"NECTAR_PROJECT_ROOT": projectRoot,
+		"NECTAR_WORKSPACE":    string(sessionWorkspace.Mode),
 	}
 	if executable, execErr := os.Executable(); execErr == nil {
 		opts.Env["NECTAR_CLI"] = executable
@@ -565,8 +580,8 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 
 	engineSessionID := session.EngineSessionID
 	hasSession := engineSessionID != ""
-	prompt = r.withMemory(ctx, msg, workdir, prompt, sessionID, hasSession)
-	unlockWorkspace := r.lockWorkspace(workdir)
+	prompt = r.withMemory(ctx, msg, workdir, projectRoot, prompt, sessionID, hasSession)
+	unlockWorkspace := r.lockWorkspace(workdir, msg)
 	defer unlockWorkspace()
 	if err := ctx.Err(); err != nil {
 		answer := "❌ Run stopped: " + err.Error()
@@ -826,7 +841,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 
 	if len(errTexts) > 0 && ctx.Err() == nil {
-		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), workdir)
+		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), projectRoot)
 	}
 	var runErr error
 	if len(errTexts) > 0 {
@@ -891,6 +906,7 @@ func (r *Router) stop(key SessionKey, msg platform.Message) {
 }
 
 func (r *Router) status(key SessionKey) string {
+	session, ok := r.sessions.Active(key)
 	rows := [][2]string{
 		{"Engine", r.engine.Name()},
 		{"Model", r.resolvedModel()},
@@ -900,7 +916,6 @@ func (r *Router) status(key SessionKey) string {
 	} else {
 		rows = append(rows, [2]string{"Steer", "unsupported"})
 	}
-	session, ok := r.sessions.Active(key)
 	if !ok {
 		rows = append(rows, [2]string{"Session", "New session (not started)"})
 		return markdownKeyValue(rows)
@@ -912,6 +927,10 @@ func (r *Router) status(key SessionKey) string {
 		rows = append(rows, [2]string{"Session", engineSession})
 	}
 	rows = append(rows, [2]string{"Nectar session", "`" + session.ID + "` (" + session.DisplayName() + ")"})
+	if workspace, err := r.workspaces.SessionPath(session.ID, session.ChatID); err == nil {
+		rows = append(rows, [2]string{"Workspace", workspace.Path})
+		rows = append(rows, [2]string{"Workspace mode", string(workspace.Mode)})
+	}
 	if usage, contextWindow, ok := r.sessions.UsageByID(session.ID); ok {
 		if line := formatContextUsage(&usage, contextWindow); line != "" {
 			rows = append(rows, [2]string{"Context", line})
@@ -1234,7 +1253,7 @@ func formatTokens(n int) string {
 	}
 }
 
-func (r *Router) recordLesson(msg platform.Message, prompt, errText, workdir string) {
+func (r *Router) recordLesson(msg platform.Message, prompt, errText, projectRoot string) {
 	if isTransientError(errText) {
 		return
 	}
@@ -1252,7 +1271,7 @@ func (r *Router) recordLesson(msg platform.Message, prompt, errText, workdir str
 	if r.memories == nil || r.cfg.DisableMemoryAutoLearn {
 		return
 	}
-	content, locality := memory.NormalizeContent(workdir,
+	content, locality := memory.NormalizeContent(projectRoot,
 		"Task: "+execguard.Truncate(prompt, 300)+"\nFailure: "+execguard.Truncate(errText, 700))
 	_, err := r.memories.Put(r.ctx, memory.Memory{
 		Kind:       memory.KindLesson,

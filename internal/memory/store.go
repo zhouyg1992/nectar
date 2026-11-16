@@ -69,6 +69,9 @@ func (s *FileStore) Put(ctx context.Context, item Memory) (Memory, error) {
 	if item.Scope == "" {
 		item.Scope = ScopeChat
 	}
+	if item.Scope == ScopeGlobal {
+		item.Scope = ScopeBot
+	}
 	if item.ProjectID == "" && item.Scope == ScopeProject {
 		item.ProjectID = strings.TrimPrefix(item.ScopeID, "project:")
 	}
@@ -499,6 +502,9 @@ func normalizeLoaded(item *Memory) {
 	if item.Scope == "" {
 		item.Scope = ScopeChat
 	}
+	if item.Scope == ScopeGlobal {
+		item.Scope = ScopeBot
+	}
 	if item.Status == "" {
 		item.Status = StatusCandidate
 	}
@@ -526,7 +532,7 @@ func inScopes(item Memory, scopeIDs []string) bool {
 	if len(scopeIDs) == 0 {
 		return true
 	}
-	if item.Scope == ScopeGlobal {
+	if item.Scope == ScopeGlobal || item.Scope == ScopeBot {
 		return true
 	}
 	for _, id := range scopeIDs {

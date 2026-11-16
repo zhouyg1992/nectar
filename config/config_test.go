@@ -25,12 +25,35 @@ func TestLoadDefaultsAndEnv(t *testing.T) {
 	if cfg.OpenCode.Standalone {
 		t.Fatal("opencode should default to the shared server")
 	}
+	if cfg.MemoryDefaultScope() != "bot" {
+		t.Fatalf("memory default scope = %q", cfg.MemoryDefaultScope())
+	}
 	timeout, err := cfg.Timeout()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if timeout != 30*time.Minute {
 		t.Fatalf("timeout = %v", timeout)
+	}
+}
+
+func TestMemoryDefaultScopeValidation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[memory]\ndefault_scope = \"chat\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MemoryDefaultScope() != "chat" {
+		t.Fatalf("memory default scope = %q", cfg.MemoryDefaultScope())
+	}
+	if err := os.WriteFile(path, []byte("[memory]\ndefault_scope = \"invalid\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid memory default scope error")
 	}
 }
 

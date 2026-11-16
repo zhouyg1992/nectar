@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +64,17 @@ func TestValidateServiceConfig(t *testing.T) {
 			content: "[feishu]\napp_id = \"cli_realid\"\napp_secret = \"real-secret-value\"\n\n[telegram]\nbot_token = \"test-token\"\n",
 			wantErr: true,
 		},
+		{
+			name: "multiple bots without legacy bot",
+			content: `[bots.reviewer]
+platform = "feishu"
+engine = "claude"
+
+[bots.reviewer.feishu]
+app_id = "cli_reviewer"
+app_secret = "reviewer-secret"
+`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -78,5 +90,28 @@ func TestValidateServiceConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestServiceLogFiltersByBot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `
+[bots.reviewer]
+name = "Reviewer"
+platform = "telegram"
+engine = "claude"
+[bots.reviewer.telegram]
+bot_token = "token-reviewer"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filters, err := serviceLogFilters(path, "reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(filters, "\n")
+	if !strings.Contains(joined, "bot=reviewer") || !strings.Contains(joined, "bot=Reviewer") {
+		t.Fatalf("filters = %#v", filters)
 	}
 }

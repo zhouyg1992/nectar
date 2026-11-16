@@ -82,7 +82,56 @@ engine = "codex"         # codex | opencode | cursor | claude | pi
 # platform = "feishu"    # feishu | dingtalk | telegram；单平台可省略
 admin_users = []
 allowed_chats = []
+# shared | per_chat | per_session | worktree | auto
+workspace_mode = "shared"
 ```
+
+## 多 Bot
+
+一个 Nectar 进程可以同时运行多个 Bot。每个 Bot 有独立的平台身份、引擎、工作区、会话、记忆和权限；在同一个群里分别 @ 对应 Bot 即可。
+
+```toml
+[bots.codex_dev]
+name = "Codex Dev"
+platform = "feishu"
+engine = "codex"
+workspace = "~/code/project-a"
+workspace_mode = "worktree"
+
+[bots.codex_dev.feishu]
+app_id = "cli_xxx"
+app_secret = "xxx"
+
+[bots.claude_review]
+name = "Claude Review"
+platform = "feishu"
+engine = "claude"
+workspace = "~/code/project-a"
+
+[bots.claude_review.feishu]
+app_id = "cli_yyy"
+app_secret = "yyy"
+```
+
+规则：
+
+- 每个 Bot 必须使用独立的平台应用/token；重复凭据会启动失败，避免同一条消息被两个 Bot 重复处理。
+- `[bots.<id>]` 默认使用 `~/.nectar/bots/<id>` 作为数据目录；可用 `data_dir` 覆盖。再增加或删除 Bot 不会改变已有 Bot 的默认路径。旧 `[bot]` 仍使用 `storage.data_dir`。
+- 同一个 Bot 的不同 chat 默认并发执行，同一个 chat 内按会话串行；单聊和群聊不会互相等待。
+- 新 Bot 默认 `workspace_mode = "auto"`：工作区是已提交的 Git 仓库时为每个 session 创建独立 worktree，否则回退到 `per_chat`。
+- `workspace = "..."` 覆盖该 Bot 的引擎工作目录；`model = "..."` 覆盖该 Bot 当前引擎的模型。
+- 省略 `engine` 时继承 `[bot].engine`；如果连旧 `[bot].engine` 也没有配置，则默认 `codex`。
+- 旧 `[bot]` + 全局 `[feishu]` / `[codex]` 配置继续可用；新增 `[bots.*]` 时会同时启动旧默认 Bot 和新增 Bot。
+
+`workspace_mode` 可选 `shared`、`per_chat`、`per_session`、`worktree`、`auto`。`worktree` 会从仓库当前 `HEAD` 创建 `nectar/<bot>/<session>` 分支和独立目录，适合多个 Agent 并行修改同一个仓库；worktree 目录在 `~/.nectar/worktrees/<bot>/<session>`。
+
+`shared` 只表示所有 chat 共用同一个目录，不表示所有任务串行；不同 chat 仍可并发，同一个 chat 内按会话串行。如果两个 chat 会修改同一批文件，请使用 `worktree`。
+
+worktree 只包含已提交的 `HEAD`，主工作区里未提交的改动不会自动带进去；需要先提交或在主工作区继续处理。
+
+worktree 会按 session 复用。清理时可执行 `git -C <repo> worktree list` 查看，再用 `git -C <repo> worktree remove <path>` 删除。
+
+`per_chat` / `per_session` 会让多个 Agent 同时操作同一个目录，适合读取、分析和互不重叠的任务；要并行修改同一批文件，请使用 `worktree`。
 
 ## 引擎配置
 
@@ -198,12 +247,15 @@ data_dir = "~/.nectar"
 ```toml
 [memory]
 enabled = true                # false 时关闭记忆存储、命令和注入
+default_scope = "bot"         # bot | chat | project；bot = 同一个 Bot 的所有 chat 共享
 max_items = 6                 # 每轮最多注入多少条记忆
 max_chars = 1500              # 每轮记忆上下文的最大字符数
 auto_learn_failures = true    # 失败任务记录为 pending 候选，审核后才注入
 ```
 
-记忆保存在 `~/.nectar/memory/memory.json`。`/remember` 写入的记忆默认立即生效；失败教训先进入 `candidate`，通过 `/memory approve <id>` 后才进入 `active` 并参与检索。
+记忆保存在 `~/.nectar/memory/memory.json`。默认 `/remember` 写入 bot scope，同一个 Bot 的单聊和群聊共享；设置 `default_scope = "chat"` 可退回按 chat 隔离，或用 `/remember chat <text>` 单次指定。`/remember project` 写入项目 scope。失败教训先进入 `candidate`，通过 `/memory approve <id>` 后才进入 `active` 并参与检索。
+
+写入 Bot 级记忆需要管理员权限；`admin_users` 为空时不做限制。
 
 Agent 通过 `nectar memory` CLI 读写记忆；`nectar skills install` 会同时安装 `nectar-memory` Skill 和 `AGENTS.md` 托管说明，让 Agent 能在任意语言下按自然语言意图调用。
 

@@ -11,6 +11,7 @@ Nectar 有两类命令：
 nectar [-config PATH]                 前台运行 bot
 nectar -version                       查看版本
 nectar help                           查看 CLI 帮助
+nectar bots                           查看已配置的 Bot 列表
 nectar service <subcommand>           管理后台服务
 nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
@@ -29,6 +30,24 @@ nectar uninstall                      卸载 Nectar
 
 > 安装脚本默认已经启动后台服务。手动前台运行时先执行 `nectar service stop`，避免多个实例同时连接平台。
 
+## 多 Bot
+
+```bash
+nectar bots [-config PATH]
+```
+
+列出 `[bot]` 和 `[bots.*]` 解析后的 Bot，包括 ID、平台、引擎、工作区、workspace mode 和数据目录。实际运行仍由 `nectar` 或后台服务统一启动。
+
+## Worktree
+
+```bash
+nectar worktrees list [--config PATH] [--bot ID] [--json]
+nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force] [--delete-branch]
+nectar worktrees remove --all [--config PATH] [--bot ID] [--force] [--delete-branch]
+```
+
+只列出/删除当前 Bot 的 worktree（`workspace_mode = worktree` 或 Git 仓库上的 `auto`）。默认保留对应分支；有未提交改动时默认拒绝，使用 `--force` 强制删除，使用 `--delete-branch` 同时删除 `nectar/<bot>/<session>` 分支。
+
 ## 后台服务
 
 ```bash
@@ -37,7 +56,7 @@ nectar service start [--config PATH] [--binary PATH]
 nectar service stop [--config PATH] [--binary PATH]
 nectar service restart [--config PATH] [--binary PATH]
 nectar service status [--config PATH] [--binary PATH]
-nectar service logs [--config PATH] [--binary PATH] [-n N] [-f]
+nectar service logs [--config PATH] [--binary PATH] [-n N] [-f] [--bot ID]
 nectar service uninstall [--config PATH] [--binary PATH]
 ```
 
@@ -49,6 +68,7 @@ nectar service uninstall [--config PATH] [--binary PATH]
 | `--no-start` | 只安装并启用服务，不立即启动 |
 | `-n N` | 日志行数，默认 200 |
 | `-f` | 持续跟随日志 |
+| `--bot ID` | 只显示指定 Bot 的日志 |
 
 示例：
 
@@ -58,6 +78,8 @@ nectar service logs -n 500
 nectar service logs -f
 nectar service restart
 ```
+
+多 Bot 配置下，`service status` 会在服务状态后按 Bot 列出 ID、平台、引擎、工作区和数据目录。
 
 ## 更新
 
@@ -100,6 +122,8 @@ CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信，因此需要
 ```bash
 nectar schedule list [--all] [--json] [--socket PATH]
 ```
+
+多 Bot 时使用 `--bot ID` 指定目标 Bot；`schedule list --all-bots` 会逐 Bot 查询并显示 Bot ID/名称。
 
 | 参数 | 说明 |
 |---|---|
@@ -182,9 +206,9 @@ nectar skills uninstall [--config PATH] [--data-dir DIR] [--no-workspace] [--dry
 
 ```bash
 nectar memory add [--kind profile|project|fact|lesson|episode] \
-  [--scope chat|project|global] [--status candidate|active] \
+  [--scope bot|chat|project|global] [--status candidate|active] \
   [--tags a,b] [--source agent] <text>
-nectar memory search [--scope chat|project|global|all] [--limit N] <query>
+nectar memory search [--scope bot|chat|project|global|all] [--limit N] <query>
 nectar memory list [--status active|pending|archived|all] [--json]
 nectar memory get <id> [--json]
 nectar memory update <id> <new text> [--json]
@@ -192,10 +216,12 @@ nectar memory approve|reject|pin|unpin <id>
 nectar memory forget <id> --confirm
 ```
 
+多 Bot 时使用 `--bot ID` 选择对应 Bot 的数据目录和权限配置；也可以继续用 `--socket` 直连某个 Bot 的本地 API。
+
 - 默认 `--status candidate`，审核后才注入；用户在聊天中明确要求记住时可传 `--status active`。
-- `--scope` 默认使用 `NECTAR_CHAT_ID` 对应的聊天；不在 Agent 会话中时默认当前项目。
+- `--scope` 默认跟随 `[memory] default_scope`（默认 `bot`，同一个 Bot 的所有 chat 共享）；显式传 `chat` 才只写当前会话。
 - Agent 会话会自动通过 `NECTAR_API_SOCKET` 调用 daemon，避免沙箱直接写 `~/.nectar/memory`；手动 CLI 未设置 socket 时直接读写本地文件。
-- `global` 记忆仅管理员可写、审核、固定和删除。
+- `bot` / `global` 记忆仅管理员可写、审核、固定和删除。
 - 群聊中非管理员的写入会变为 `candidate`，审核、固定和删除也需要管理员。
 - 删除必须显式传 `--confirm`，避免 Agent 误删。
 - 项目/主目录路径会自动转换为 `${PROJECT_ROOT}` / `${HOME}` 模板；其他绝对路径标记为设备本地记忆。
@@ -203,12 +229,13 @@ nectar memory forget <id> --confirm
 ## 卸载
 
 ```bash
-nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
+nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--force-worktrees] [--keep-binary] [--no-skills] [--dry-run]
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--purge-data` | 同时删除配置、任务数据、工作区和备份 |
+| `--force-worktrees` | 与 `--purge-data` 一起使用时，强制删除有未提交改动的 worktree |
 | `--keep-binary` | 保留二进制 |
 | `--no-skills` | 保留 Agent Skill 和 `AGENTS.md` 托管片段 |
 | `--dry-run` | 只预览清理项 |
@@ -291,16 +318,17 @@ Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当
 /memory reject <id>
 /memory pin <id>
 /memory unpin <id>
-/memory forget <id>
-/remember [project|global] <text>
-/forget <id>
+/memory forget <id> [confirm]
+/remember [bot|chat|project] <text>
+/forget <id> [confirm]
 ```
 
 - `/memory` 不带子命令时等价于 `/memory list`。
 - 失败任务会写入 `pending` 候选，审核通过前不会注入。
-- `/remember` 默认写入当前会话；`project` 写入当前工作区；`global` 仅管理员可写。
+- `/remember` 默认写入当前 Bot（单聊和群聊共享）；`chat` 只写当前会话；`project` 写入当前工作区；`global` 是 `bot` 的兼容别名，仅管理员可写。
 - `global` 记忆的审核、固定和删除也只允许管理员操作。
 - 群聊中非管理员 `/remember` 只创建 `pending` 候选，审核/删除需要管理员。
+- `/memory forget` 是两步确认：第一次只返回删除确认卡片，第二次带 `confirm` 才真正删除。
 
 记忆保存在 `~/.nectar/memory/memory.json`，便于查看、备份和后续同步。
 

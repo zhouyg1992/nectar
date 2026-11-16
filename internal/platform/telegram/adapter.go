@@ -24,6 +24,7 @@ const (
 
 type Config struct {
 	BotToken     string
+	BotName      string
 	Proxy        string
 	AllowedUsers []string
 	AllowedChats []string
@@ -35,6 +36,7 @@ type Config struct {
 
 type Adapter struct {
 	token        string
+	botName      string
 	apiBaseURL   string
 	httpClient   *http.Client
 	allowedUsers map[string]struct{}
@@ -102,6 +104,7 @@ func New(cfg Config) (*Adapter, error) {
 
 	return &Adapter{
 		token:        token,
+		botName:      strings.TrimSpace(cfg.BotName),
 		apiBaseURL:   apiBaseURL,
 		httpClient:   httpClient,
 		allowedUsers: stringSet(cfg.AllowedUsers),
@@ -114,6 +117,13 @@ func New(cfg Config) (*Adapter, error) {
 }
 
 func (a *Adapter) Name() string { return "telegram" }
+
+func (a *Adapter) botLabel() string {
+	if a.botName != "" {
+		return a.botName
+	}
+	return "telegram"
+}
 
 func (a *Adapter) Capabilities() platform.Capabilities {
 	return platform.Capabilities{
@@ -144,7 +154,7 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 	}
 	a.botID = me.ID
 	a.botUsername = me.Username
-	slog.Info("telegram: connected", "username", me.Username, "id", me.ID)
+	slog.Info("telegram: connected", "bot", a.botLabel(), "username", me.Username, "id", me.ID)
 
 	var offset int64
 	backoff := time.Second
@@ -175,7 +185,7 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 					}
 				}
 			}
-			slog.Warn("telegram: poll failed, retrying", "error", err)
+			slog.Warn("telegram: poll failed, retrying", "bot", a.botLabel(), "error", err)
 			if !sleepContext(ctx, backoff) {
 				return nil
 			}
@@ -210,7 +220,7 @@ func (a *Adapter) waitForMe(ctx context.Context) (tgUser, error) {
 		if errors.As(err, &apiErr) && apiErr.Code < 500 && apiErr.Code != http.StatusTooManyRequests {
 			return tgUser{}, err
 		}
-		slog.Warn("telegram: getMe failed, retrying", "error", err)
+		slog.Warn("telegram: getMe failed, retrying", "bot", a.botLabel(), "error", err)
 		if !sleepContext(ctx, backoff) {
 			return tgUser{}, ctx.Err()
 		}

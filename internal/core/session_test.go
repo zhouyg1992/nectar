@@ -190,6 +190,29 @@ func TestSessionStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestSessionStoreSeparatesBotsInSameChat(t *testing.T) {
+	store := NewSessionStore()
+	codexKey := SessionKey{BotID: "codex_dev", Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	claudeKey := SessionKey{BotID: "claude_review", Channel: "feishu", ChatID: "c1", AgentID: "claude"}
+	codexSession, err := store.EnsureActive(codexKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claudeSession, err := store.EnsureActive(claudeKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if codexSession.ID == claudeSession.ID {
+		t.Fatalf("bots shared session %q", codexSession.ID)
+	}
+	if got, ok := store.Active(codexKey); !ok || got.ID != codexSession.ID {
+		t.Fatalf("codex active = %#v, %v", got, ok)
+	}
+	if got, ok := store.Active(claudeKey); !ok || got.ID != claudeSession.ID {
+		t.Fatalf("claude active = %#v, %v", got, ok)
+	}
+}
+
 func TestPersistentSessionStoreMigratesV1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	legacy := `{
@@ -250,6 +273,52 @@ func TestPersistentSessionStoreMigratesV1(t *testing.T) {
 	}
 	if persisted.Version != sessionFileVersion {
 		t.Fatalf("persisted version = %d, want %d", persisted.Version, sessionFileVersion)
+	}
+}
+
+func TestPersistentSessionStoreMigratesEngineBotIDToDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	legacy := `{
+  "version": 2,
+  "sessions": [
+    {
+      "id": "ses_legacy",
+      "channel": "feishu",
+      "chat_id": "c1",
+      "agent_id": "codex",
+      "bot_id": "codex",
+      "engine_session_id": "thread-old",
+      "status": "active",
+      "updated_at": "2026-11-16T10:00:00Z"
+    }
+  ],
+  "active": [
+    {
+      "channel": "feishu",
+      "chat_id": "c1",
+      "agent_id": "codex",
+      "bot_id": "codex",
+      "session_id": "ses_legacy"
+    }
+  ]
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewPersistentSessionStore(path, "default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := SessionKey{BotID: "default", Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	if got := store.ActiveID(key); got != "ses_legacy" {
+		t.Fatalf("active session = %q, want ses_legacy", got)
+	}
+	session, ok := store.GetSession("ses_legacy")
+	if !ok || session.BotID != "default" {
+		t.Fatalf("migrated session = %#v, %v", session, ok)
+	}
+	if got, ok := store.Get(key); !ok || got != "thread-old" {
+		t.Fatalf("engine session = %q, %v", got, ok)
 	}
 }
 

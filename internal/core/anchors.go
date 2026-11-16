@@ -30,6 +30,7 @@ type persistedAnchor struct {
 	Channel   string `json:"channel"`
 	ChatID    string `json:"chat_id"`
 	ThreadID  string `json:"thread_id,omitempty"`
+	BotID     string `json:"bot_id,omitempty"`
 	AgentID   string `json:"agent_id"`
 	ChatType  string `json:"chat_type,omitempty"`
 	UserID    string `json:"user_id,omitempty"`
@@ -74,11 +75,12 @@ func (s *AnchorStore) load() error {
 			continue
 		}
 		key := SessionKey{
+			BotID:    item.BotID,
 			Channel:  item.Channel,
 			ChatID:   item.ChatID,
 			ThreadID: item.ThreadID,
 			AgentID:  item.AgentID,
-		}
+		}.normalized()
 		s.anchors[key] = SessionAnchor{
 			Channel:   item.Channel,
 			ChatID:    item.ChatID,
@@ -92,6 +94,7 @@ func (s *AnchorStore) load() error {
 }
 
 func (s *AnchorStore) Set(key SessionKey, anchor SessionAnchor) error {
+	key = key.normalized()
 	if anchor.Channel == "" || anchor.ChatID == "" {
 		return nil
 	}
@@ -113,6 +116,7 @@ func (s *AnchorStore) Set(key SessionKey, anchor SessionAnchor) error {
 }
 
 func (s *AnchorStore) Get(key SessionKey) (SessionAnchor, bool) {
+	key = key.normalized()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	anchor, ok := s.anchors[key]
@@ -148,6 +152,7 @@ func (s *AnchorStore) persistLocked() error {
 			Channel:   key.Channel,
 			ChatID:    key.ChatID,
 			ThreadID:  key.ThreadID,
+			BotID:     key.effectiveBotID(),
 			AgentID:   key.AgentID,
 			ChatType:  anchor.ChatType,
 			UserID:    anchor.UserID,

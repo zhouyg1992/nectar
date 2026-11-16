@@ -218,6 +218,39 @@ admin_users = []
 # Feishu: chat_id. DingTalk: openConversationId.
 # Empty = allow any group the bot can reach.
 allowed_chats = []
+# Workspace mode: shared | per_chat | per_session | worktree | auto.
+# auto creates a git worktree for each session when the workspace is a
+# committed git repository, otherwise it falls back to per_chat.
+workspace_mode = "shared"
+
+# ---------------------------------------------------------------------------
+# Additional bots
+# ---------------------------------------------------------------------------
+# Each entry runs as an independent bot in the same process with its own
+# platform identity, engine, workspace, session store, and memory.
+#
+# [bots.reviewer]
+# name = "Claude Reviewer"
+# platform = "feishu"
+# engine = "claude"
+# workspace = "~/code/project"
+# # New bots default to auto: git worktree when possible, otherwise per_chat.
+# workspace_mode = "auto"
+# admin_users = []
+# allowed_chats = []
+#
+# [bots.reviewer.feishu]
+# app_id = "cli_yyy"
+# app_secret = "yyy"
+#
+# [bots.ops]
+# name = "Ops"
+# platform = "telegram"
+# engine = "codex"
+# workspace = "~/code/ops"
+#
+# [bots.ops.telegram]
+# bot_token = "123456:replace-me"
 
 # ---------------------------------------------------------------------------
 # Storage
@@ -232,6 +265,9 @@ data_dir = "~/.nectar"
 [memory]
 # Enable the local-first memory store and prompt injection.
 enabled = true
+# Default scope for /remember and `nectar memory add`: bot | chat | project.
+# "bot" shares memories across every chat handled by the same bot.
+default_scope = "bot"
 # Maximum number of memories injected into one agent turn.
 max_items = 6
 # Maximum characters of memory context injected into one prompt.

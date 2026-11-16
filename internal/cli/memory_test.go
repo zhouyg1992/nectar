@@ -74,6 +74,34 @@ func TestMemoryCLIAddSearchAndForget(t *testing.T) {
 	}
 }
 
+func TestMemoryCLIDefaultScopeBot(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	configPath := filepath.Join(root, "config.toml")
+	body := fmt.Sprintf("[storage]\ndata_dir = %q\n\n[bot]\nengine = \"codex\"\n\n[memory]\ndefault_scope = \"bot\"\n", dataDir)
+	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NECTAR_API_SOCKET", "")
+	t.Setenv("NECTAR_CHANNEL", "feishu")
+	t.Setenv("NECTAR_CHAT_ID", "dm")
+
+	if err := runMemory([]string{"add", "--config", configPath, "--status", "active", "共享记忆"}); err != nil {
+		t.Fatal(err)
+	}
+	store, err := memory.NewFileStore(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.List(context.Background(), memory.ListOptions{Status: memory.StatusActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Scope != memory.ScopeBot || items[0].ScopeID != "" {
+		t.Fatalf("memories = %#v", items)
+	}
+}
+
 func TestMemoryCLIProjectScope(t *testing.T) {
 	configPath, dataDir := writeMemoryCLIConfig(t, "")
 	project := filepath.Join(t.TempDir(), "nectar")
@@ -297,6 +325,7 @@ func writeMemoryCLIConfig(t *testing.T, admins string) (string, string) {
 	if admins != "" {
 		body += "admin_users = " + admins + "\n"
 	}
+	body += "\n[memory]\ndefault_scope = \"chat\"\n"
 	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

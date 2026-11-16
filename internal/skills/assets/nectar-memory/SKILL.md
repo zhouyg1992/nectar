@@ -60,9 +60,13 @@ Use `--status active` when the user explicitly asks you to remember something.
 Use `--status candidate` when you are proactively saving something you inferred.
 Candidates are not injected until an admin approves them.
 
+Do not pass `--scope chat` for ordinary "remember this" requests. If the user
+does not explicitly say the information is only for this conversation, omit
+`--scope` and let Nectar use its configured default (`bot`).
+
 ```bash
 "${NECTAR_CLI:-nectar}" memory add --status active --kind profile \
-  --scope chat --source agent "用户希望以后默认用中文回复"
+  --source agent "用户希望以后默认用中文回复"
 
 "${NECTAR_CLI:-nectar}" memory add --status candidate --kind project \
   --scope project --source agent --tags stack,go "这个项目使用 Go 1.22"
@@ -80,10 +84,15 @@ Choose the kind:
 
 Choose the scope:
 
-- `chat` (default when `NECTAR_CHAT_ID` is set): this chat only.
-- `project` (default outside chat): current workspace, shared by chats using it.
-- `global`: all chats. Only admins may write, approve, pin, or delete global
-  memories. If the CLI reports an admin error, tell the user an admin must do it.
+- Omit `--scope` to follow `[memory] default_scope`. The default is `bot`, so
+  the memory is shared by every chat handled by this bot.
+- `bot`: every chat handled by this bot.
+- `chat`: this chat only. Use it when the user says the information should stay
+  in this conversation.
+- `project`: current workspace, shared by chats using it.
+- `global` is accepted as a compatibility alias for `bot`. Only admins may
+  write, approve, pin, or delete bot-wide memories. If the CLI reports an admin
+  error, tell the user an admin must do it.
 - In group chats, a non-admin write is forced to `candidate`, and
   approve/delete/pin operations require an admin.
 

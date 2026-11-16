@@ -27,9 +27,11 @@ const (
 	maxAutoSessionNameRunes = 40
 )
 
-// SessionKey identifies the chat lane that owns a set of sessions. AgentID is
-// kept in the key so multiple engines can share one chat without colliding.
+// SessionKey identifies the chat lane that owns a set of sessions. BotID
+// separates bots that share the same platform chat; AgentID is kept for
+// backwards compatibility and engine-level lanes.
 type SessionKey struct {
+	BotID    string
 	Channel  string
 	ChatID   string
 	ThreadID string
@@ -37,7 +39,23 @@ type SessionKey struct {
 }
 
 func (k SessionKey) String() string {
-	return k.Channel + "\x00" + k.ChatID + "\x00" + k.ThreadID + "\x00" + k.AgentID
+	return k.effectiveBotID() + "\x00" + k.Channel + "\x00" + k.ChatID + "\x00" + k.ThreadID + "\x00" + k.AgentID
+}
+
+func (k SessionKey) effectiveBotID() string {
+	if value := strings.TrimSpace(k.BotID); value != "" {
+		return value
+	}
+	return strings.TrimSpace(k.AgentID)
+}
+
+func (k SessionKey) normalized() SessionKey {
+	k.BotID = strings.TrimSpace(k.BotID)
+	k.AgentID = strings.TrimSpace(k.AgentID)
+	if k.BotID == k.AgentID {
+		k.BotID = ""
+	}
+	return k
 }
 
 // Session is a Nectar-owned conversation. EngineSessionID is the underlying
@@ -48,6 +66,7 @@ type Session struct {
 	Channel         string
 	ChatID          string
 	ThreadID        string
+	BotID           string
 	AgentID         string
 	EngineSessionID string
 	Status          string
@@ -70,10 +89,11 @@ func (s Session) DisplayName() string {
 }
 
 type SessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string]*Session
-	active   map[SessionKey]string
-	path     string
+	mu           sync.RWMutex
+	sessions     map[string]*Session
+	active       map[SessionKey]string
+	path         string
+	defaultBotID string
 }
 
 type sessionFile struct {
@@ -89,6 +109,7 @@ type persistedSession struct {
 	ChatID          string          `json:"chat_id"`
 	ThreadID        string          `json:"thread_id,omitempty"`
 	AgentID         string          `json:"agent_id"`
+	BotID           string          `json:"bot_id,omitempty"`
 	EngineSessionID string          `json:"engine_session_id,omitempty"`
 	Status          string          `json:"status,omitempty"`
 	CreatedAt       time.Time       `json:"created_at,omitempty"`
@@ -103,6 +124,7 @@ type persistedActive struct {
 	Channel   string `json:"channel"`
 	ChatID    string `json:"chat_id"`
 	ThreadID  string `json:"thread_id,omitempty"`
+	BotID     string `json:"bot_id,omitempty"`
 	AgentID   string `json:"agent_id"`
 	SessionID string `json:"session_id"`
 }
@@ -124,9 +146,12 @@ func NewSessionStore() *SessionStore {
 
 // NewPersistentSessionStore loads sessions from path. Version 1 files are
 // migrated on load; the next write persists the version 2 layout.
-func NewPersistentSessionStore(path string) (*SessionStore, error) {
+func NewPersistentSessionStore(path string, defaultBotID ...string) (*SessionStore, error) {
 	store := NewSessionStore()
 	store.path = path
+	if len(defaultBotID) > 0 {
+		store.defaultBotID = strings.TrimSpace(defaultBotID[0])
+	}
 	if path == "" {
 		return store, nil
 	}
@@ -153,6 +178,15 @@ func NewPersistentSessionStore(path string) (*SessionStore, error) {
 		}
 		if item.EngineSessionID == "" && item.ID == "" {
 			continue
+		}
+		if strings.TrimSpace(item.BotID) == "" {
+			item.BotID = store.defaultBotID
+			if item.BotID == "" {
+				item.BotID = item.AgentID
+			}
+		}
+		if store.defaultBotID != "" && strings.TrimSpace(item.BotID) == strings.TrimSpace(item.AgentID) {
+			item.BotID = store.defaultBotID
 		}
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
@@ -190,6 +224,7 @@ func NewPersistentSessionStore(path string) (*SessionStore, error) {
 			Channel:         item.Channel,
 			ChatID:          item.ChatID,
 			ThreadID:        item.ThreadID,
+			BotID:           item.BotID,
 			AgentID:         item.AgentID,
 			EngineSessionID: item.EngineSessionID,
 			Status:          status,
@@ -220,12 +255,23 @@ func NewPersistentSessionStore(path string) (*SessionStore, error) {
 	}
 
 	for _, item := range file.Active {
+		botID := strings.TrimSpace(item.BotID)
+		if botID == "" {
+			botID = store.defaultBotID
+			if botID == "" {
+				botID = item.AgentID
+			}
+		}
+		if store.defaultBotID != "" && botID == strings.TrimSpace(item.AgentID) {
+			botID = store.defaultBotID
+		}
 		key := SessionKey{
+			BotID:    botID,
 			Channel:  item.Channel,
 			ChatID:   item.ChatID,
 			ThreadID: item.ThreadID,
 			AgentID:  item.AgentID,
-		}
+		}.normalized()
 		session := store.sessions[item.SessionID]
 		if session != nil && session.Status != SessionStatusArchived && session.matchesKey(key) {
 			store.active[key] = item.SessionID
@@ -656,6 +702,7 @@ func (s *SessionStore) createLocked(key SessionKey, name string) (*Session, erro
 		Channel:    key.Channel,
 		ChatID:     key.ChatID,
 		ThreadID:   key.ThreadID,
+		BotID:      key.effectiveBotID(),
 		AgentID:    key.AgentID,
 		Status:     SessionStatusActive,
 		CreatedAt:  now,
@@ -690,6 +737,7 @@ func (s *SessionStore) persistLocked() error {
 			ChatID:          session.ChatID,
 			ThreadID:        session.ThreadID,
 			AgentID:         session.AgentID,
+			BotID:           session.BotID,
 			EngineSessionID: session.EngineSessionID,
 			Status:          session.Status,
 			CreatedAt:       session.CreatedAt,
@@ -723,6 +771,7 @@ func (s *SessionStore) persistLocked() error {
 			Channel:   key.Channel,
 			ChatID:    key.ChatID,
 			ThreadID:  key.ThreadID,
+			BotID:     key.effectiveBotID(),
 			AgentID:   key.AgentID,
 			SessionID: id,
 		})
@@ -774,6 +823,7 @@ func (s Session) matchesKey(key SessionKey) bool {
 	return s.Channel == key.Channel &&
 		s.ChatID == key.ChatID &&
 		s.ThreadID == key.ThreadID &&
+		s.BotID == key.effectiveBotID() &&
 		s.AgentID == key.AgentID
 }
 
@@ -835,9 +885,10 @@ func legacySessionName(updated time.Time) string {
 
 func (p persistedSession) key() SessionKey {
 	return SessionKey{
+		BotID:    p.BotID,
 		Channel:  p.Channel,
 		ChatID:   p.ChatID,
 		ThreadID: p.ThreadID,
 		AgentID:  p.AgentID,
-	}
+	}.normalized()
 }

@@ -585,6 +585,9 @@ if [ "$DETECTED_COUNT" -eq 0 ]; then
 fi
 
 step 2 "Configure Nectar"
+if [ -f "$CONFIG_FILE" ] && grep -q '^\[bots\.' "$CONFIG_FILE" 2>/dev/null; then
+	printf '\nWarning: %s contains multiple bots. Reconfigure will back it up and write a single-bot config.\n' "$CONFIG_FILE" >&2
+fi
 if [ -f "$CONFIG_FILE" ] && [ "$RECONFIGURE" -eq 0 ]; then
 	if [ "$HAVE_TTY" -eq 1 ]; then
 		printf '\nExisting config found: %s\n' "$CONFIG_FILE" >&2

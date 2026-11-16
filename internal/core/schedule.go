@@ -71,6 +71,7 @@ type ScheduleRequest struct {
 	Channel     string `json:"channel,omitempty"`
 	ChatID      string `json:"chat_id,omitempty"`
 	ThreadID    string `json:"thread_id,omitempty"`
+	BotID       string `json:"bot_id,omitempty"`
 	AgentID     string `json:"agent_id,omitempty"`
 	SessionID   string `json:"session_id,omitempty"`
 }
@@ -199,11 +200,12 @@ func buildScheduledTask(req ScheduleRequest, now time.Time, defaultTimezone, cre
 		Description: strings.TrimSpace(req.Description),
 		Timeout:     strings.TrimSpace(req.Timeout),
 		Key: SessionKey{
+			BotID:    strings.TrimSpace(req.BotID),
 			Channel:  strings.TrimSpace(req.Channel),
 			ChatID:   strings.TrimSpace(req.ChatID),
 			ThreadID: strings.TrimSpace(req.ThreadID),
 			AgentID:  strings.TrimSpace(req.AgentID),
-		},
+		}.normalized(),
 		SessionID: strings.TrimSpace(req.SessionID),
 		Status:    ScheduleActive,
 		CreatedBy: createdBy,

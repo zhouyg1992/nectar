@@ -12,18 +12,19 @@ import (
 )
 
 type Config struct {
-	Feishu   FeishuConfig   `toml:"feishu"`
-	DingTalk DingTalkConfig `toml:"dingtalk"`
-	Telegram TelegramConfig `toml:"telegram"`
-	Codex    CodexConfig    `toml:"codex"`
-	OpenCode OpenCodeConfig `toml:"opencode"`
-	Cursor   CursorConfig   `toml:"cursor"`
-	Claude   ClaudeConfig   `toml:"claude"`
-	Pi       PiConfig       `toml:"pi"`
-	Bot      BotConfig      `toml:"bot"`
-	Storage  StorageConfig  `toml:"storage"`
-	Memory   MemoryConfig   `toml:"memory"`
-	Schedule ScheduleConfig `toml:"schedule"`
+	Feishu   FeishuConfig        `toml:"feishu"`
+	DingTalk DingTalkConfig      `toml:"dingtalk"`
+	Telegram TelegramConfig      `toml:"telegram"`
+	Codex    CodexConfig         `toml:"codex"`
+	OpenCode OpenCodeConfig      `toml:"opencode"`
+	Cursor   CursorConfig        `toml:"cursor"`
+	Claude   ClaudeConfig        `toml:"claude"`
+	Pi       PiConfig            `toml:"pi"`
+	Bot      BotConfig           `toml:"bot"`
+	Bots     map[string]BotEntry `toml:"bots"`
+	Storage  StorageConfig       `toml:"storage"`
+	Memory   MemoryConfig        `toml:"memory"`
+	Schedule ScheduleConfig      `toml:"schedule"`
 }
 
 type FeishuConfig struct {
@@ -121,11 +122,29 @@ type PiConfig struct {
 }
 
 type BotConfig struct {
-	Name         string   `toml:"name"`
-	Engine       string   `toml:"engine"`
-	Platform     string   `toml:"platform"`
-	AdminUsers   []string `toml:"admin_users"`
-	AllowedChats []string `toml:"allowed_chats"`
+	Name          string   `toml:"name"`
+	Engine        string   `toml:"engine"`
+	Platform      string   `toml:"platform"`
+	AdminUsers    []string `toml:"admin_users"`
+	AllowedChats  []string `toml:"allowed_chats"`
+	WorkspaceMode string   `toml:"workspace_mode"`
+}
+
+// BotEntry describes an additional bot in the same Nectar process. Each entry
+// has its own platform identity, engine, workspace, session store, and memory.
+type BotEntry struct {
+	Name          string          `toml:"name"`
+	Platform      string          `toml:"platform"`
+	Engine        string          `toml:"engine"`
+	Workspace     string          `toml:"workspace"`
+	Model         string          `toml:"model"`
+	DataDir       string          `toml:"data_dir"`
+	AdminUsers    []string        `toml:"admin_users"`
+	AllowedChats  []string        `toml:"allowed_chats"`
+	WorkspaceMode string          `toml:"workspace_mode"`
+	Feishu        *FeishuConfig   `toml:"feishu"`
+	DingTalk      *DingTalkConfig `toml:"dingtalk"`
+	Telegram      *TelegramConfig `toml:"telegram"`
 }
 
 type StorageConfig struct {
@@ -133,10 +152,11 @@ type StorageConfig struct {
 }
 
 type MemoryConfig struct {
-	Enabled           *bool `toml:"enabled"`
-	MaxItems          int   `toml:"max_items"`
-	MaxChars          int   `toml:"max_chars"`
-	AutoLearnFailures *bool `toml:"auto_learn_failures"`
+	Enabled           *bool  `toml:"enabled"`
+	MaxItems          int    `toml:"max_items"`
+	MaxChars          int    `toml:"max_chars"`
+	AutoLearnFailures *bool  `toml:"auto_learn_failures"`
+	DefaultScope      string `toml:"default_scope"`
 }
 
 type ScheduleConfig struct {
@@ -195,11 +215,12 @@ func defaults() Config {
 			MaxOutputBytes: 2 << 20,
 			TrustWorkspace: true,
 		},
-		Bot:     BotConfig{Name: "Nectar"},
+		Bot:     BotConfig{Name: "Nectar", WorkspaceMode: "shared"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
 		Memory: MemoryConfig{
-			MaxItems: 6,
-			MaxChars: 1500,
+			MaxItems:     6,
+			MaxChars:     1500,
+			DefaultScope: "bot",
 		},
 		Schedule: ScheduleConfig{
 			StartupGrace:  "5m",
@@ -216,6 +237,17 @@ func DefaultPath() string {
 }
 
 func Load(path string) (Config, error) {
+	return load(path, true)
+}
+
+// LoadFile loads only the config file and ignores environment overrides. It is
+// used by service commands, which must validate the persisted config because
+// the service environment does not inherit shell credentials.
+func LoadFile(path string) (Config, error) {
+	return load(path, false)
+}
+
+func load(path string, applyEnvOverrides bool) (Config, error) {
 	cfg := defaults()
 	if path == "" {
 		path = DefaultPath()
@@ -233,7 +265,9 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("stat config %s: %w", expanded, err)
 	}
 
-	applyEnv(&cfg)
+	if applyEnvOverrides {
+		applyEnv(&cfg)
+	}
 	if err := normalize(&cfg); err != nil {
 		return Config{}, err
 	}
@@ -270,6 +304,17 @@ func (c Config) MemoryEnabled() bool {
 
 func (c Config) MemoryAutoLearnFailures() bool {
 	return c.Memory.AutoLearnFailures == nil || *c.Memory.AutoLearnFailures
+}
+
+func (c Config) MemoryDefaultScope() string {
+	switch strings.ToLower(strings.TrimSpace(c.Memory.DefaultScope)) {
+	case "chat":
+		return "chat"
+	case "project":
+		return "project"
+	default:
+		return "bot"
+	}
 }
 
 func (c Config) ScheduleGrace() (time.Duration, error) {
@@ -416,6 +461,15 @@ func normalize(cfg *Config) error {
 	if cfg.Memory.MaxChars <= 0 {
 		cfg.Memory.MaxChars = 1500
 	}
+	cfg.Memory.DefaultScope = strings.ToLower(strings.TrimSpace(cfg.Memory.DefaultScope))
+	if cfg.Memory.DefaultScope == "" {
+		cfg.Memory.DefaultScope = "bot"
+	}
+	switch cfg.Memory.DefaultScope {
+	case "bot", "chat", "project":
+	default:
+		return fmt.Errorf("unsupported memory.default_scope %q (supported: bot, chat, project)", cfg.Memory.DefaultScope)
+	}
 	if cfg.Codex.WorkingDir == "" {
 		return errors.New("codex.working_dir is required")
 	}
@@ -500,6 +554,12 @@ func normalize(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
+	}
+	if strings.TrimSpace(cfg.Bot.WorkspaceMode) == "" {
+		cfg.Bot.WorkspaceMode = "shared"
+	}
+	if err := validateWorkspaceMode("bot.workspace_mode", cfg.Bot.WorkspaceMode); err != nil {
+		return err
 	}
 	cfg.Schedule.Timezone = strings.TrimSpace(cfg.Schedule.Timezone)
 	if cfg.Schedule.Timezone == "" {

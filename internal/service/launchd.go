@@ -117,7 +117,7 @@ func (m *Manager) Status(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) Logs(ctx context.Context, lines int, follow bool) error {
+func (m *Manager) Logs(ctx context.Context, lines int, follow bool, filters []string) error {
 	if lines <= 0 {
 		lines = 200
 	}
@@ -131,7 +131,7 @@ func (m *Manager) Logs(ctx context.Context, lines int, follow bool) error {
 		args = append(args, "-f")
 	}
 	args = append(args, outLog, errLog)
-	return run(ctx, "tail", args...)
+	return runFiltered(ctx, "tail", args, filters)
 }
 
 func launchdDomain() string {

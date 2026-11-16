@@ -29,6 +29,7 @@ const (
 type Config struct {
 	ClientID     string
 	ClientSecret string
+	BotName      string
 	RobotCode    string
 	LogLevel     string
 	AllowedUsers []string
@@ -116,6 +117,13 @@ func New(cfg Config) (*Adapter, error) {
 
 func (a *Adapter) Name() string { return "dingtalk" }
 
+func (a *Adapter) botLabel() string {
+	if name := strings.TrimSpace(a.cfg.BotName); name != "" {
+		return name
+	}
+	return "dingtalk"
+}
+
 func (a *Adapter) Capabilities() platform.Capabilities {
 	cards := a.cardAvailable()
 	return platform.Capabilities{
@@ -165,7 +173,7 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 				wg.Wait()
 				return nil
 			}
-			slog.Warn("dingtalk: stream connect failed, retrying", "error", err)
+			slog.Warn("dingtalk: stream connect failed, retrying", "bot", a.botLabel(), "error", err)
 			select {
 			case <-ctx.Done():
 				wg.Wait()
@@ -177,7 +185,7 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 		break
 	}
 
-	slog.Info("dingtalk: stream connected", "client_id", a.clientID)
+	slog.Info("dingtalk: stream connected", "bot", a.botLabel(), "client_id", a.clientID)
 	<-ctx.Done()
 	a.stopOnce.Do(func() {
 		if a.stream != nil {

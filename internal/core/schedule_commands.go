@@ -63,6 +63,7 @@ func (r *Router) handleScheduleCommand(key SessionKey, msg platform.Message, tex
 			Channel:  key.Channel,
 			ChatID:   key.ChatID,
 			ThreadID: key.ThreadID,
+			BotID:    key.BotID,
 			AgentID:  key.AgentID,
 		}
 		r.addScheduledTask(msg, req)
@@ -78,6 +79,7 @@ func (r *Router) handleScheduleCommand(key SessionKey, msg platform.Message, tex
 			Channel:  key.Channel,
 			ChatID:   key.ChatID,
 			ThreadID: key.ThreadID,
+			BotID:    key.BotID,
 			AgentID:  key.AgentID,
 		})
 	case "in":
@@ -92,6 +94,7 @@ func (r *Router) handleScheduleCommand(key SessionKey, msg platform.Message, tex
 			Channel:  key.Channel,
 			ChatID:   key.ChatID,
 			ThreadID: key.ThreadID,
+			BotID:    key.BotID,
 			AgentID:  key.AgentID,
 		})
 	case "at":
@@ -106,6 +109,7 @@ func (r *Router) handleScheduleCommand(key SessionKey, msg platform.Message, tex
 			Channel:  key.Channel,
 			ChatID:   key.ChatID,
 			ThreadID: key.ThreadID,
+			BotID:    key.BotID,
 			AgentID:  key.AgentID,
 		})
 	case "pause", "resume", "run", "cancel", "stop", "delete", "del", "rm":
@@ -205,6 +209,7 @@ func (r *Router) handleScheduleUpdate(msg platform.Message, args []string) {
 func (r *Router) addScheduledTask(msg platform.Message, req ScheduleRequest) {
 	if strings.TrimSpace(req.SessionID) == "" {
 		req.SessionID = r.sessions.ActiveID(SessionKey{
+			BotID:    req.BotID,
 			Channel:  req.Channel,
 			ChatID:   req.ChatID,
 			ThreadID: req.ThreadID,

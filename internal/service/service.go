@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,7 +26,7 @@ type Service interface {
 	Stop(context.Context) error
 	Restart(context.Context) error
 	Status(context.Context) error
-	Logs(context.Context, int, bool) error
+	Logs(context.Context, int, bool, []string) error
 }
 
 type Manager struct {
@@ -114,6 +116,51 @@ func run(ctx context.Context, name string, args ...string) error {
 		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return nil
+}
+
+func runFiltered(ctx context.Context, name string, args []string, filters []string) error {
+	if len(filters) == 0 {
+		return run(ctx, name, args...)
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin = os.Stdin
+	reader, writer := io.Pipe()
+	cmd.Stdout = writer
+	cmd.Stderr = writer
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+	}
+	wait := make(chan error, 1)
+	go func() {
+		err := cmd.Wait()
+		_ = writer.Close()
+		wait <- err
+	}()
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if matchesAnyFilter(line, filters) {
+			fmt.Fprintln(os.Stdout, line)
+		}
+	}
+	scanErr := scanner.Err()
+	waitErr := <-wait
+	if waitErr != nil && ctx.Err() == nil {
+		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), waitErr)
+	}
+	if scanErr != nil && ctx.Err() == nil {
+		return fmt.Errorf("read %s output: %w", name, scanErr)
+	}
+	return nil
+}
+
+func matchesAnyFilter(line string, filters []string) bool {
+	for _, filter := range filters {
+		if filter = strings.TrimSpace(filter); filter != "" && strings.Contains(line, filter) {
+			return true
+		}
+	}
+	return false
 }
 
 func runQuiet(ctx context.Context, name string, args ...string) (string, error) {
