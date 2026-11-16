@@ -57,7 +57,16 @@ claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
-Nectar 通过 `claude -p --output-format stream-json --verbose --include-partial-messages` 执行任务，通过 stdin 传入 prompt，并用 `--resume` 续接会话。
+Nectar 默认通过 `claude -p --output-format stream-json --verbose --include-partial-messages` 执行任务，通过 stdin 传入 prompt，并用 `--resume` 续接会话。
+
+需要插话时，把 Claude backend 切换为 streaming-input：
+
+```toml
+[claude]
+backend = "stream-json"
+```
+
+该模式使用 `--input-format stream-json` 保持进程存活，`/steer` 会向同一进程追加用户消息。默认 `print` backend 不支持插话。
 
 `auto_approve = true` 会映射为 `--dangerously-skip-permissions`，适合无人值守的 bot 场景；关闭时使用 `permission_mode`。
 
@@ -90,6 +99,8 @@ opencode run --format json "Reply with exactly OK"
 
 Nectar 通过 `opencode run --format json` 执行任务，并用 `--session` 续接会话。`model` 为空时会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。
 
+OpenCode 的插话通过共享 server API 的 `delivery = "steer"` 实现。默认 `standalone = true` 会为每次运行启动私有 server，此时插话不可用；需要把 `standalone` 设为 `false`，或配置 `server_url` 指向已有 OpenCode server。
+
 ## Pi
 
 安装并登录 Pi，确认下面的命令可以正常运行：
@@ -99,7 +110,16 @@ pi auth check --provider anthropic
 pi --mode json "Reply with exactly OK"
 ```
 
-Nectar 通过 `pi --mode json` 执行任务，通过 stdin 传入 prompt，并用 `--session` 续接会话。`provider`、`model` 和 `thinking` 会直接透传为 Pi 参数。
+Nectar 默认通过 `pi --mode json` 执行任务，通过 stdin 传入 prompt，并用 `--session` 续接会话。`provider`、`model` 和 `thinking` 会直接透传为 Pi 参数。
+
+需要插话时，把 Pi backend 切换为 RPC：
+
+```toml
+[pi]
+backend = "rpc"
+```
+
+RPC backend 使用 `pi --mode rpc`，`/steer` 会发送 Pi 原生的 `steer` 命令。默认 `json` backend 不支持插话。
 
 ## 常见问题
 

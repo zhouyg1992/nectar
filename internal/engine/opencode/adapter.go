@@ -21,6 +21,7 @@ const defaultMaxOutputBytes = 2 << 20
 
 type Config struct {
 	Executable     string
+	ServerURL      string
 	Model          string
 	Agent          string
 	WorkingDir     string

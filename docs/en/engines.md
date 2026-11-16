@@ -57,7 +57,16 @@ claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
-Nectar runs `claude -p --output-format stream-json --verbose --include-partial-messages`, passes the prompt on stdin, and resumes sessions with `--resume`.
+Nectar runs `claude -p --output-format stream-json --verbose --include-partial-messages` by default, passes the prompt on stdin, and resumes sessions with `--resume`.
+
+To enable steering, switch Claude to streaming-input mode:
+
+```toml
+[claude]
+backend = "stream-json"
+```
+
+That mode uses `--input-format stream-json` to keep the process alive; `/steer` appends a user message to the same process. The default `print` backend does not support steering.
 
 `auto_approve = true` maps to `--dangerously-skip-permissions` for unattended bot use. When disabled, Nectar passes `permission_mode` instead.
 
@@ -90,6 +99,8 @@ opencode run --format json "Reply with exactly OK"
 
 Nectar runs `opencode run --format json` and resumes with `--session`. When `model` is empty, Nectar tries to resolve the default model from `~/.config/opencode/opencode.json`.
 
+OpenCode steering uses the shared server API's `delivery = "steer"` path. The default `standalone = true` starts a private server for each run, so steering is unavailable; set `standalone = false` or provide `server_url` for an existing OpenCode server.
+
 ## Pi
 
 Install and log in to Pi, then verify:
@@ -99,7 +110,16 @@ pi auth check --provider anthropic
 pi --mode json "Reply with exactly OK"
 ```
 
-Nectar runs `pi --mode json`, passes the prompt on stdin, and resumes with `--session`. `provider`, `model`, and `thinking` are passed through to Pi.
+Nectar runs `pi --mode json` by default, passes the prompt on stdin, and resumes with `--session`. `provider`, `model`, and `thinking` are passed through to Pi.
+
+To enable steering, switch Pi to RPC mode:
+
+```toml
+[pi]
+backend = "rpc"
+```
+
+The RPC backend uses `pi --mode rpc`; `/steer` sends Pi's native `steer` command. The default `json` backend does not support steering.
 
 ## Troubleshooting
 

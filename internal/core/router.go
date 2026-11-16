@@ -877,7 +877,7 @@ func (r *Router) status(key SessionKey) string {
 		{"Engine", r.engine.Name()},
 		{"Model", r.resolvedModel()},
 	}
-	if _, ok := r.engine.(engine.Steerer); ok {
+	if r.supportsSteer() {
 		rows = append(rows, [2]string{"Steer", "supported"})
 	} else {
 		rows = append(rows, [2]string{"Steer", "unsupported"})

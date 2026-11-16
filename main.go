@@ -350,6 +350,7 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 		return engineSetup{
 			adapter: opencode.NewAdapter(opencode.Config{
 				Executable:     cfg.OpenCode.Path,
+				ServerURL:      cfg.OpenCode.ServerURL,
 				Model:          cfg.OpenCode.Model,
 				Agent:          cfg.OpenCode.Agent,
 				WorkingDir:     cfg.OpenCode.WorkingDir,
@@ -413,18 +414,23 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 		if model == "" {
 			model = "claude"
 		}
+		claudeConfig := claude.Config{
+			Executable:     cfg.Claude.Path,
+			Model:          cfg.Claude.Model,
+			FallbackModel:  cfg.Claude.FallbackModel,
+			PermissionMode: cfg.Claude.PermissionMode,
+			WorkingDir:     cfg.Claude.WorkingDir,
+			Timeout:        timeout,
+			MaxOutputBytes: cfg.Claude.MaxOutputBytes,
+			MaxTurns:       cfg.Claude.MaxTurns,
+			AutoApprove:    cfg.Claude.AutoApprove,
+		}
+		var adapter engine.EngineAdapter = claude.NewAdapter(claudeConfig)
+		if cfg.Claude.Backend == "stream-json" {
+			adapter = claude.NewStreamAdapter(claudeConfig)
+		}
 		return engineSetup{
-			adapter: claude.NewAdapter(claude.Config{
-				Executable:     cfg.Claude.Path,
-				Model:          cfg.Claude.Model,
-				FallbackModel:  cfg.Claude.FallbackModel,
-				PermissionMode: cfg.Claude.PermissionMode,
-				WorkingDir:     cfg.Claude.WorkingDir,
-				Timeout:        timeout,
-				MaxOutputBytes: cfg.Claude.MaxOutputBytes,
-				MaxTurns:       cfg.Claude.MaxTurns,
-				AutoApprove:    cfg.Claude.AutoApprove,
-			}),
+			adapter: adapter,
 			options: engine.EngineOptions{
 				Model:          cfg.Claude.Model,
 				WorkingDir:     cfg.Claude.WorkingDir,
@@ -446,17 +452,22 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 		if model == "" {
 			model = "pi"
 		}
+		piConfig := pi.Config{
+			Executable:     cfg.Pi.Path,
+			Provider:       cfg.Pi.Provider,
+			Model:          cfg.Pi.Model,
+			Thinking:       cfg.Pi.Thinking,
+			WorkingDir:     cfg.Pi.WorkingDir,
+			Timeout:        timeout,
+			MaxOutputBytes: cfg.Pi.MaxOutputBytes,
+			TrustWorkspace: cfg.Pi.TrustWorkspace,
+		}
+		var adapter engine.EngineAdapter = pi.NewAdapter(piConfig)
+		if cfg.Pi.Backend == "rpc" {
+			adapter = pi.NewRPCAdapter(piConfig)
+		}
 		return engineSetup{
-			adapter: pi.NewAdapter(pi.Config{
-				Executable:     cfg.Pi.Path,
-				Provider:       cfg.Pi.Provider,
-				Model:          cfg.Pi.Model,
-				Thinking:       cfg.Pi.Thinking,
-				WorkingDir:     cfg.Pi.WorkingDir,
-				Timeout:        timeout,
-				MaxOutputBytes: cfg.Pi.MaxOutputBytes,
-				TrustWorkspace: cfg.Pi.TrustWorkspace,
-			}),
+			adapter: adapter,
 			options: engine.EngineOptions{
 				Model:          cfg.Pi.Model,
 				WorkingDir:     cfg.Pi.WorkingDir,

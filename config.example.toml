@@ -107,6 +107,9 @@ max_output_bytes = 2097152
 context_window = 0
 # true = pass --standalone.
 standalone = true
+# /steer requires a reachable shared server. Set standalone = false, or point
+# at an existing server. Example: "http://127.0.0.1:4096".
+# server_url = ""
 # true = pass --auto (non-interactive execution).
 auto_approve = true
 # true = create a separate subdirectory per chat under working_dir.
@@ -145,6 +148,8 @@ per_chat_workspace = false
 [claude]
 # Executable name or absolute path. Default: claude.
 path = "claude"
+# Transport: print | stream-json. stream-json enables /steer.
+backend = "print"
 # Model name. Empty = Claude Code default.
 # model = "claude-sonnet-4-5"
 # Fallback model used when the primary model is unavailable.
@@ -173,6 +178,8 @@ per_chat_workspace = false
 [pi]
 # Executable name or absolute path. Default: pi.
 path = "pi"
+# Transport: json | rpc. rpc enables /steer.
+backend = "json"
 # Provider name passed as --provider. Empty = Pi default.
 # provider = "anthropic"
 # Model name. Empty = Pi default model.

@@ -117,11 +117,14 @@ timeout = "30m"
 max_output_bytes = 2097152
 context_window = 0            # 0 = read from OpenCode config
 standalone = true             # private server per run
+server_url = ""               # /steer needs a shared server; e.g. http://127.0.0.1:4096
 auto_approve = true           # required for non-interactive bot use
 per_chat_workspace = false
 ```
 
 When `model` is empty, Nectar tries to resolve the default model from `~/.config/opencode/opencode.json`. The context limit comes from the model's `limit.context`; set `context_window` manually when the model is not declared there.
+
+OpenCode steering uses the shared server's `delivery = "steer"` path. With `standalone = true`, every run has a private server, so `/steer` is unavailable; set `standalone = false` or provide `server_url` for an existing server.
 
 ### Cursor Agent
 
@@ -147,6 +150,7 @@ per_chat_workspace = false
 ```toml
 [claude]
 path = "claude"
+backend = "print"             # print | stream-json; stream-json enables /steer
 model = ""                    # e.g. claude-sonnet-4-5; empty = Claude Code default
 fallback_model = ""           # optional fallback model
 permission_mode = ""          # acceptEdits | plan | bypassPermissions | manual | dontAsk | auto
@@ -166,6 +170,7 @@ Token usage and the context limit come from the final `result` event; `context_w
 ```toml
 [pi]
 path = "pi"
+backend = "json"              # json | rpc; rpc enables /steer
 provider = ""                 # optional provider override
 model = ""                    # e.g. claude-sonnet-4-5; empty = Pi default
 thinking = ""                 # off | minimal | low | medium | high | xhigh | max

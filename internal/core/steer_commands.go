@@ -53,7 +53,7 @@ func (r *Router) handleSteerCommand(key SessionKey, msg platform.Message, text s
 	}
 
 	steerer, ok := r.engine.(engine.Steerer)
-	if !ok {
+	if !ok || !r.supportsSteer() {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Steering Unsupported", "The current engine does not support steering a running turn.")
 		return true
 	}
@@ -73,5 +73,16 @@ func (r *Router) handleSteerCommand(key SessionKey, msg platform.Message, text s
 		}
 		r.sendCommandResult(msg, platform.CardInfo, "🧭 Steering", "Inserted into the running task.")
 	}()
+	return true
+}
+
+func (r *Router) supportsSteer() bool {
+	steerer, ok := r.engine.(engine.Steerer)
+	if !ok {
+		return false
+	}
+	if capability, ok := steerer.(engine.SteerCapability); ok {
+		return capability.SupportsSteer()
+	}
 	return true
 }

@@ -169,7 +169,7 @@ nectar uninstall                      卸载 Nectar
 | `/unarchive <id\|name>` | 恢复已归档会话 |
 | `/status` | 查看当前引擎、模型和会话 |
 | `/stop` | 中断当前任务 |
-| `/steer`、`/append`、`/ps`、`/btw` | 向运行中的任务插入补充信息（Codex 需 app-server backend） |
+| `/steer`、`/append`、`/ps`、`/btw` | 向运行中的任务插入补充信息（需对应引擎的常驻 backend） |
 | `/cron`、`/schedule` | 定时任务入口 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 

@@ -116,3 +116,10 @@ var ErrNoActiveTurn = errors.New("no active turn")
 type Steerer interface {
 	Steer(ctx context.Context, sessionID string, text string) error
 }
+
+// SteerCapability lets an engine report whether steering is available for its
+// current configuration. An adapter may implement Steer but disable it, for
+// example when OpenCode is running a private standalone server.
+type SteerCapability interface {
+	SupportsSteer() bool
+}

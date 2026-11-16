@@ -169,7 +169,7 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 | `/unarchive <id\|name>` | Restore an archived session |
 | `/status` | Show the current engine, model, and session |
 | `/stop` | Cancel the current run |
-| `/steer`, `/append`, `/ps`, `/btw` | Insert text into a running turn (Codex requires the app-server backend) |
+| `/steer`, `/append`, `/ps`, `/btw` | Insert text into a running turn (requires a persistent engine backend) |
 | `/cron`, `/schedule` | Scheduled task entry point |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 

@@ -65,6 +65,7 @@ type CodexConfig struct {
 
 type OpenCodeConfig struct {
 	Path             string `toml:"path"`
+	ServerURL        string `toml:"server_url"`
 	Model            string `toml:"model"`
 	Agent            string `toml:"agent"`
 	WorkingDir       string `toml:"working_dir"`
@@ -92,6 +93,7 @@ type CursorConfig struct {
 
 type ClaudeConfig struct {
 	Path             string `toml:"path"`
+	Backend          string `toml:"backend"`
 	Model            string `toml:"model"`
 	FallbackModel    string `toml:"fallback_model"`
 	PermissionMode   string `toml:"permission_mode"`
@@ -106,6 +108,7 @@ type ClaudeConfig struct {
 
 type PiConfig struct {
 	Path             string `toml:"path"`
+	Backend          string `toml:"backend"`
 	Provider         string `toml:"provider"`
 	Model            string `toml:"model"`
 	Thinking         string `toml:"thinking"`
@@ -178,6 +181,7 @@ func defaults() Config {
 		},
 		Claude: ClaudeConfig{
 			Path:           "claude",
+			Backend:        "print",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
@@ -185,6 +189,7 @@ func defaults() Config {
 		},
 		Pi: PiConfig{
 			Path:           "pi",
+			Backend:        "json",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
@@ -440,6 +445,7 @@ func normalize(cfg *Config) error {
 	if strings.TrimSpace(cfg.OpenCode.Path) == "" {
 		cfg.OpenCode.Path = "opencode"
 	}
+	cfg.OpenCode.ServerURL = strings.TrimSpace(cfg.OpenCode.ServerURL)
 	if strings.TrimSpace(cfg.Cursor.Path) == "" {
 		cfg.Cursor.Path = "agent"
 	}
@@ -467,8 +473,24 @@ func normalize(cfg *Config) error {
 	default:
 		return fmt.Errorf("unsupported claude.permission_mode %q", mode)
 	}
+	switch backend := strings.ToLower(strings.TrimSpace(cfg.Claude.Backend)); backend {
+	case "", "print":
+		cfg.Claude.Backend = "print"
+	case "stream-json", "stream_json", "stream":
+		cfg.Claude.Backend = "stream-json"
+	default:
+		return fmt.Errorf("unsupported claude.backend %q (supported: print, stream-json)", cfg.Claude.Backend)
+	}
 	if cfg.Claude.MaxTurns < 0 {
 		return errors.New("claude.max_turns must not be negative")
+	}
+	switch backend := strings.ToLower(strings.TrimSpace(cfg.Pi.Backend)); backend {
+	case "", "json":
+		cfg.Pi.Backend = "json"
+	case "rpc":
+		cfg.Pi.Backend = "rpc"
+	default:
+		return fmt.Errorf("unsupported pi.backend %q (supported: json, rpc)", cfg.Pi.Backend)
 	}
 	switch thinking := strings.TrimSpace(cfg.Pi.Thinking); thinking {
 	case "", "off", "minimal", "low", "medium", "high", "xhigh", "max":
