@@ -937,7 +937,7 @@ Cursor, or Pi itself. Do not say you cannot access Nectar; you are running
 inside it. If asked what model powers you, answer with the underlying model.
 
 Nectar capabilities: coding tasks, persistent sessions, scheduled tasks,
-on-call CI watches, and long-term memory. Use the
+generic on-call shifts, and long-term memory. Use the
 `+"`\"${NECTAR_CLI:-nectar}\" schedule`"+`, `+"`\"${NECTAR_CLI:-nectar}\" oncall`"+`,
 and `+"`\"${NECTAR_CLI:-nectar}\" memory`"+` CLIs when appropriate.`,
 		name, version, r.platform.Name(), engineName, modelName, name)
@@ -960,7 +960,7 @@ func (r *Router) aboutText() string {
 		"Engine: " + engineDisplayName(r.engine.Name()),
 		"Model: " + r.resolvedModel(),
 		"",
-		"I can run coding tasks, keep sessions, manage scheduled tasks, watch CI on-call, and use long-term memory.",
+		"I can run coding tasks, keep sessions, manage scheduled tasks, run generic on-call shifts, and use long-term memory.",
 		"Use /help for commands.",
 	}, "\n")
 }
@@ -1264,7 +1264,7 @@ func helpCardBody(engineName string) string {
 		"- `/about` — Show what Nectar is and what it is running on\n" +
 		"- `/stop` — Stop the current task\n" +
 		"- `/cron` — List or manage scheduled tasks\n" +
-		"- `/oncall` — Watch CI failures and inspect on-call jobs\n" +
+		"- `/oncall` — Manage on-call shifts and inspect jobs\n" +
 		"- `/memory` — Inspect or curate memory\n" +
 		"- `/remember <text>` — Save a memory\n" +
 		"- `/help` / `/commands` — Show this command card\n\n" +
@@ -1286,7 +1286,7 @@ func helpText(engineName string) string {
 /about, /whoami  Show what Nectar is and what it is running on
 /stop            Stop the current task
 /cron            List or manage scheduled tasks
-/oncall          Watch CI failures and inspect on-call jobs
+/oncall          Manage on-call shifts and inspect jobs
 /memory          Inspect or curate memory
 /remember        Save a memory
 /help, /commands Show this command card

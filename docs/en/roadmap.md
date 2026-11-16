@@ -2,9 +2,9 @@
 
 ## In progress: on-call mode
 
-- GitHub Actions failure polling, isolated git worktrees, diagnostic/fix jobs, and local artifacts
+- Generic OnCallShift: GitHub Actions / command / HTTP probes, one-off time windows, budgets, diagnostic/fix jobs, and local artifacts
 - `/oncall` chat commands, `nectar oncall` CLI, natural-language skill, and interruption recovery
-- Next: interactive approvals, flaky-test classification, Sentry / Prometheus triggers
+- Next: more probes, interactive approvals, and flaky-test classification
 
 ## v0.8.1 complete
 

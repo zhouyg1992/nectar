@@ -220,7 +220,7 @@ timeout = "30m"               # default per-run timeout; 0s disables it
 
 See [Scheduled tasks](schedule.md) for the semantics.
 
-## On-call mode
+## On-call shifts
 
 On-call is enabled by default; no `[oncall]` section is required. Optional
 overrides:
@@ -228,17 +228,16 @@ overrides:
 ```toml
 [oncall]
 enabled = true
-default_every = "5m"       # default polling interval for new watches
-window = ""                # e.g. "22:00-08:00"; empty = all day
-autonomy = "diagnose"      # diagnose | fix
+default_every = "5m"       # default check interval for new shifts
+autonomy = "diagnose"      # notify | diagnose | fix
 max_minutes = 20           # per-job timeout
-max_attempts = 2           # maximum manual retries
+max_agent_runs = 5         # maximum agent jobs in one shift
 max_concurrent = 1         # simultaneous jobs
 ```
 
-`diagnose` investigates without editing files. `fix` may edit files and run
-tests in an isolated worktree, but never commits, pushes, opens a PR, merges,
-or deploys. See [On-call mode](oncall.md).
+`notify` only sends cards. `diagnose` investigates without editing files. `fix`
+may edit files and run tests in an isolated workspace, but never commits,
+pushes, opens a PR, merges, or deploys. See [On-call shifts](oncall.md).
 
 ## Environment overrides
 

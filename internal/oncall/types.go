@@ -2,23 +2,28 @@ package oncall
 
 import "time"
 
-// Autonomy controls how far an on-call job may go.
+const (
+	SourceGitHub  = "github"
+	SourceCommand = "command"
+	SourceHTTP    = "http"
+)
+
 type Autonomy string
 
 const (
+	AutonomyNotify   Autonomy = "notify"
 	AutonomyDiagnose Autonomy = "diagnose"
 	AutonomyFix      Autonomy = "fix"
 )
 
-// WatchStatus is the lifecycle of a repository watch.
-type WatchStatus string
+type ShiftStatus string
 
 const (
-	WatchActive WatchStatus = "active"
-	WatchPaused WatchStatus = "paused"
+	ShiftActive    ShiftStatus = "active"
+	ShiftPaused    ShiftStatus = "paused"
+	ShiftCompleted ShiftStatus = "completed"
 )
 
-// JobStatus is the durable state of one on-call run.
 type JobStatus string
 
 const (
@@ -29,87 +34,124 @@ const (
 	JobCanceled  JobStatus = "canceled"
 )
 
-// Watch is a repository + branch that Nectar polls for failed GitHub Actions
-// runs during a configured time window.
-type Watch struct {
-	ID          string      `json:"id"`
-	Repo        string      `json:"repo"`
-	Path        string      `json:"path"`
-	Branch      string      `json:"branch"`
-	Channel     string      `json:"channel"`
-	ChatID      string      `json:"chat_id"`
-	ChatType    string      `json:"chat_type,omitempty"`
-	MessageID   string      `json:"message_id,omitempty"`
-	ThreadID    string      `json:"thread_id,omitempty"`
-	UserID      string      `json:"user_id,omitempty"`
-	AgentID     string      `json:"agent_id,omitempty"`
-	Every       string      `json:"every"`
-	Window      string      `json:"window,omitempty"`
-	Autonomy    Autonomy    `json:"autonomy"`
-	MaxMinutes  int         `json:"max_minutes,omitempty"`
-	MaxAttempts int         `json:"max_attempts,omitempty"`
-	Status      WatchStatus `json:"status"`
-	CreatedBy   string      `json:"created_by,omitempty"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
-	LastChecked time.Time   `json:"last_checked,omitempty"`
-	NextCheck   time.Time   `json:"next_check,omitempty"`
-	LastRunID   int64       `json:"last_run_id,omitempty"`
-	LastError   string      `json:"last_error,omitempty"`
-	RunCount    int         `json:"run_count,omitempty"`
+// Shift is one durable on-call assignment. The agent supplies the objective;
+// the daemon owns the check loop, budget, state, and reporting.
+type Shift struct {
+	ID        string `json:"id"`
+	Objective string `json:"objective"`
+	Source    string `json:"source"`
+
+	Repo   string `json:"repo,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Path   string `json:"path,omitempty"`
+
+	Command     string `json:"command,omitempty"`
+	Workdir     string `json:"workdir,omitempty"`
+	URL         string `json:"url,omitempty"`
+	ActionDir   string `json:"action_dir,omitempty"`
+	AlertOnExit bool   `json:"alert_on_exit,omitempty"`
+
+	Channel   string `json:"channel"`
+	ChatID    string `json:"chat_id"`
+	ChatType  string `json:"chat_type,omitempty"`
+	MessageID string `json:"message_id,omitempty"`
+	ThreadID  string `json:"thread_id,omitempty"`
+	UserID    string `json:"user_id,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+
+	Every        string    `json:"every"`
+	StartAt      time.Time `json:"start_at"`
+	EndAt        time.Time `json:"end_at,omitempty"`
+	Autonomy     Autonomy  `json:"autonomy"`
+	MaxMinutes   int       `json:"max_minutes,omitempty"`
+	MaxAgentRuns int       `json:"max_agent_runs,omitempty"`
+
+	Status       ShiftStatus `json:"status"`
+	Checks       int         `json:"checks,omitempty"`
+	Incidents    int         `json:"incidents,omitempty"`
+	AgentRuns    int         `json:"agent_runs,omitempty"`
+	LastKey      string      `json:"last_key,omitempty"`
+	LastAlert    bool        `json:"last_alert,omitempty"`
+	LastSummary  string      `json:"last_summary,omitempty"`
+	LastDetails  string      `json:"last_details,omitempty"`
+	LastChecked  time.Time   `json:"last_checked,omitempty"`
+	NextCheck    time.Time   `json:"next_check,omitempty"`
+	LastError    string      `json:"last_error,omitempty"`
+	CreatedBy    string      `json:"created_by,omitempty"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+	CompletedAt  *time.Time  `json:"completed_at,omitempty"`
+	ReportSentAt *time.Time  `json:"report_sent_at,omitempty"`
 }
 
-// WatchRequest is the platform-neutral input for creating a watch.
-type WatchRequest struct {
-	Repo        string `json:"repo,omitempty"`
-	Path        string `json:"path,omitempty"`
-	Branch      string `json:"branch,omitempty"`
-	Every       string `json:"every,omitempty"`
-	Window      string `json:"window,omitempty"`
-	Autonomy    string `json:"autonomy,omitempty"`
-	MaxMinutes  int    `json:"max_minutes,omitempty"`
-	MaxAttempts int    `json:"max_attempts,omitempty"`
-	Channel     string `json:"channel,omitempty"`
-	ChatID      string `json:"chat_id,omitempty"`
-	ChatType    string `json:"chat_type,omitempty"`
-	MessageID   string `json:"message_id,omitempty"`
-	ThreadID    string `json:"thread_id,omitempty"`
-	UserID      string `json:"user_id,omitempty"`
-	AgentID     string `json:"agent_id,omitempty"`
+type ShiftRequest struct {
+	Objective string `json:"objective"`
+	Source    string `json:"source"`
+
+	Repo   string `json:"repo,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Path   string `json:"path,omitempty"`
+
+	Command     string `json:"command,omitempty"`
+	Workdir     string `json:"workdir,omitempty"`
+	URL         string `json:"url,omitempty"`
+	ActionDir   string `json:"action_dir,omitempty"`
+	AlertOnExit bool   `json:"alert_on_exit,omitempty"`
+
+	Every        string `json:"every,omitempty"`
+	Start        string `json:"start,omitempty"`
+	For          string `json:"for,omitempty"`
+	Until        string `json:"until,omitempty"`
+	Autonomy     string `json:"autonomy,omitempty"`
+	MaxMinutes   int    `json:"max_minutes,omitempty"`
+	MaxAgentRuns int    `json:"max_agent_runs,omitempty"`
+
+	Channel   string `json:"channel,omitempty"`
+	ChatID    string `json:"chat_id,omitempty"`
+	ChatType  string `json:"chat_type,omitempty"`
+	MessageID string `json:"message_id,omitempty"`
+	ThreadID  string `json:"thread_id,omitempty"`
+	UserID    string `json:"user_id,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
 }
 
-// FailedRun is the normalized GitHub Actions failure that starts a job.
-type FailedRun struct {
-	ID        int64     `json:"id"`
-	Workflow  string    `json:"workflow"`
-	Commit    string    `json:"commit"`
-	URL       string    `json:"url"`
-	Event     string    `json:"event,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+type Observation struct {
+	Key     string `json:"key"`
+	Summary string `json:"summary"`
+	Details string `json:"details,omitempty"`
+	Alert   bool   `json:"alert,omitempty"`
+	Repo    string `json:"repo,omitempty"`
+	Branch  string `json:"branch,omitempty"`
+	Commit  string `json:"commit,omitempty"`
+	RunURL  string `json:"run_url,omitempty"`
 }
 
-// Job is one isolated on-call investigation. It deliberately does not reuse a
-// chat session: the worktree and context belong to the incident, not the chat.
+// Job is one bounded action caused by a shift observation.
 type Job struct {
-	ID          string     `json:"id"`
-	WatchID     string     `json:"watch_id"`
-	ParentID    string     `json:"parent_id,omitempty"`
-	Attempt     int        `json:"attempt"`
-	Repo        string     `json:"repo"`
-	Path        string     `json:"path"`
-	Branch      string     `json:"branch"`
-	RunID       int64      `json:"run_id"`
-	RunURL      string     `json:"run_url"`
-	Workflow    string     `json:"workflow"`
-	Commit      string     `json:"commit"`
-	Event       string     `json:"event,omitempty"`
-	Channel     string     `json:"channel"`
-	ChatID      string     `json:"chat_id"`
-	ChatType    string     `json:"chat_type,omitempty"`
-	MessageID   string     `json:"message_id,omitempty"`
-	ThreadID    string     `json:"thread_id,omitempty"`
-	UserID      string     `json:"user_id,omitempty"`
-	AgentID     string     `json:"agent_id,omitempty"`
+	ID       string `json:"id"`
+	ShiftID  string `json:"shift_id"`
+	ParentID string `json:"parent_id,omitempty"`
+	Attempt  int    `json:"attempt"`
+
+	Objective      string `json:"objective"`
+	Source         string `json:"source"`
+	TriggerKey     string `json:"trigger_key,omitempty"`
+	TriggerSummary string `json:"trigger_summary,omitempty"`
+	TriggerDetails string `json:"trigger_details,omitempty"`
+	WorkspacePath  string `json:"workspace_path,omitempty"`
+	Repo           string `json:"repo,omitempty"`
+	Branch         string `json:"branch,omitempty"`
+	Commit         string `json:"commit,omitempty"`
+	RunURL         string `json:"run_url,omitempty"`
+
+	Channel   string `json:"channel"`
+	ChatID    string `json:"chat_id"`
+	ChatType  string `json:"chat_type,omitempty"`
+	MessageID string `json:"message_id,omitempty"`
+	ThreadID  string `json:"thread_id,omitempty"`
+	UserID    string `json:"user_id,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+
 	Autonomy    Autonomy   `json:"autonomy"`
 	MaxMinutes  int        `json:"max_minutes,omitempty"`
 	Status      JobStatus  `json:"status"`
@@ -124,15 +166,14 @@ type Job struct {
 	FinishedAt  *time.Time `json:"finished_at,omitempty"`
 }
 
-// RunResult is the normalized output of an engine run.
 type RunResult struct {
 	Output    string
 	ToolCalls int
 	SessionID string
 }
 
-// Report is a deterministic summary of jobs in a time range.
 type Report struct {
+	Shift     Shift     `json:"shift"`
 	Since     time.Time `json:"since"`
 	Until     time.Time `json:"until"`
 	Total     int       `json:"total"`
@@ -140,10 +181,10 @@ type Report struct {
 	Failed    int       `json:"failed"`
 	Running   int       `json:"running"`
 	Canceled  int       `json:"canceled"`
+	Incidents int       `json:"incidents"`
 	Jobs      []Job     `json:"jobs"`
 }
 
-// ResolvedRepo is the local checkout and GitHub coordinates for a watch.
 type ResolvedRepo struct {
 	Path   string
 	Repo   string

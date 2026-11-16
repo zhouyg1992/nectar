@@ -227,15 +227,14 @@ timeout = "30m"               # 单次运行默认超时；0s 关闭调度层超
 ```toml
 [oncall]
 enabled = true
-default_every = "5m"       # 新建 watch 的默认轮询间隔
-window = ""                # 例如 "22:00-08:00"；空表示全天
-autonomy = "diagnose"      # diagnose | fix
+default_every = "5m"       # 新建 shift 的默认检查间隔
+autonomy = "diagnose"      # notify | diagnose | fix
 max_minutes = 20           # 单 job 超时
-max_attempts = 2           # 最大手动重试次数
+max_agent_runs = 5         # 单个 shift 最多启动多少次 Agent
 max_concurrent = 1         # 同时执行的 job 数
 ```
 
-`diagnose` 只调查、不改文件；`fix` 允许在隔离 worktree 改代码和跑测试，但不会 commit、push、开 PR、merge 或 deploy。详细语义见 [值班模式](oncall.md)。
+`notify` 只通知；`diagnose` 只调查、不改文件；`fix` 允许在隔离 workspace 改代码和跑测试，但不会 commit、push、开 PR、merge 或 deploy。详细语义见 [值班模式](oncall.md)。
 
 ## 环境变量
 

@@ -198,6 +198,6 @@ Do not disable checksum verification, change the download URL, or patch installe
 
 Nectar runs with empty `bot.admin_users` and `bot.allowed_chats` allowlists unless the user configures them. Empty lists leave administration and group access unrestricted.
 
-After installation, ask the user whether the bot is exposed to shared chats. If yes, offer to restrict `bot.allowed_chats` (which groups may use the bot) and `bot.admin_users` (who may manage scheduled tasks and on-call watches) in the config file, then restart the service. See [docs/en/config.md](docs/en/config.md).
+After installation, ask the user whether the bot is exposed to shared chats. If yes, offer to restrict `bot.allowed_chats` (which groups may use the bot) and `bot.admin_users` (who may manage scheduled tasks and on-call shifts) in the config file, then restart the service. See [docs/en/config.md](docs/en/config.md).
 
 For more detail, see [install and upgrade](docs/en/install.md), [Feishu setup](docs/en/feishu.md), [DingTalk setup](docs/en/dingtalk.md), and [Telegram setup](docs/en/telegram.md).

@@ -2,8 +2,8 @@ package cli
 
 import (
 	"context"
-	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,63 +12,56 @@ import (
 	"github.com/zhouyg1992/nectar/internal/oncall"
 )
 
-type cliOnCallWatcher struct {
-	run *oncall.FailedRun
+type cliProber struct {
+	mu           sync.Mutex
+	observations []oncall.Observation
+	index        int
 }
 
-func (f cliOnCallWatcher) LatestFailed(context.Context, string, string) (*oncall.FailedRun, error) {
-	return f.run, nil
+func (p *cliProber) Check(context.Context, oncall.Shift) (oncall.Observation, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.observations) == 0 {
+		return oncall.Observation{}, nil
+	}
+	idx := p.index
+	if idx >= len(p.observations) {
+		idx = len(p.observations) - 1
+	}
+	p.index++
+	return p.observations[idx], nil
 }
 
-type cliOnCallResolver struct{}
+type cliRunner struct{}
 
-func (cliOnCallResolver) Resolve(context.Context, string, string, string) (oncall.ResolvedRepo, error) {
-	return oncall.ResolvedRepo{Path: "/repo", Repo: "owner/repo", Branch: "main"}, nil
+func (cliRunner) Run(context.Context, string, engine.EngineOptions) (oncall.RunResult, error) {
+	return oncall.RunResult{Output: "job completed"}, nil
 }
 
-type cliOnCallWorktrees struct {
-	root string
-}
+type cliNotifier struct{}
 
-func (f cliOnCallWorktrees) Create(context.Context, string, string, string, string) (string, error) {
-	path := filepath.Join(f.root, "worktree")
-	return path, os.MkdirAll(path, 0o700)
-}
-
-func (f cliOnCallWorktrees) Diff(context.Context, string, string) (string, error) {
-	return "", nil
-}
-
-func (f cliOnCallWorktrees) Remove(context.Context, string, string) error { return nil }
-
-type cliOnCallRunner struct{}
-
-func (cliOnCallRunner) Run(context.Context, string, engine.EngineOptions) (oncall.RunResult, error) {
-	return oncall.RunResult{Output: "root cause: test failed"}, nil
-}
-
-type cliOnCallNotifier struct{}
-
-func (cliOnCallNotifier) NotifyJob(context.Context, oncall.Job) error { return nil }
-
-func (cliOnCallNotifier) NotifyReport(context.Context, oncall.Watch, oncall.Report) error {
+func (cliNotifier) NotifyObservation(context.Context, oncall.Shift, oncall.Observation) error {
 	return nil
 }
 
+func (cliNotifier) NotifyJob(context.Context, oncall.Job) error { return nil }
+
+func (cliNotifier) NotifyReport(context.Context, oncall.Report) error { return nil }
+
 func TestOnCallCLIRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	now := time.Now().UTC()
+	prober := &cliProber{observations: []oncall.Observation{
+		{Key: "k1", Summary: "baseline"},
+		{Key: "k2", Summary: "changed", Alert: true},
+	}}
 	service, err := oncall.New(oncall.Options{
 		StorePath:    filepath.Join(dir, "oncall.json"),
+		WorktreeRoot: filepath.Join(dir, "worktrees"),
 		ArtifactRoot: filepath.Join(dir, "artifacts"),
-		Watcher: cliOnCallWatcher{run: &oncall.FailedRun{
-			ID: 9, Workflow: "CI", Commit: "abc", URL: "https://example.test/9", CreatedAt: now.Add(time.Second),
-		}},
-		Resolver:  cliOnCallResolver{},
-		Worktrees: cliOnCallWorktrees{root: filepath.Join(dir, "worktrees")},
-		Runner:    cliOnCallRunner{},
-		Notifier:  cliOnCallNotifier{},
-		Now:       func() time.Time { return now },
+		Probes:       prober,
+		Runner:       cliRunner{},
+		Notifier:     cliNotifier{},
+		Now:          func() time.Time { return time.Now().UTC() },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,19 +84,27 @@ func TestOnCallCLIRoundTrip(t *testing.T) {
 	t.Setenv("NECTAR_API_SOCKET", socket)
 	t.Setenv("NECTAR_CHANNEL", "feishu")
 	t.Setenv("NECTAR_CHAT_ID", "chat-1")
-	t.Setenv("NECTAR_WORKING_DIR", "/repo")
 
-	if err := oncallCLIWatchAdd([]string{"--repo", "owner/repo", "--branch", "main", "--autonomy", "diagnose"}); err != nil {
+	if err := oncallCLIStart([]string{
+		"--objective", "watch something",
+		"--source", "command",
+		"--command", "true",
+		"--autonomy", "diagnose",
+	}); err != nil {
 		t.Fatal(err)
 	}
-	watches := service.ListWatches(true)
-	if len(watches) != 1 {
-		t.Fatalf("watches = %#v", watches)
+	shifts := service.ListShifts(true)
+	if len(shifts) != 1 {
+		t.Fatalf("shifts = %#v", shifts)
 	}
-	if err := oncallCLIWatchList([]string{"--json"}); err != nil {
+	id := shifts[0].ID
+	if err := oncallCLIList([]string{"--json"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := oncallCLIWatchAction("check", []string{watches[0].ID}); err != nil {
+	if err := oncallCLICheck([]string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if err := oncallCLICheck([]string{id}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(3 * time.Second)
@@ -123,7 +124,22 @@ func TestOnCallCLIRoundTrip(t *testing.T) {
 	if err := oncallCLIJob([]string{jobs[0].ID, "--json"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := oncallCLIReport([]string{"--since", "24h", "--json"}); err != nil {
+	if err := oncallCLIReport([]string{"--shift", id, "--since", "24h", "--json"}); err != nil {
 		t.Fatal(err)
+	}
+	if err := oncallCLIShiftAction("pause", []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if err := oncallCLIShiftAction("resume", []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if err := oncallCLIShiftAction("stop", []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if err := oncallCLIShiftAction("delete", []string{id}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.ListShifts(true); len(got) != 0 {
+		t.Fatalf("shifts after delete = %#v", got)
 	}
 }

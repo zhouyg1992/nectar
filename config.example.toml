@@ -256,20 +256,18 @@ jitter = "0s"
 timeout = "30m"
 
 # ---------------------------------------------------------------------------
-# On-call mode
+# On-call shifts
 # ---------------------------------------------------------------------------
 [oncall]
-# Poll GitHub Actions failures and run isolated investigation/fix jobs.
+# Durable on-call shifts with GitHub Actions, command, or HTTP probes.
 enabled = true
-# Default polling interval for new watches. Watches can override it.
+# Default probe interval for new shifts. Shifts can override it.
 default_every = "5m"
-# Optional local-time window, e.g. "22:00-08:00". Empty means all day.
-window = ""
-# diagnose = investigate only; fix = edit and run tests in an isolated worktree.
+# notify = send observation cards; diagnose = investigate; fix = edit and test.
 autonomy = "diagnose"
 # Per-job timeout.
 max_minutes = 20
-# Maximum number of manual retries per job.
-max_attempts = 2
+# Maximum number of bounded agent jobs in one shift.
+max_agent_runs = 5
 # Maximum number of on-call jobs executing at the same time.
 max_concurrent = 1

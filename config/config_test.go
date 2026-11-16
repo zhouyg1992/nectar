@@ -184,12 +184,12 @@ func TestOnCallDefaultsAndValidation(t *testing.T) {
 		t.Fatal("on-call should be enabled by default")
 	}
 	if cfg.OnCall.DefaultEvery != "5m" || cfg.OnCall.Autonomy != "diagnose" ||
-		cfg.OnCall.MaxMinutes != 20 || cfg.OnCall.MaxAttempts != 2 || cfg.OnCall.MaxConcurrent != 1 {
+		cfg.OnCall.MaxMinutes != 20 || cfg.OnCall.MaxAgentRuns != 5 || cfg.OnCall.MaxConcurrent != 1 {
 		t.Fatalf("on-call defaults = %#v", cfg.OnCall)
 	}
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	body := "[oncall]\ndefault_every = \"10m\"\nwindow = \"22:00-08:00\"\nautonomy = \"fix\"\nmax_minutes = 30\nmax_attempts = 3\nmax_concurrent = 2\n"
+	body := "[oncall]\ndefault_every = \"10m\"\nautonomy = \"fix\"\nmax_minutes = 30\nmax_agent_runs = 3\nmax_concurrent = 2\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -197,23 +197,17 @@ func TestOnCallDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.OnCall.DefaultEvery != "10m" || cfg.OnCall.Window != "22:00-08:00" ||
-		cfg.OnCall.Autonomy != "fix" || cfg.OnCall.MaxMinutes != 30 {
+	if cfg.OnCall.DefaultEvery != "10m" || cfg.OnCall.Autonomy != "fix" ||
+		cfg.OnCall.MaxMinutes != 30 || cfg.OnCall.MaxAgentRuns != 3 {
 		t.Fatalf("on-call overrides = %#v", cfg.OnCall)
 	}
 
 	invalid := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(invalid, []byte("[oncall]\nwindow = \"late\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(invalid, []byte("[oncall]\nautonomy = \"merge\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Load(invalid); err == nil {
-		t.Fatal("expected invalid on-call window error")
-	}
-	if err := os.WriteFile(invalid, []byte("[oncall]\nwindow = \"09:00-09:00\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Load(invalid); err == nil {
-		t.Fatal("expected equal on-call window error")
+		t.Fatal("expected invalid on-call autonomy error")
 	}
 }
 

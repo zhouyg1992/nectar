@@ -62,7 +62,7 @@ func printMainUsage() {
   nectar -version
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--timeout 10m]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
-  nectar oncall <watch|jobs|job|retry|cancel|report>
+  nectar oncall <start|list|show|check|pause|resume|stop|jobs|job|retry|cancel|report>
   nectar skills <install|uninstall>
   nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>
   nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]

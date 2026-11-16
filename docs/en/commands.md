@@ -14,7 +14,7 @@ nectar help                           Show CLI help
 nectar service <subcommand>           Manage the background service
 nectar update                         Update Nectar
 nectar schedule <subcommand>          Manage scheduled tasks
-nectar oncall <subcommand>            Manage on-call watches and jobs
+nectar oncall <subcommand>            Manage on-call shifts and jobs
 nectar skills <subcommand>            Manage agent skills
 nectar memory <subcommand>            Manage local memory
 nectar uninstall                      Uninstall Nectar
@@ -295,37 +295,42 @@ Scheduled tasks are enabled by default. Management commands are limited to `bot.
 
 ```text
 /oncall
-/oncall list
-/oncall watch [repo] [branch]
-/oncall check <watch-id>
-/oncall pause|resume|delete <watch-id>
+/oncall show <shift-id>
+/oncall check <shift-id>
+/oncall pause|resume|stop <shift-id>
 /oncall jobs [limit]
 /oncall job <job-id>
 /oncall retry|cancel <job-id>
-/oncall report [duration]
+/oncall report [shift-id] [duration]
 /oncall help
 ```
 
-`/oncall` without a subcommand is equivalent to `/oncall list`. `watch` uses
-the current chat workspace as the local checkout; agents can also create
-watches from natural language, or you can pass `--path` explicitly in the CLI.
+`/oncall` without a subcommand is equivalent to `/oncall list`. Creating a
+shift is primarily a natural-language flow; the `nectar-oncall` skill maps it
+to the CLI.
 
 ```bash
-nectar oncall watch add [--repo OWNER/NAME] [--path DIR] [--branch BRANCH]
-  [--every 5m] [--window 22:00-08:00] [--autonomy diagnose|fix]
-  [--max-minutes 20] [--max-attempts 2]
-  [--channel CHANNEL] [--chat CHAT_ID] [--thread THREAD_ID] [--agent AGENT]
-nectar oncall watch list [--all] [--json]
-nectar oncall watch pause|resume|check|delete <watch-id>
+nectar oncall start --objective TEXT --source github|command|http [options]
+  github:  --repo OWNER/NAME [--path DIR] [--branch BRANCH]
+  command: --command TEXT [--workdir DIR] [--alert-on-exit]
+  http:    --url URL
+  common:  [--every 5m] [--start RFC3339] [--for 10h | --until RFC3339]
+           [--autonomy notify|diagnose|fix] [--max-minutes 20]
+           [--max-agent-runs 5] [--action-dir DIR]
+           [--channel CHANNEL] [--chat CHAT_ID]
+nectar oncall list [--all] [--json]
+nectar oncall show <shift-id> [--json]
+nectar oncall check <shift-id>
+nectar oncall pause|resume|stop|delete <shift-id>
 nectar oncall jobs [--limit N] [--json]
 nectar oncall job <job-id> [--json]
 nectar oncall retry|cancel <job-id>
-nectar oncall report [--since 12h] [--json]
+nectar oncall report [--shift ID] [--since 12h] [--json]
 ```
 
 The CLI talks to the running bot over the local socket. Agent sessions
 automatically receive the target chat and default workspace. See
-[On-call mode](oncall.md).
+[On-call shifts](oncall.md).
 
 ### /memory
 

@@ -9,7 +9,7 @@
 - [Telegram setup and troubleshooting](telegram.md)
 - [Background service](service.md)
 - [Scheduled tasks](schedule.md)
-- [On-call mode](oncall.md)
+- [On-call shifts](oncall.md)
 - [Security boundaries](security.md)
 - [Roadmap](roadmap.md)
 - [Changelog](changelog.md)

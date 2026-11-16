@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果以实时消息或卡片回传。会话保持连续，进度实时可见，任务可以定时执行；开启值班模式后，它还会监控 GitHub Actions 失败，在隔离 worktree 中调查或修复 CI。安装器会检测本机引擎、写入配置并启动后台服务。
+Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果以实时消息或卡片回传。会话保持连续，进度实时可见，任务可以定时执行；开启值班模式后，它还能在指定时间窗内持续观察 GitHub Actions、命令或 HTTP，只在需要时启动一次有边界的 Agent job。安装器会检测本机引擎、写入配置并启动后台服务。
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
@@ -40,7 +40,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 - **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`；`/list`、`/switch`、`/rename` 让一个聊天可以保留多个会话，服务重启后如果原会话仍然有效，就继续使用它。
 - **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
-- **可以替你值班**：轮询 GitHub Actions 失败，在隔离 worktree 中自动调查或修复 CI，并回传报告和 diff。
+- **可以替你值班**：给你一个目标和时间窗，Nectar 在后台持续观察；有变化才调查或通知，结束时给报告。
 - **记忆可携带**：本地优先的 profile / project / chat 记忆，支持审核、检索注入和 Agent CLI 读写。
 - **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
 
@@ -109,7 +109,7 @@ allowed_chats = ["oc_xxx"]
 nectar service restart
 ```
 
-上面的 ID 是飞书示例：钉钉使用 `staffId` / `openConversationId`，Telegram 使用数字 user ID 和 chat ID（负数群 ID 需要加引号）。`admin_users` 为空时，任何人都能管理定时任务和值班 watch；`allowed_chats` 为空时，不限制群聊。完整配置见 [配置参考](docs/zh-CN/config.md) 和 [安全边界](docs/zh-CN/security.md)。
+上面的 ID 是飞书示例：钉钉使用 `staffId` / `openConversationId`，Telegram 使用数字 user ID 和 chat ID（负数群 ID 需要加引号）。`admin_users` 为空时，任何人都能管理定时任务和值班 shift；`allowed_chats` 为空时，不限制群聊。完整配置见 [配置参考](docs/zh-CN/config.md) 和 [安全边界](docs/zh-CN/security.md)。
 
 ## 支持矩阵
 
@@ -150,7 +150,7 @@ nectar service uninstall              卸载服务
 
 nectar update                         升级到最新版本
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
-nectar oncall watch|jobs|job|retry|cancel|report
+nectar oncall start|list|show|check|pause|resume|stop|jobs|job|retry|cancel|report
 nectar skills install|uninstall       Agent Skill 管理
 nectar memory add|search|list|get|approve|reject|pin|unpin|forget
 nectar uninstall                      卸载 Nectar
@@ -191,16 +191,17 @@ nectar uninstall                      卸载 Nectar
 `/oncall` 子命令：
 
 ```text
-/oncall watch [repo] [branch]
-/oncall list
-/oncall check|pause|resume|delete <watch-id>
+/oncall
+/oncall show <shift-id>
+/oncall check <shift-id>
+/oncall pause|resume|stop <shift-id>
 /oncall jobs [limit]
 /oncall job <job-id>
 /oncall retry|cancel <job-id>
-/oncall report [duration]
+/oncall report [shift-id] [duration]
 ```
 
-详见[值班模式](docs/zh-CN/oncall.md)，或在聊天里发送 `/oncall help`。值班模式默认开启，首次检查会忽略创建 watch 之前的历史失败；要调查已经失败的 run，使用 `/oncall check <watch-id>`。
+创建值班主要走自然语言，由 `nectar-oncall` Skill 翻译成 `nectar oncall start`。详见[值班模式](docs/zh-CN/oncall.md)，或在聊天里发送 `/oncall help`。
 
 群聊里的会话管理命令（`/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/stop`、`/status`）仅限 `bot.admin_users`；单聊保持单人使用行为。
 

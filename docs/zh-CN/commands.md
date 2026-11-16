@@ -14,7 +14,7 @@ nectar help                           查看 CLI 帮助
 nectar service <subcommand>           管理后台服务
 nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
-nectar oncall <subcommand>            管理值班 watch 和 job
+nectar oncall <subcommand>            管理值班 shift 和 job
 nectar skills <subcommand>            管理 Agent Skill
 nectar memory <subcommand>            管理本地记忆
 nectar uninstall                      卸载 Nectar
@@ -282,30 +282,35 @@ Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当
 
 ```text
 /oncall
-/oncall list
-/oncall watch [repo] [branch]
-/oncall check <watch-id>
-/oncall pause|resume|delete <watch-id>
+/oncall show <shift-id>
+/oncall check <shift-id>
+/oncall pause|resume|stop <shift-id>
 /oncall jobs [limit]
 /oncall job <job-id>
 /oncall retry|cancel <job-id>
-/oncall report [duration]
+/oncall report [shift-id] [duration]
 /oncall help
 ```
 
-`/oncall` 不带子命令时等价于 `/oncall list`。`watch` 使用当前聊天的工作区作为本地 checkout；也可以用 Agent 从自然语言创建，或直接运行 CLI 传 `--path`。
+`/oncall` 不带子命令时等价于 `/oncall list`。创建值班主要走自然语言，由 `nectar-oncall` Skill 翻译成 CLI。
 
 ```bash
-nectar oncall watch add [--repo OWNER/NAME] [--path DIR] [--branch BRANCH]
-  [--every 5m] [--window 22:00-08:00] [--autonomy diagnose|fix]
-  [--max-minutes 20] [--max-attempts 2]
-  [--channel CHANNEL] [--chat CHAT_ID] [--thread THREAD_ID] [--agent AGENT]
-nectar oncall watch list [--all] [--json]
-nectar oncall watch pause|resume|check|delete <watch-id>
+nectar oncall start --objective TEXT --source github|command|http [options]
+  github:  --repo OWNER/NAME [--path DIR] [--branch BRANCH]
+  command: --command TEXT [--workdir DIR] [--alert-on-exit]
+  http:    --url URL
+  common:  [--every 5m] [--start RFC3339] [--for 10h | --until RFC3339]
+           [--autonomy notify|diagnose|fix] [--max-minutes 20]
+           [--max-agent-runs 5] [--action-dir DIR]
+           [--channel CHANNEL] [--chat CHAT_ID]
+nectar oncall list [--all] [--json]
+nectar oncall show <shift-id> [--json]
+nectar oncall check <shift-id>
+nectar oncall pause|resume|stop|delete <shift-id>
 nectar oncall jobs [--limit N] [--json]
 nectar oncall job <job-id> [--json]
 nectar oncall retry|cancel <job-id>
-nectar oncall report [--since 12h] [--json]
+nectar oncall report [--shift ID] [--since 12h] [--json]
 ```
 
 CLI 通过本地 socket 与正在运行的 bot 通信。Agent 会话会自动注入目标 chat 和默认工作区。详见 [值班模式](oncall.md)。

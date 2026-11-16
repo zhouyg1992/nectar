@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar sends chat messages to a coding agent on your machine and streams progress and results back as live messages or cards. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. With on-call mode enabled, it also watches GitHub Actions failures and investigates or fixes CI in an isolated worktree. The installer detects installed engines, writes the config, and starts the background service.
+Nectar sends chat messages to a coding agent on your machine and streams progress and results back as live messages or cards. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. With on-call mode enabled, it can also observe GitHub Actions, a command, or an HTTP endpoint for a time window, starting a bounded agent job only when needed. The installer detects installed engines, writes the config, and starts the background service.
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
@@ -40,7 +40,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`; `/list`, `/switch`, and `/rename` keep multiple sessions per chat, and the service resumes the same agent session when it is still valid after a restart.
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
-- **It can take the on-call shift**: poll GitHub Actions failures, investigate or fix CI in an isolated worktree, and report back with a summary and diff.
+- **It can take the on-call shift**: give it an objective and time window; Nectar observes in the background, investigates only on change, and reports when the shift ends.
 - **Memory travels with you**: local-first profile / project / chat memory with review, retrieval, and an agent CLI.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 
@@ -150,7 +150,7 @@ nectar service uninstall              Uninstall the service
 
 nectar update                         Update to the latest release
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
-nectar oncall watch|jobs|job|retry|cancel|report
+nectar oncall start|list|show|check|pause|resume|stop|jobs|job|retry|cancel|report
 nectar skills install|uninstall       Manage agent skills
 nectar memory add|search|list|get|approve|reject|pin|unpin|forget
 nectar uninstall                      Uninstall Nectar
@@ -172,7 +172,7 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 | `/status` | Show the current engine, model, and session |
 | `/stop` | Cancel the current run |
 | `/cron`, `/schedule` | Scheduled task entry point |
-| `/oncall` | On-call mode entry point |
+| `/oncall` | On-call shift entry point |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
 `/cron` subcommands:
@@ -191,16 +191,17 @@ See [scheduled tasks](docs/en/schedule.md) for details, or send `/cron help` in 
 `/oncall` subcommands:
 
 ```text
-/oncall watch [repo] [branch]
-/oncall list
-/oncall check|pause|resume|delete <watch-id>
+/oncall
+/oncall show <shift-id>
+/oncall check <shift-id>
+/oncall pause|resume|stop <shift-id>
 /oncall jobs [limit]
 /oncall job <job-id>
 /oncall retry|cancel <job-id>
-/oncall report [duration]
+/oncall report [shift-id] [duration]
 ```
 
-See [on-call mode](docs/en/oncall.md), or send `/oncall help` in chat. The first check ignores failures older than the watch; use `/oncall check <watch-id>` to investigate a failure that is already red.
+Create shifts primarily through natural language; the `nectar-oncall` skill maps it to `nectar oncall start`. See [on-call mode](docs/en/oncall.md), or send `/oncall help` in chat.
 
 In group chats, session management commands (`/new`, `/list`, `/switch`, `/current`, `/rename`, `/archive`, `/unarchive`, `/stop`, `/status`) are limited to `bot.admin_users`. Direct messages keep the single-user behavior.
 
@@ -225,7 +226,7 @@ See [Install and upgrade](docs/en/install.md) for all update and uninstall flags
 - [Telegram setup and troubleshooting](docs/en/telegram.md)
 - [Background service](docs/en/service.md)
 - [Scheduled tasks](docs/en/schedule.md)
-- [On-call mode](docs/en/oncall.md)
+- [On-call shifts](docs/en/oncall.md)
 - [Security boundaries](docs/en/security.md)
 - [Roadmap](docs/en/roadmap.md)
 - [Changelog](docs/en/changelog.md)

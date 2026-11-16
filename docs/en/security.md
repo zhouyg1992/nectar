@@ -12,7 +12,7 @@ Codex/OpenCode/Cursor/Claude Code/Pi read, write, and execute commands in the co
 - OpenCode's `opencode.auto_approve = true` automatically approves tool permissions; use it carefully in untrusted group chats.
 - Cursor's `cursor.auto_approve = true` is equivalent to `-f` and automatically approves tool calls; `cursor.trust_workspace = true` skips the working-directory trust prompt. Both are enabled by default; tighten them in untrusted environments.
 - Pi's `pi.trust_workspace = true` is equivalent to `--approve` and loads project settings, skills, context files, and extensions from the working directory. Disable it in untrusted repositories.
-- On-call `fix` jobs may edit files and run tests inside an isolated worktree. CI logs, issue text, and repository content can contain prompt injection and must be treated as untrusted data. The current MVP never auto-merges or deploys.
+- On-call `fix` jobs may edit files and run tests inside an isolated workspace. CI logs, command output, HTTP content, issue text, and repository content can contain prompt injection and must be treated as untrusted data. The `command` probe executes shell commands on the host and should be admin-only. The current MVP never auto-merges or deploys.
 
 ## Known limitations
 

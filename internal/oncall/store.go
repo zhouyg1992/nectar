@@ -10,28 +10,26 @@ import (
 	"time"
 )
 
-const storeVersion = 1
+const storeVersion = 2
 
 type storeFile struct {
 	Version int     `json:"version"`
-	Watches []Watch `json:"watches"`
+	Shifts  []Shift `json:"shifts"`
 	Jobs    []Job   `json:"jobs"`
 }
 
-// Store persists watches and jobs. The file contains operational metadata only;
-// repository contents and diffs live under the job artifact directory.
 type Store struct {
-	mu      sync.RWMutex
-	path    string
-	watches map[string]Watch
-	jobs    map[string]Job
+	mu     sync.RWMutex
+	path   string
+	shifts map[string]Shift
+	jobs   map[string]Job
 }
 
 func NewStore(path string) (*Store, error) {
 	s := &Store{
-		path:    path,
-		watches: make(map[string]Watch),
-		jobs:    make(map[string]Job),
+		path:   path,
+		shifts: make(map[string]Shift),
+		jobs:   make(map[string]Job),
 	}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -57,57 +55,55 @@ func (s *Store) load() error {
 	if file.Version != 0 && file.Version != storeVersion {
 		return fmt.Errorf("unsupported on-call store version %d", file.Version)
 	}
-	for _, watch := range file.Watches {
-		if watch.ID == "" {
-			continue
+	for _, shift := range file.Shifts {
+		if shift.ID != "" {
+			s.shifts[shift.ID] = shift
 		}
-		s.watches[watch.ID] = watch
 	}
 	for _, job := range file.Jobs {
-		if job.ID == "" {
-			continue
+		if job.ID != "" {
+			s.jobs[job.ID] = job
 		}
-		s.jobs[job.ID] = job
 	}
 	return nil
 }
 
-func (s *Store) AddWatch(watch Watch) error {
+func (s *Store) AddShift(shift Shift) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.watches[watch.ID]; exists {
-		return fmt.Errorf("on-call watch %s already exists", watch.ID)
+	if _, exists := s.shifts[shift.ID]; exists {
+		return fmt.Errorf("on-call shift %s already exists", shift.ID)
 	}
-	s.watches[watch.ID] = watch
+	s.shifts[shift.ID] = shift
 	return s.persistLocked()
 }
 
-func (s *Store) UpdateWatch(watch Watch) error {
+func (s *Store) UpdateShift(shift Shift) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.watches[watch.ID]; !exists {
-		return fmt.Errorf("on-call watch %s not found", watch.ID)
+	if _, exists := s.shifts[shift.ID]; !exists {
+		return fmt.Errorf("on-call shift %s not found", shift.ID)
 	}
-	s.watches[watch.ID] = watch
+	s.shifts[shift.ID] = shift
 	return s.persistLocked()
 }
 
-func (s *Store) GetWatch(id string) (Watch, bool) {
+func (s *Store) GetShift(id string) (Shift, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	watch, ok := s.watches[id]
-	return watch, ok
+	shift, ok := s.shifts[id]
+	return shift, ok
 }
 
-func (s *Store) ListWatches(includePaused bool) []Watch {
+func (s *Store) ListShifts(includeInactive bool) []Shift {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]Watch, 0, len(s.watches))
-	for _, watch := range s.watches {
-		if !includePaused && watch.Status != WatchActive {
+	out := make([]Shift, 0, len(s.shifts))
+	for _, shift := range s.shifts {
+		if !includeInactive && shift.Status != ShiftActive {
 			continue
 		}
-		out = append(out, watch)
+		out = append(out, shift)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
@@ -118,13 +114,13 @@ func (s *Store) ListWatches(includePaused bool) []Watch {
 	return out
 }
 
-func (s *Store) DeleteWatch(id string) error {
+func (s *Store) DeleteShift(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.watches[id]; !exists {
-		return fmt.Errorf("on-call watch %s not found", id)
+	if _, exists := s.shifts[id]; !exists {
+		return fmt.Errorf("on-call shift %s not found", id)
 	}
-	delete(s.watches, id)
+	delete(s.shifts, id)
 	return s.persistLocked()
 }
 
@@ -155,17 +151,6 @@ func (s *Store) GetJob(id string) (Job, bool) {
 	return job, ok
 }
 
-func (s *Store) FindJobByRun(watchID string, runID int64) (Job, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, job := range s.jobs {
-		if job.WatchID == watchID && job.RunID == runID {
-			return job, true
-		}
-	}
-	return Job{}, false
-}
-
 func (s *Store) ListJobs(limit int) []Job {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -185,11 +170,17 @@ func (s *Store) ListJobs(limit int) []Job {
 	return out
 }
 
-func (s *Store) Report(since, until time.Time) Report {
+func (s *Store) Report(shiftID string, since, until time.Time) Report {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	report := Report{Since: since, Until: until}
+	if shiftID != "" {
+		report.Shift = s.shifts[shiftID]
+	}
 	for _, job := range s.jobs {
+		if shiftID != "" && job.ShiftID != shiftID {
+			continue
+		}
 		if job.CreatedAt.Before(since) || job.CreatedAt.After(until) {
 			continue
 		}
@@ -209,11 +200,12 @@ func (s *Store) Report(since, until time.Time) Report {
 	sort.Slice(report.Jobs, func(i, j int) bool {
 		return report.Jobs[i].CreatedAt.After(report.Jobs[j].CreatedAt)
 	})
+	if shift, ok := s.shifts[shiftID]; ok {
+		report.Incidents = shift.Incidents
+	}
 	return report
 }
 
-// MarkInterruptedJobs fails jobs that were queued or running when Nectar
-// stopped. They cannot be resumed safely because their engine process is gone.
 func (s *Store) MarkInterruptedJobs(now time.Time) ([]Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -239,13 +231,13 @@ func (s *Store) persistLocked() error {
 		return nil
 	}
 	file := storeFile{Version: storeVersion}
-	for _, watch := range s.watches {
-		file.Watches = append(file.Watches, watch)
+	for _, shift := range s.shifts {
+		file.Shifts = append(file.Shifts, shift)
 	}
 	for _, job := range s.jobs {
 		file.Jobs = append(file.Jobs, job)
 	}
-	sort.Slice(file.Watches, func(i, j int) bool { return file.Watches[i].ID < file.Watches[j].ID })
+	sort.Slice(file.Shifts, func(i, j int) bool { return file.Shifts[i].ID < file.Shifts[j].ID })
 	sort.Slice(file.Jobs, func(i, j int) bool { return file.Jobs[i].ID < file.Jobs[j].ID })
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {

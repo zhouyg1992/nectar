@@ -13,16 +13,16 @@ import (
 	"github.com/zhouyg1992/nectar/internal/oncall"
 )
 
-type oncallWatchResponse struct {
-	Watch oncall.Watch `json:"watch"`
+type oncallShiftResponse struct {
+	Shift oncall.Shift `json:"shift"`
 }
 
-type oncallWatchListResponse struct {
-	Watches []oncall.Watch `json:"watches"`
+type oncallShiftListResponse struct {
+	Shifts []oncall.Shift `json:"shifts"`
 }
 
 type oncallCheckResponse struct {
-	WatchID string      `json:"watch_id"`
+	ShiftID string      `json:"shift_id"`
 	Job     *oncall.Job `json:"job"`
 }
 
@@ -43,16 +43,25 @@ func runOnCall(args []string) error {
 	args = args[1:]
 	var err error
 	switch command {
-	case "watch":
-		err = runOnCallWatch(args)
-	case "jobs", "list":
+	case "start", "add":
+		err = oncallCLIStart(args)
+	case "list", "ls":
+		err = oncallCLIList(args)
+	case "show", "status":
+		err = oncallCLIShow(args)
+	case "check":
+		err = oncallCLICheck(args)
+	case "pause", "resume", "stop", "delete", "del", "rm":
+		if command == "del" || command == "rm" {
+			command = "delete"
+		}
+		err = oncallCLIShiftAction(command, args)
+	case "jobs":
 		err = oncallCLIJobs(args)
-	case "job", "show":
+	case "job":
 		err = oncallCLIJob(args)
-	case "retry":
-		err = oncallCLIAction("retry", args)
-	case "cancel", "stop":
-		err = oncallCLIAction("cancel", args)
+	case "retry", "cancel":
+		err = oncallCLIJobAction(command, args)
 	case "report":
 		err = oncallCLIReport(args)
 	default:
@@ -65,40 +74,26 @@ func runOnCall(args []string) error {
 	return err
 }
 
-func runOnCallWatch(args []string) error {
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		printOnCallUsage()
-		return nil
-	}
-	command := args[0]
-	args = args[1:]
-	switch command {
-	case "add", "create":
-		return oncallCLIWatchAdd(args)
-	case "list", "ls":
-		return oncallCLIWatchList(args)
-	case "pause", "resume", "check", "delete", "del", "rm", "remove":
-		if command == "del" || command == "rm" || command == "remove" {
-			command = "delete"
-		}
-		return oncallCLIWatchAction(command, args)
-	default:
-		printOnCallUsage()
-		return fmt.Errorf("unknown oncall watch command %q", command)
-	}
-}
-
-func oncallCLIWatchAdd(args []string) error {
-	fs := flag.NewFlagSet("oncall watch add", flag.ContinueOnError)
+func oncallCLIStart(args []string) error {
+	fs := flag.NewFlagSet("oncall start", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	repo := fs.String("repo", "", "GitHub repository (owner/name); inferred from origin when empty")
-	path := fs.String("path", "", "local git checkout; defaults to NECTAR_WORKING_DIR or cwd")
-	branch := fs.String("branch", "", "branch to watch; defaults from git or main")
-	every := fs.String("every", "", "poll interval, e.g. 5m")
-	window := fs.String("window", "", "local time window, e.g. 22:00-08:00")
-	autonomy := fs.String("autonomy", "", "diagnose or fix")
-	maxMinutes := fs.Int("max-minutes", 0, "per-job timeout in minutes")
-	maxAttempts := fs.Int("max-attempts", 0, "maximum attempts for manual retries")
+	objective := fs.String("objective", "", "what Nectar should watch and why")
+	source := fs.String("source", "", "github | command | http")
+	repo := fs.String("repo", "", "GitHub repository owner/name")
+	path := fs.String("path", "", "local checkout")
+	branch := fs.String("branch", "", "branch to watch")
+	command := fs.String("command", "", "shell command probe")
+	workdir := fs.String("workdir", "", "command probe working directory")
+	urlValue := fs.String("url", "", "HTTP URL probe")
+	actionDir := fs.String("action-dir", "", "workspace for agent investigation")
+	alertOnExit := fs.Bool("alert-on-exit", true, "treat non-zero command exit as an alert")
+	every := fs.String("every", "", "check interval, e.g. 5m or 2s")
+	start := fs.String("start", "", "RFC3339 start time")
+	forValue := fs.String("for", "", "shift duration, e.g. 10h")
+	until := fs.String("until", "", "RFC3339 end time")
+	autonomy := fs.String("autonomy", "", "notify | diagnose | fix")
+	maxMinutes := fs.Int("max-minutes", 0, "per-agent-job timeout")
+	maxAgentRuns := fs.Int("max-agent-runs", 0, "maximum agent jobs in this shift")
 	channel := fs.String("channel", "", "target channel")
 	chat := fs.String("chat", "", "target chat id")
 	chatType := fs.String("chat-type", "", "target chat type")
@@ -109,74 +104,93 @@ func oncallCLIWatchAdd(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	req := oncall.WatchRequest{
-		Repo:        *repo,
-		Path:        firstNonEmpty(*path, os.Getenv("NECTAR_WORKING_DIR")),
-		Branch:      *branch,
-		Every:       *every,
-		Window:      *window,
-		Autonomy:    *autonomy,
-		MaxMinutes:  *maxMinutes,
-		MaxAttempts: *maxAttempts,
-		Channel:     firstNonEmpty(*channel, os.Getenv("NECTAR_CHANNEL")),
-		ChatID:      firstNonEmpty(*chat, os.Getenv("NECTAR_CHAT_ID")),
-		ChatType:    firstNonEmpty(*chatType, os.Getenv("NECTAR_CHAT_TYPE")),
-		MessageID:   os.Getenv("NECTAR_MESSAGE_ID"),
-		ThreadID:    firstNonEmpty(*thread, os.Getenv("NECTAR_THREAD_ID")),
-		UserID:      os.Getenv("NECTAR_USER_ID"),
-		AgentID:     firstNonEmpty(*agent, os.Getenv("NECTAR_AGENT_ID")),
+	req := oncall.ShiftRequest{
+		Objective:    *objective,
+		Source:       strings.ToLower(strings.TrimSpace(*source)),
+		Repo:         *repo,
+		Path:         firstNonEmpty(*path, os.Getenv("NECTAR_WORKING_DIR")),
+		Branch:       *branch,
+		Command:      *command,
+		Workdir:      firstNonEmpty(*workdir, os.Getenv("NECTAR_WORKING_DIR")),
+		URL:          *urlValue,
+		ActionDir:    *actionDir,
+		AlertOnExit:  *alertOnExit,
+		Every:        *every,
+		Start:        *start,
+		For:          *forValue,
+		Until:        *until,
+		Autonomy:     *autonomy,
+		MaxMinutes:   *maxMinutes,
+		MaxAgentRuns: *maxAgentRuns,
+		Channel:      firstNonEmpty(*channel, os.Getenv("NECTAR_CHANNEL")),
+		ChatID:       firstNonEmpty(*chat, os.Getenv("NECTAR_CHAT_ID")),
+		ChatType:     firstNonEmpty(*chatType, os.Getenv("NECTAR_CHAT_TYPE")),
+		MessageID:    os.Getenv("NECTAR_MESSAGE_ID"),
+		ThreadID:     firstNonEmpty(*thread, os.Getenv("NECTAR_THREAD_ID")),
+		UserID:       os.Getenv("NECTAR_USER_ID"),
+		AgentID:      firstNonEmpty(*agent, os.Getenv("NECTAR_AGENT_ID")),
 	}
-	if req.Path == "" {
-		req.Path = "."
+	if req.Objective == "" {
+		return errors.New("--objective is required")
+	}
+	if req.Source == "" {
+		switch {
+		case req.URL != "":
+			req.Source = oncall.SourceHTTP
+		case req.Command != "":
+			req.Source = oncall.SourceCommand
+		default:
+			req.Source = oncall.SourceGitHub
+		}
 	}
 	if req.ChatID == "" {
 		return errors.New("--chat is required (or run inside a nectar agent session)")
 	}
-	var response oncallWatchResponse
-	if err := scheduleRequest(*socket, http.MethodPost, "/oncall/watches", req, &response); err != nil {
+	var response oncallShiftResponse
+	if err := scheduleRequest(*socket, http.MethodPost, "/oncall/shifts", req, &response); err != nil {
 		return err
 	}
 	if *jsonOut {
 		return printJSON(response)
 	}
-	fmt.Println(formatOnCallWatch(response.Watch))
+	fmt.Println(formatOnCallShift(response.Shift))
 	return nil
 }
 
-func oncallCLIWatchList(args []string) error {
-	fs := flag.NewFlagSet("oncall watch list", flag.ContinueOnError)
+func oncallCLIList(args []string) error {
+	fs := flag.NewFlagSet("oncall list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	all := fs.Bool("all", false, "include paused watches")
+	all := fs.Bool("all", false, "include completed and paused shifts")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "local API socket")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	path := "/oncall/watches"
+	path := "/oncall/shifts"
 	if *all {
 		path += "?all=1"
 	}
-	var response oncallWatchListResponse
+	var response oncallShiftListResponse
 	if err := scheduleRequest(*socket, http.MethodGet, path, nil, &response); err != nil {
 		return err
 	}
 	if *jsonOut {
 		return printJSON(response)
 	}
-	if len(response.Watches) == 0 {
-		fmt.Println("No on-call watches.")
+	if len(response.Shifts) == 0 {
+		fmt.Println("No on-call shifts.")
 		return nil
 	}
-	for _, watch := range response.Watches {
-		fmt.Println(formatOnCallWatch(watch))
+	for _, shift := range response.Shifts {
+		fmt.Println(formatOnCallShift(shift))
 		fmt.Println()
 	}
 	return nil
 }
 
-func oncallCLIWatchAction(command string, args []string) error {
+func oncallCLIShow(args []string) error {
 	id, args := splitScheduleID(args)
-	fs := flag.NewFlagSet("oncall watch "+command, flag.ContinueOnError)
+	fs := flag.NewFlagSet("oncall show", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "local API socket")
@@ -185,30 +199,71 @@ func oncallCLIWatchAction(command string, args []string) error {
 	}
 	if id == "" {
 		if len(fs.Args()) == 0 {
-			return fmt.Errorf("oncall watch %s requires an id", command)
+			return errors.New("oncall show requires a shift id")
+		}
+		id = fs.Args()[0]
+	}
+	var response oncallShiftResponse
+	if err := scheduleRequest(*socket, http.MethodGet, "/oncall/shifts/"+id, nil, &response); err != nil {
+		return err
+	}
+	if *jsonOut {
+		return printJSON(response)
+	}
+	fmt.Println(formatOnCallShift(response.Shift))
+	return nil
+}
+
+func oncallCLICheck(args []string) error {
+	id, args := splitScheduleID(args)
+	fs := flag.NewFlagSet("oncall check", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "print JSON")
+	socket := fs.String("socket", "", "local API socket")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if id == "" {
+		if len(fs.Args()) == 0 {
+			return errors.New("oncall check requires a shift id")
+		}
+		id = fs.Args()[0]
+	}
+	var response oncallCheckResponse
+	if err := scheduleRequest(*socket, http.MethodPost, "/oncall/shifts/"+id+"/check", nil, &response); err != nil {
+		return err
+	}
+	if *jsonOut {
+		return printJSON(response)
+	}
+	if response.Job == nil {
+		fmt.Printf("%s checked: no change or alert\n", id)
+		return nil
+	}
+	fmt.Println(formatOnCallJob(*response.Job))
+	return nil
+}
+
+func oncallCLIShiftAction(command string, args []string) error {
+	id, args := splitScheduleID(args)
+	fs := flag.NewFlagSet("oncall "+command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	jsonOut := fs.Bool("json", false, "print JSON")
+	socket := fs.String("socket", "", "local API socket")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if id == "" {
+		if len(fs.Args()) == 0 {
+			return fmt.Errorf("oncall %s requires a shift id", command)
 		}
 		id = fs.Args()[0]
 	}
 	method := http.MethodPost
-	path := "/oncall/watches/" + id + "/" + command
+	path := "/oncall/shifts/" + id + "/" + command
 	if command == "delete" {
 		method = http.MethodDelete
-		path = "/oncall/watches/" + id
-	}
-	if command == "check" {
-		var response oncallCheckResponse
-		if err := scheduleRequest(*socket, method, path, nil, &response); err != nil {
-			return err
-		}
-		if *jsonOut {
-			return printJSON(response)
-		}
-		if response.Job == nil {
-			fmt.Printf("%s checked: no new failed run\n", id)
-			return nil
-		}
-		fmt.Println(formatOnCallJob(*response.Job))
-		return nil
+		path = "/oncall/shifts/" + id
 	}
 	var response map[string]any
 	if err := scheduleRequest(*socket, method, path, nil, &response); err != nil {
@@ -260,7 +315,7 @@ func oncallCLIJob(args []string) error {
 	}
 	if id == "" {
 		if len(fs.Args()) == 0 {
-			return errors.New("oncall job requires an id")
+			return errors.New("oncall job requires a job id")
 		}
 		id = fs.Args()[0]
 	}
@@ -279,7 +334,7 @@ func oncallCLIJob(args []string) error {
 	return nil
 }
 
-func oncallCLIAction(command string, args []string) error {
+func oncallCLIJobAction(command string, args []string) error {
 	id, args := splitScheduleID(args)
 	fs := flag.NewFlagSet("oncall "+command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -308,6 +363,7 @@ func oncallCLIAction(command string, args []string) error {
 func oncallCLIReport(args []string) error {
 	fs := flag.NewFlagSet("oncall report", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	shiftID := fs.String("shift", "", "shift id")
 	since := fs.String("since", "12h", "duration or RFC3339 start time")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "local API socket")
@@ -316,6 +372,9 @@ func oncallCLIReport(args []string) error {
 	}
 	var response oncall.Report
 	path := "/oncall/report?since=" + url.QueryEscape(*since)
+	if *shiftID != "" {
+		path += "&shift=" + url.QueryEscape(*shiftID)
+	}
 	if err := scheduleRequest(*socket, http.MethodGet, path, nil, &response); err != nil {
 		return err
 	}
@@ -325,6 +384,8 @@ func oncallCLIReport(args []string) error {
 	fmt.Printf("On-call report %s → %s\n", formatOnCallTime(response.Since), formatOnCallTime(response.Until))
 	fmt.Printf("completed=%d failed=%d running=%d canceled=%d total=%d\n",
 		response.Completed, response.Failed, response.Running, response.Canceled, response.Total)
+	fmt.Printf("checks=%d incidents=%d agent_runs=%d\n",
+		response.Shift.Checks, response.Incidents, response.Shift.AgentRuns)
 	for _, job := range response.Jobs {
 		fmt.Println()
 		fmt.Println(formatOnCallJob(job))
@@ -332,28 +393,34 @@ func oncallCLIReport(args []string) error {
 	return nil
 }
 
-func formatOnCallWatch(watch oncall.Watch) string {
+func formatOnCallShift(shift oncall.Shift) string {
 	lines := []string{
-		fmt.Sprintf("%s  %s  %s@%s", watch.ID, watch.Status, watch.Repo, watch.Branch),
-		"  path: " + watch.Path,
-		fmt.Sprintf("  every %s · autonomy %s · max %dm", watch.Every, watch.Autonomy, watch.MaxMinutes),
+		fmt.Sprintf("%s  %s  %s  every %s", shift.ID, shift.Status, shift.Source, shift.Every),
+		"  " + shift.Objective,
+		fmt.Sprintf("  checks %d · incidents %d · agent runs %d/%d",
+			shift.Checks, shift.Incidents, shift.AgentRuns, shift.MaxAgentRuns),
 	}
-	if watch.Window != "" {
-		lines = append(lines, "  window: "+watch.Window)
+	if !shift.StartAt.IsZero() {
+		lines = append(lines, "  start: "+formatOnCallTime(shift.StartAt))
 	}
-	if !watch.NextCheck.IsZero() {
-		lines = append(lines, "  next: "+formatOnCallTime(watch.NextCheck))
+	if !shift.EndAt.IsZero() {
+		lines = append(lines, "  end: "+formatOnCallTime(shift.EndAt))
 	}
-	if watch.LastError != "" {
-		lines = append(lines, "  error: "+watch.LastError)
+	if shift.LastSummary != "" {
+		lines = append(lines, "  last: "+firstOnCallLine(shift.LastSummary))
+	}
+	if shift.LastError != "" {
+		lines = append(lines, "  error: "+firstOnCallLine(shift.LastError))
 	}
 	return strings.Join(lines, "\n")
 }
 
 func formatOnCallJob(job oncall.Job) string {
 	lines := []string{
-		fmt.Sprintf("%s  %s  %s@%s", job.ID, job.Status, job.Repo, job.Branch),
-		fmt.Sprintf("  run: %s · %s", job.Workflow, job.RunURL),
+		fmt.Sprintf("%s  %s  %s", job.ID, job.Status, job.Source),
+	}
+	if job.TriggerSummary != "" {
+		lines = append(lines, "  trigger: "+firstOnCallLine(job.TriggerSummary))
 	}
 	if job.Summary != "" {
 		lines = append(lines, "  summary: "+firstOnCallLine(job.Summary))
@@ -387,19 +454,23 @@ func formatOnCallTime(value time.Time) string {
 
 func printOnCallUsage() {
 	fmt.Print(`Usage:
-  nectar oncall watch add [--repo OWNER/NAME] [--path DIR] [--branch BRANCH]
-    [--every 5m] [--window 22:00-08:00] [--autonomy diagnose|fix]
-    [--max-minutes 20] [--max-attempts 2]
-    [--channel CHANNEL] [--chat CHAT_ID] [--thread THREAD_ID] [--agent AGENT]
-  nectar oncall watch list [--all] [--json]
-  nectar oncall watch pause|resume|check|delete <watch-id>
+  nectar oncall start --objective TEXT --source github|command|http [options]
+    github:  --repo OWNER/NAME [--path DIR] [--branch BRANCH]
+    command: --command TEXT [--workdir DIR] [--alert-on-exit]
+    http:    --url URL
+    common:  [--every 5m] [--start RFC3339] [--for 10h | --until RFC3339]
+             [--autonomy notify|diagnose|fix] [--max-minutes 20]
+             [--max-agent-runs 5] [--action-dir DIR]
+             [--channel CHANNEL] [--chat CHAT_ID]
+  nectar oncall list [--all] [--json]
+  nectar oncall show <shift-id> [--json]
+  nectar oncall check <shift-id> [--json]
+  nectar oncall pause|resume|stop|delete <shift-id>
   nectar oncall jobs [--limit N] [--json]
   nectar oncall job <job-id> [--json]
   nectar oncall retry|cancel <job-id>
-  nectar oncall report [--since 12h] [--json]
+  nectar oncall report [--shift ID] [--since 12h] [--json]
 
-Target chat defaults come from NECTAR_CHANNEL, NECTAR_CHAT_ID,
-NECTAR_CHAT_TYPE, NECTAR_THREAD_ID, and NECTAR_AGENT_ID, which Nectar injects
-into agent sessions. The local checkout defaults to NECTAR_WORKING_DIR.
+The shift owns the loop; each incident creates at most one bounded agent job.
 `)
 }

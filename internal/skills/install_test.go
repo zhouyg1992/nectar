@@ -59,7 +59,7 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 	if !strings.Contains(string(data), "memory add") {
 		t.Fatal("AGENTS hint does not describe memory")
 	}
-	if !strings.Contains(string(data), "oncall watch add") {
+	if !strings.Contains(string(data), "oncall start") {
 		t.Fatal("AGENTS hint does not describe on-call")
 	}
 

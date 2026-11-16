@@ -4,7 +4,7 @@
 
 ### Added
 
-- On-call mode MVP: poll GitHub Actions failures, run diagnostic or fix jobs in isolated git worktrees, store reports/diffs, and send results back to chat
+- Generic on-call shift MVP: OnCallShift with GitHub Actions / command / HTTP probes, one-off windows, budgets, diagnostic/fix jobs, and stored reports
 - `/oncall` chat commands, `nectar oncall` CLI, local socket API, `nectar-oncall` skill, and managed AGENTS.md guidance
 - Durable on-call job state, timeouts, concurrency limits, manual retries, cancellation, and deterministic reports
 

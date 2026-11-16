@@ -129,8 +129,8 @@ func (a *ScheduleAPI) Handler() http.Handler {
 	mux.HandleFunc("/schedule/", a.handleItem)
 	mux.HandleFunc("/memory", a.handleMemoryCollection)
 	mux.HandleFunc("/memory/", a.handleMemoryItem)
-	mux.HandleFunc("/oncall/watches", a.handleOnCallWatches)
-	mux.HandleFunc("/oncall/watches/", a.handleOnCallWatchItem)
+	mux.HandleFunc("/oncall/shifts", a.handleOnCallWatches)
+	mux.HandleFunc("/oncall/shifts/", a.handleOnCallWatchItem)
 	mux.HandleFunc("/oncall/jobs", a.handleOnCallJobs)
 	mux.HandleFunc("/oncall/jobs/", a.handleOnCallJobItem)
 	mux.HandleFunc("/oncall/report", a.handleOnCallReport)
@@ -148,9 +148,9 @@ func (a *ScheduleAPI) handleOnCallWatches(w http.ResponseWriter, r *http.Request
 	switch r.Method {
 	case http.MethodGet:
 		includePaused := r.URL.Query().Get("all") == "1" || r.URL.Query().Get("all") == "true"
-		writeJSON(w, http.StatusOK, map[string]any{"watches": a.oncall.ListWatches(includePaused)})
+		writeJSON(w, http.StatusOK, map[string]any{"shifts": a.oncall.ListShifts(includePaused)})
 	case http.MethodPost:
-		var req oncall.WatchRequest
+		var req oncall.ShiftRequest
 		if err := decodeJSON(w, r, &req); err != nil {
 			return
 		}
@@ -167,12 +167,12 @@ func (a *ScheduleAPI) handleOnCallWatches(w http.ResponseWriter, r *http.Request
 		if strings.TrimSpace(req.UserID) == "" {
 			req.UserID = createdBy
 		}
-		watch, err := a.oncall.AddWatch(r.Context(), req, createdBy)
+		shift, err := a.oncall.AddShift(r.Context(), req, createdBy)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{"watch": watch})
+		writeJSON(w, http.StatusCreated, map[string]any{"shift": shift})
 	default:
 		w.Header().Set("Allow", "GET, POST")
 		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
@@ -187,10 +187,10 @@ func (a *ScheduleAPI) handleOnCallWatchItem(w http.ResponseWriter, r *http.Reque
 	if !a.authorize(w, r) {
 		return
 	}
-	rest := strings.TrimPrefix(r.URL.Path, "/oncall/watches/")
+	rest := strings.TrimPrefix(r.URL.Path, "/oncall/shifts/")
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
-		writeError(w, http.StatusNotFound, errors.New("on-call watch id is required"))
+		writeError(w, http.StatusNotFound, errors.New("on-call shift id is required"))
 		return
 	}
 	id := parts[0]
@@ -200,39 +200,46 @@ func (a *ScheduleAPI) handleOnCallWatchItem(w http.ResponseWriter, r *http.Reque
 	}
 	switch {
 	case action == "" && r.Method == http.MethodGet:
-		watch, ok := a.oncall.GetWatch(id)
+		shift, ok := a.oncall.GetShift(id)
 		if !ok {
-			writeError(w, http.StatusNotFound, fmt.Errorf("on-call watch %s not found", id))
+			writeError(w, http.StatusNotFound, fmt.Errorf("on-call shift %s not found", id))
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"watch": watch})
+		writeJSON(w, http.StatusOK, map[string]any{"shift": shift})
 	case (action == "" || action == "delete") && r.Method == http.MethodDelete:
-		if err := a.oncall.DeleteWatch(id); err != nil {
+		if err := a.oncall.DeleteShift(id); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
 	case action == "pause" && r.Method == http.MethodPost:
-		watch, err := a.oncall.PauseWatch(id)
+		shift, err := a.oncall.PauseShift(id)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"watch": watch})
+		writeJSON(w, http.StatusOK, map[string]any{"shift": shift})
 	case action == "resume" && r.Method == http.MethodPost:
-		watch, err := a.oncall.ResumeWatch(id)
+		shift, err := a.oncall.ResumeShift(id)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"watch": watch})
+		writeJSON(w, http.StatusOK, map[string]any{"shift": shift})
+	case action == "stop" && r.Method == http.MethodPost:
+		shift, err := a.oncall.StopShift(id)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"shift": shift})
 	case action == "check" && r.Method == http.MethodPost:
-		job, err := a.oncall.CheckWatchNow(r.Context(), id)
+		job, err := a.oncall.CheckShiftNow(r.Context(), id)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"watch_id": id, "job": job})
+		writeJSON(w, http.StatusOK, map[string]any{"shift_id": id, "job": job})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, errors.New("method or action not allowed"))
 	}
@@ -328,7 +335,8 @@ func (a *ScheduleAPI) handleOnCallReport(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, a.oncall.Report(since))
+	shiftID := strings.TrimSpace(r.URL.Query().Get("shift"))
+	writeJSON(w, http.StatusOK, a.oncall.Report(shiftID, since))
 }
 
 func parseReportSince(value string) (time.Time, error) {

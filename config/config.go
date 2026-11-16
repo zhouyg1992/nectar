@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -150,10 +149,9 @@ type ScheduleConfig struct {
 type OnCallConfig struct {
 	Enabled       *bool  `toml:"enabled"`
 	DefaultEvery  string `toml:"default_every"`
-	Window        string `toml:"window"`
 	Autonomy      string `toml:"autonomy"`
 	MaxMinutes    int    `toml:"max_minutes"`
-	MaxAttempts   int    `toml:"max_attempts"`
+	MaxAgentRuns  int    `toml:"max_agent_runs"`
 	MaxConcurrent int    `toml:"max_concurrent"`
 }
 
@@ -217,7 +215,7 @@ func defaults() Config {
 			DefaultEvery:  "5m",
 			Autonomy:      "diagnose",
 			MaxMinutes:    20,
-			MaxAttempts:   2,
+			MaxAgentRuns:  5,
 			MaxConcurrent: 1,
 		},
 	}
@@ -523,26 +521,20 @@ func normalize(cfg *Config) error {
 	if interval, err := time.ParseDuration(cfg.OnCall.DefaultEvery); err != nil || interval <= 0 {
 		return fmt.Errorf("invalid oncall.default_every %q", cfg.OnCall.DefaultEvery)
 	}
-	cfg.OnCall.Window = strings.TrimSpace(cfg.OnCall.Window)
-	if cfg.OnCall.Window != "" {
-		if _, err := parseOnCallWindow(cfg.OnCall.Window); err != nil {
-			return err
-		}
-	}
 	cfg.OnCall.Autonomy = strings.ToLower(strings.TrimSpace(cfg.OnCall.Autonomy))
 	if cfg.OnCall.Autonomy == "" {
 		cfg.OnCall.Autonomy = "diagnose"
 	}
 	switch cfg.OnCall.Autonomy {
-	case "diagnose", "fix":
+	case "notify", "diagnose", "fix":
 	default:
-		return fmt.Errorf("unsupported oncall.autonomy %q (supported: diagnose, fix)", cfg.OnCall.Autonomy)
+		return fmt.Errorf("unsupported oncall.autonomy %q (supported: notify, diagnose, fix)", cfg.OnCall.Autonomy)
 	}
 	if cfg.OnCall.MaxMinutes <= 0 {
 		cfg.OnCall.MaxMinutes = 20
 	}
-	if cfg.OnCall.MaxAttempts <= 0 {
-		cfg.OnCall.MaxAttempts = 2
+	if cfg.OnCall.MaxAgentRuns <= 0 {
+		cfg.OnCall.MaxAgentRuns = 5
 	}
 	if cfg.OnCall.MaxConcurrent <= 0 {
 		cfg.OnCall.MaxConcurrent = 1
@@ -591,30 +583,6 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	return nil
-}
-
-func parseOnCallWindow(value string) (struct{}, error) {
-	parts := strings.Split(value, "-")
-	if len(parts) != 2 {
-		return struct{}{}, fmt.Errorf("invalid oncall.window %q (use HH:MM-HH:MM)", value)
-	}
-	minutes := make([]int, 0, 2)
-	for _, part := range parts {
-		fields := strings.Split(strings.TrimSpace(part), ":")
-		if len(fields) != 2 {
-			return struct{}{}, fmt.Errorf("invalid oncall.window %q (use HH:MM-HH:MM)", value)
-		}
-		hour, hourErr := strconv.Atoi(fields[0])
-		minute, minuteErr := strconv.Atoi(fields[1])
-		if hourErr != nil || minuteErr != nil || hour < 0 || hour > 23 || minute < 0 || minute > 59 {
-			return struct{}{}, fmt.Errorf("invalid oncall.window %q (use HH:MM-HH:MM)", value)
-		}
-		minutes = append(minutes, hour*60+minute)
-	}
-	if minutes[0] == minutes[1] {
-		return struct{}{}, fmt.Errorf("oncall.window start and end must differ")
-	}
-	return struct{}{}, nil
 }
 
 func normalizePlatform(cfg *Config) error {

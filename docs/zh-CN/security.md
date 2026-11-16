@@ -12,7 +12,7 @@ Codex/OpenCode/Cursor/Claude Code/Pi 会在配置的工作目录里读取、写�
 - OpenCode 的 `opencode.auto_approve = true` 会自动批准工具权限；在不可信群聊中慎用。
 - Cursor 的 `cursor.auto_approve = true` 等价于 `-f`，会自动批准工具调用；`cursor.trust_workspace = true` 会跳过工作目录信任提示。两者默认开启，不可信环境请收紧。
 - Pi 的 `pi.trust_workspace = true` 等价于 `--approve`，会加载工作目录内的项目设置、skills、上下文文件和扩展。不可信仓库中请关闭。
-- 值班模式的 `fix` 会在隔离 worktree 中允许 Agent 改代码和跑测试；CI 日志、issue 正文和仓库内容都可能包含 prompt injection，必须按不可信数据处理。当前 MVP 不会自动 merge 或 deploy。
+- 值班模式的 `fix` 会在隔离 workspace 中允许 Agent 改代码和跑测试；CI 日志、命令输出、HTTP 内容、issue 正文和仓库内容都可能包含 prompt injection，必须按不可信数据处理。`command` probe 会在本机执行 shell 命令，只应允许受信管理员创建。当前 MVP 不会自动 merge 或 deploy。
 
 ## 已知限制
 

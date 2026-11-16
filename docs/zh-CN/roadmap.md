@@ -2,9 +2,9 @@
 
 ## 进行中：值班模式
 
-- GitHub Actions 失败轮询、独立 git worktree、诊断/修复 job 和本地产物
+- 通用 OnCallShift：GitHub Actions / command / HTTP probe、一次性时间窗、预算、诊断/修复 job 和本地产物
 - `/oncall` 聊天命令、`nectar oncall` CLI、自然语言 Skill 和恢复记录
-- 后续：交互式审批、flaky test 分类、Sentry / Prometheus 触发源
+- 后续：更多 probe、交互式审批和 flaky test 分类
 
 ## v0.8.1 已完成
 

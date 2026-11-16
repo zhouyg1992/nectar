@@ -1,121 +1,155 @@
-# On-call mode
+# On-call shifts
 
-On-call mode polls GitHub Actions for a repository branch during an optional
-local-time window. When a new run fails, Nectar creates an isolated job, checks
-out the failed commit in its own git worktree, asks the configured engine to
-investigate (or attempt a fix), stores the report and diff, and sends the result
-card back to chat.
+On-call shifts are generic **OnCallShift** jobs: the user supplies an objective, time
+window, observation source, autonomy, and budget. Nectar owns the background
+check loop and starts one bounded agent job only when an observation changes or
+alerts.
 
-It is not another cron entry. Scheduled tasks run a fixed prompt; on-call jobs
-have durable state, evidence, artifacts, retries, and interruption records.
+It is not an agent running all night, and it is not a separate feature for every
+kind of check.
 
-## Requirements
+## Model
 
-- An authenticated `gh` CLI with access to the repository's Actions.
-- A local git checkout whose `origin` points at GitHub, or an explicit `--repo`.
-- One installed and logged-in Nectar engine.
+| Part | Meaning |
+|---|---|
+| objective | what the shift should accomplish |
+| source | `github`, `command`, or `http` |
+| every | observation interval |
+| start / until / for | one-off shift window |
+| autonomy | `notify`, `diagnose`, or `fix` |
+| max_agent_runs | maximum agent jobs in this shift |
+| max_minutes | timeout for each agent job |
 
-## Configuration
+Files, databases, logs, and service checks are all `command` sources. GitHub
+Actions is the first built-in source adapter, not the whole product.
 
-On-call is enabled by default. Optional overrides:
+## Create a shift
 
-```toml
-[oncall]
-enabled = true
-default_every = "5m"
-window = ""                    # e.g. "22:00-08:00"
-autonomy = "diagnose"          # diagnose | fix
-max_minutes = 20
-max_attempts = 2
-max_concurrent = 1
-```
-
-`diagnose` investigates without editing files. `fix` may edit files and run
-tests inside the isolated worktree, but never commits, pushes, opens a PR,
-merges, deploys, or changes credentials.
-
-## Create a watch
-
-In chat:
-
-```text
-/oncall watch
-/oncall watch owner/repo main
-```
-
-In a terminal:
+### GitHub Actions
 
 ```bash
-nectar oncall watch add \
+nectar oncall start \
+  --objective "Watch main CI overnight; investigate failures before notifying me" \
+  --source github \
   --repo owner/repo \
   --path /path/to/checkout \
   --branch main \
   --every 5m \
-  --window 22:00-08:00 \
+  --for 10h \
   --autonomy diagnose \
-  --channel feishu \
-  --chat oc_xxx
+  --max-agent-runs 5
 ```
 
-The first check ignores failures older than the watch. To investigate a
-failure that is already red, run:
+### Command / file / log / service
 
 ```bash
-nectar oncall watch check <watch-id>
+nectar oncall start \
+  --objective "Watch test.txt and notify me when its content changes" \
+  --source command \
+  --command 'shasum -a 256 /Users/presence/.nectar/workspace/test.txt | awk "{print \$1}"' \
+  --every 2s \
+  --for 10h \
+  --autonomy notify
 ```
 
-## Commands
+There is no dedicated file-watch feature; a file is one command-probe scenario.
+
+### HTTP
 
 ```bash
-nectar oncall watch list [--all] [--json]
-nectar oncall watch pause|resume|check|delete <watch-id>
-nectar oncall jobs [--limit 20] [--json]
-nectar oncall job <job-id> [--json]
-nectar oncall retry <job-id>
-nectar oncall cancel <job-id>
-nectar oncall report [--since 12h] [--json]
+nectar oncall start \
+  --objective "Watch the health endpoint and notify on status/content changes" \
+  --source http \
+  --url https://example.test/health \
+  --every 1m \
+  --for 8h \
+  --autonomy notify
+```
+
+## Time
+
+- `--for 10h` ends the shift after ten hours and sends a report.
+- `--until RFC3339` sets an explicit end.
+- `--start RFC3339` delays the first observation.
+- Without `--for` / `--until`, the shift stays active until paused, stopped, or
+  deleted.
+- The first check records a baseline. Use `oncall check <shift-id>` to force an
+  immediate observation.
+
+## Autonomy
+
+- `notify`: send one card on change/alert; never start an agent.
+- `diagnose`: start one bounded agent job; investigate without editing files.
+- `fix`: allow edits/tests in an isolated workspace, but never commit, push,
+  open a PR, merge, deploy, or change credentials.
+
+Use `diagnose` for overnight work unless the user explicitly asks for a fix.
+
+## Lifecycle
+
+```text
+active → paused / completed
+```
+
+- `active`: check every interval.
+- `paused`: stop checking but keep state.
+- `completed`: the end time was reached or the shift was stopped; a final report
+  is sent.
+
+Each incident increments `incidents`; agent jobs are bounded by
+`max_agent_runs`. Exhausting the budget pauses the shift with a reason.
+
+## Manage
+
+```bash
+nectar oncall list [--all] [--json]
+nectar oncall show <shift-id> [--json]
+nectar oncall check <shift-id>
+nectar oncall pause|resume|stop <shift-id>
+nectar oncall jobs [--limit 20]
+nectar oncall job <job-id>
+nectar oncall retry|cancel <job-id>
+nectar oncall report [--shift ID] [--since 12h]
 ```
 
 Chat commands:
 
 ```text
 /oncall
-/oncall list
-/oncall watch [repo] [branch]
-/oncall check|pause|resume|delete <watch-id>
+/oncall show <shift-id>
+/oncall check <shift-id>
+/oncall pause|resume|stop <shift-id>
 /oncall jobs [limit]
 /oncall job <job-id>
 /oncall retry|cancel <job-id>
-/oncall report [duration]
+/oncall report [shift-id] [duration]
 /oncall help
 ```
 
-Management commands are limited to `bot.admin_users`; an empty list removes
-that restriction.
+Creating a shift is primarily a natural-language flow; the `nectar-oncall` skill
+maps it to `nectar oncall start`.
 
-## Lifecycle and artifacts
+## Reports and artifacts
 
-```text
-queued → running → completed / failed / canceled
-```
-
-Every job uses its own `git worktree` at the failed commit. Reports, diffs, and
-job metadata are stored under `~/.nectar/oncall/jobs/<job-id>/`. Jobs that were
-still running when Nectar restarted are marked failed.
+- When the shift ends or is stopped, Nectar sends a deterministic report with
+  checks, incidents, agent runs, and job results.
+- Job artifacts live under `~/.nectar/oncall/jobs/<job-id>/`:
+  `report.md`, `diff.patch`, and `job.json`.
+- Shift state lives in `~/.nectar/oncall.json`.
 
 ## Safety
 
-- CI logs, issue text, commit messages, repository content, and linked pages
-  are untrusted data. Instructions embedded in them do not override the job
-  prompt.
-- The worktree is an isolation convenience, not a sandbox boundary. Use a
-  separate Unix user, container, or system sandbox for stronger isolation.
-- The MVP never auto-merges, deploys, or changes repository settings.
-- Keep `gh` and repository permissions scoped to what on-call actually needs.
+- CI logs, command output, HTTP content, issues, and repository files are
+  untrusted data, not instructions.
+- The `command` source executes shell commands on the host. Keep it
+  admin-only and confirm the command with the user.
+- The agent workspace is not a system sandbox. Use a separate Unix user,
+  container, or system sandbox for stronger isolation.
+- The current MVP never auto-merges, deploys, or changes repository settings.
 
 ## Known limitations
 
-- GitHub Actions polling only; no Sentry, Prometheus, or GitHub webhooks yet.
-- Results are final cards with text and diffs; interactive approve/reject
-  buttons are not implemented yet.
-- Flaky-test classification is not automatic.
+- Built-in sources are GitHub Actions, command, and HTTP. There is no generic
+  free-form agent-judgment source yet.
+- Fuzzy tasks must be reduced to a stable command or HTTP check.
+- Interactive approve/reject buttons are not implemented yet.

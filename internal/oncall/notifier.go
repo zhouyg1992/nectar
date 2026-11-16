@@ -10,25 +10,44 @@ import (
 	"github.com/zhouyg1992/nectar/internal/platform"
 )
 
-// Notifier sends job and digest cards back to the chat that owns the watch.
 type Notifier interface {
+	NotifyObservation(ctx context.Context, shift Shift, observation Observation) error
 	NotifyJob(ctx context.Context, job Job) error
-	NotifyReport(ctx context.Context, watch Watch, report Report) error
+	NotifyReport(ctx context.Context, report Report) error
 }
 
 type PlatformNotifier struct {
 	Platform platform.PlatformAdapter
-	BotName  string
+}
+
+func (n *PlatformNotifier) NotifyObservation(ctx context.Context, shift Shift, observation Observation) error {
+	title := "🌙 On-call event"
+	status := platform.CardInfo
+	if observation.Alert {
+		title = "⚠️ On-call alert"
+		status = platform.CardError
+	}
+	body := fmt.Sprintf("**Objective**\n%s\n\n**Observed**\n%s", shift.Objective, observation.Summary)
+	if observation.Details != "" {
+		body += "\n\n```text\n" + truncate(observation.Details, 4000) + "\n```"
+	}
+	card := &platform.Card{
+		Title:  title,
+		Status: status,
+		Body:   body,
+		Footer: shift.ID + " · " + shift.Source + " · " + shift.Every,
+	}
+	return n.send(ctx, replyTargetShift(shift), card, body)
 }
 
 func (n *PlatformNotifier) NotifyJob(ctx context.Context, job Job) error {
-	title := "🍯 On-call complete"
+	title := "🍯 On-call job complete"
 	status := platform.CardComplete
 	if job.Status == JobFailed {
-		title = "⚠️ On-call failed"
+		title = "⚠️ On-call job failed"
 		status = platform.CardError
 	} else if job.Status == JobCanceled {
-		title = "⚪ On-call canceled"
+		title = "⚪ On-call job canceled"
 		status = platform.CardInfo
 	}
 	body := jobCardBody(job)
@@ -38,41 +57,41 @@ func (n *PlatformNotifier) NotifyJob(ctx context.Context, job Job) error {
 		Body:   body,
 		Footer: fmt.Sprintf("%s · %s · %s", job.ID, job.Autonomy, formatDuration(job.StartedAt, job.FinishedAt)),
 	}
-	return n.send(ctx, ReplyTargetFromJob(job), card, body)
+	return n.send(ctx, replyTargetJob(job), card, body)
 }
 
-func (n *PlatformNotifier) NotifyReport(ctx context.Context, watch Watch, report Report) error {
+func (n *PlatformNotifier) NotifyReport(ctx context.Context, report Report) error {
 	var body strings.Builder
-	fmt.Fprintf(&body, "**%s** · `%s`\n\n", watch.Repo, watch.Branch)
+	if report.Shift.Objective != "" {
+		fmt.Fprintf(&body, "**Objective**\n%s\n\n", report.Shift.Objective)
+	}
 	fmt.Fprintf(&body, "✅ %d completed · ⚠️ %d failed · ▶️ %d running · ⚪ %d canceled\n",
 		report.Completed, report.Failed, report.Running, report.Canceled)
+	fmt.Fprintf(&body, "Checks: %d · Incidents: %d · Agent runs: %d\n",
+		report.Shift.Checks, report.Incidents, report.Shift.AgentRuns)
 	if len(report.Jobs) == 0 {
 		body.WriteString("\nNo on-call jobs in this period.")
 	} else {
 		body.WriteString("\n")
 		for _, job := range report.Jobs {
 			line := fmt.Sprintf("- `%s` %s", job.ID, statusLabel(job.Status))
-			if job.Workflow != "" {
-				line += " · " + job.Workflow
-			}
-			if job.Summary != "" {
-				line += " — " + firstLine(job.Summary)
+			if job.TriggerSummary != "" {
+				line += " — " + firstLine(job.TriggerSummary)
 			}
 			body.WriteString(line + "\n")
 		}
 	}
 	card := &platform.Card{
-		Title:  "🌙 Nectar on-call report",
+		Title:  "🌙 On-call report",
 		Status: platform.CardInfo,
 		Body:   strings.TrimSpace(body.String()),
-		Footer: "Deterministic job summary from Nectar",
+		Footer: report.Shift.ID + " · " + report.Shift.Source,
 	}
-	return n.send(ctx, ReplyTargetFromWatch(watch), card, strings.TrimSpace(body.String()))
+	return n.send(ctx, replyTargetShift(report.Shift), card, strings.TrimSpace(body.String()))
 }
 
 func (n *PlatformNotifier) send(ctx context.Context, reply platform.Reply, card *platform.Card, fallback string) error {
-	caps := n.Platform.Capabilities()
-	if caps.Card {
+	if n.Platform.Capabilities().Card {
 		reply.Card = card
 		if _, err := n.Platform.Send(ctx, reply); err == nil {
 			return nil
@@ -84,18 +103,18 @@ func (n *PlatformNotifier) send(ctx context.Context, reply platform.Reply, card 
 	return err
 }
 
-func ReplyTargetFromWatch(watch Watch) platform.Reply {
+func replyTargetShift(shift Shift) platform.Reply {
 	return platform.Reply{
-		ChatID:        watch.ChatID,
-		ChatType:      watch.ChatType,
-		UserID:        watch.UserID,
-		ReplyTo:       watch.MessageID,
-		ThreadID:      watch.ThreadID,
-		ReplyInThread: watch.ThreadID != "" && watch.MessageID != "",
+		ChatID:        shift.ChatID,
+		ChatType:      shift.ChatType,
+		UserID:        shift.UserID,
+		ReplyTo:       shift.MessageID,
+		ThreadID:      shift.ThreadID,
+		ReplyInThread: shift.ThreadID != "" && shift.MessageID != "",
 	}
 }
 
-func ReplyTargetFromJob(job Job) platform.Reply {
+func replyTargetJob(job Job) platform.Reply {
 	return platform.Reply{
 		ChatID:        job.ChatID,
 		ChatType:      job.ChatType,
@@ -108,8 +127,12 @@ func ReplyTargetFromJob(job Job) platform.Reply {
 
 func jobCardBody(job Job) string {
 	var body strings.Builder
-	fmt.Fprintf(&body, "**%s** · `%s` · %s\n\n", job.Repo, job.Branch, job.Workflow)
+	fmt.Fprintf(&body, "**Objective**\n%s\n\n", job.Objective)
+	if job.TriggerSummary != "" {
+		fmt.Fprintf(&body, "**Observed**\n%s\n", job.TriggerSummary)
+	}
 	if job.Summary != "" {
+		body.WriteString("\n")
 		body.WriteString(job.Summary)
 		body.WriteString("\n")
 	}
@@ -123,7 +146,7 @@ func jobCardBody(job Job) string {
 		body.WriteString(truncate(job.Diff, 12000))
 	}
 	if job.RunURL != "" {
-		fmt.Fprintf(&body, "\n[Failed run](%s)", job.RunURL)
+		fmt.Fprintf(&body, "\n[Observed run](%s)", job.RunURL)
 	}
 	if job.ArtifactDir != "" {
 		fmt.Fprintf(&body, " · `%s`", job.ArtifactDir)
@@ -160,14 +183,6 @@ func statusLabel(status JobStatus) string {
 	default:
 		return string(status)
 	}
-}
-
-func firstLine(value string) string {
-	line := strings.TrimSpace(value)
-	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
-		line = line[:idx]
-	}
-	return truncate(strings.TrimSpace(line), 180)
 }
 
 func truncate(value string, max int) string {
