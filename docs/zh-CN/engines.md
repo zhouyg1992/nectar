@@ -35,16 +35,16 @@ nectar service restart
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
-Nectar 默认通过 `codex exec --json` 执行任务，并用 `resume` 续接会话。模型、推理强度、sandbox 和工作目录在 `[codex]` 中配置。
+Nectar 默认通过 Codex app-server 执行任务，模型、推理强度、sandbox 和工作目录在 `[codex]` 中配置。
 
-如果需要在任务运行中插话（`/steer`、`/append`、`/ps`、`/btw`），把 Codex backend 切换为 app-server：
+默认配置已支持插话（`/steer`、`/append`、`/ps`、`/btw`）：
 
 ```toml
 [codex]
 backend = "app-server"
 ```
 
-app-server backend 通过 Codex 的 `turn/start`、`turn/steer` 和 `turn/interrupt` 接口工作。该协议目前仍标记为 experimental，建议锁定可用的 Codex 版本。默认 `exec` backend 不支持插话，四个命令会明确提示不支持。
+app-server backend 通过 Codex 的 `turn/start`、`turn/steer` 和 `turn/interrupt` 接口工作。该协议目前仍标记为 experimental，建议锁定可用的 Codex 版本。显式设置 `backend = "exec"` 可回退到旧传输，但不支持插话。
 
 如果服务环境找不到 `codex`，把 `[codex].path` 设置为绝对路径。
 
@@ -57,16 +57,16 @@ claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
-Nectar 默认通过 `claude -p --output-format stream-json --verbose --include-partial-messages` 执行任务，通过 stdin 传入 prompt，并用 `--resume` 续接会话。
+Nectar 默认通过 Claude Code streaming-input 执行任务，并用 `--resume` 续接会话。
 
-需要插话时，把 Claude backend 切换为 streaming-input：
+默认配置已支持插话：
 
 ```toml
 [claude]
 backend = "stream-json"
 ```
 
-该模式使用 `--input-format stream-json` 保持进程存活，`/steer` 会向同一进程追加用户消息。默认 `print` backend 不支持插话。
+该模式使用 `--input-format stream-json` 保持进程存活，`/steer` 会向同一进程追加用户消息。显式设置 `backend = "print"` 可回退到旧的一次性模式，但不支持插话。
 
 `auto_approve = true` 会映射为 `--dangerously-skip-permissions`，适合无人值守的 bot 场景；关闭时使用 `permission_mode`。
 
@@ -97,9 +97,9 @@ Nectar 使用 `-p --output-format stream-json --stream-partial-output`，并用 
 opencode run --format json "Reply with exactly OK"
 ```
 
-Nectar 通过 `opencode run --format json` 执行任务，并用 `--session` 续接会话。`model` 为空时会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。
+Nectar 通过 OpenCode 共享 server 执行任务，并用 `--session` 续接会话。`model` 为空时会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。
 
-OpenCode 的插话通过共享 server API 的 `delivery = "steer"` 实现。默认 `standalone = true` 会为每次运行启动私有 server，此时插话不可用；需要把 `standalone` 设为 `false`，或配置 `server_url` 指向已有 OpenCode server。
+OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。显式设置 `standalone = true` 会改用私有 server，此时插话不可用。
 
 ## Pi
 
@@ -110,16 +110,16 @@ pi auth check --provider anthropic
 pi --mode json "Reply with exactly OK"
 ```
 
-Nectar 默认通过 `pi --mode json` 执行任务，通过 stdin 传入 prompt，并用 `--session` 续接会话。`provider`、`model` 和 `thinking` 会直接透传为 Pi 参数。
+Nectar 默认通过 Pi RPC 执行任务，并用 `--session` 续接会话。`provider`、`model` 和 `thinking` 会直接透传为 Pi 参数。
 
-需要插话时，把 Pi backend 切换为 RPC：
+默认配置已支持插话：
 
 ```toml
 [pi]
 backend = "rpc"
 ```
 
-RPC backend 使用 `pi --mode rpc`，`/steer` 会发送 Pi 原生的 `steer` 命令。默认 `json` backend 不支持插话。
+RPC backend 使用 `pi --mode rpc`，`/steer` 会发送 Pi 原生的 `steer` 命令。显式设置 `backend = "json"` 可回退到旧模式，但不支持插话。
 
 ## 常见问题
 

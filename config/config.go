@@ -157,7 +157,7 @@ func defaults() Config {
 		Telegram: TelegramConfig{LogLevel: "info"},
 		Codex: CodexConfig{
 			Path:           "codex",
-			Backend:        "exec",
+			Backend:        "app-server",
 			Sandbox:        "workspace-write",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
@@ -168,7 +168,7 @@ func defaults() Config {
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
-			Standalone:     true,
+			Standalone:     false,
 			AutoApprove:    true,
 		},
 		Cursor: CursorConfig{
@@ -181,7 +181,7 @@ func defaults() Config {
 		},
 		Claude: ClaudeConfig{
 			Path:           "claude",
-			Backend:        "print",
+			Backend:        "stream-json",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
@@ -189,7 +189,7 @@ func defaults() Config {
 		},
 		Pi: PiConfig{
 			Path:           "pi",
-			Backend:        "json",
+			Backend:        "rpc",
 			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
 			Timeout:        "30m",
 			MaxOutputBytes: 2 << 20,
@@ -435,10 +435,10 @@ func normalize(cfg *Config) error {
 		cfg.Codex.Path = "codex"
 	}
 	switch backend := strings.ToLower(strings.TrimSpace(cfg.Codex.Backend)); backend {
-	case "", "exec":
-		cfg.Codex.Backend = "exec"
-	case "app-server", "app_server", "appserver":
+	case "", "app-server", "app_server", "appserver":
 		cfg.Codex.Backend = "app-server"
+	case "exec":
+		cfg.Codex.Backend = "exec"
 	default:
 		return fmt.Errorf("unsupported codex.backend %q (supported: exec, app-server)", cfg.Codex.Backend)
 	}
@@ -474,10 +474,10 @@ func normalize(cfg *Config) error {
 		return fmt.Errorf("unsupported claude.permission_mode %q", mode)
 	}
 	switch backend := strings.ToLower(strings.TrimSpace(cfg.Claude.Backend)); backend {
-	case "", "print":
-		cfg.Claude.Backend = "print"
-	case "stream-json", "stream_json", "stream":
+	case "", "stream-json", "stream_json", "stream":
 		cfg.Claude.Backend = "stream-json"
+	case "print":
+		cfg.Claude.Backend = "print"
 	default:
 		return fmt.Errorf("unsupported claude.backend %q (supported: print, stream-json)", cfg.Claude.Backend)
 	}
@@ -485,10 +485,10 @@ func normalize(cfg *Config) error {
 		return errors.New("claude.max_turns must not be negative")
 	}
 	switch backend := strings.ToLower(strings.TrimSpace(cfg.Pi.Backend)); backend {
-	case "", "json":
-		cfg.Pi.Backend = "json"
-	case "rpc":
+	case "", "rpc":
 		cfg.Pi.Backend = "rpc"
+	case "json":
+		cfg.Pi.Backend = "json"
 	default:
 		return fmt.Errorf("unsupported pi.backend %q (supported: json, rpc)", cfg.Pi.Backend)
 	}

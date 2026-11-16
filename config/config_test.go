@@ -22,6 +22,9 @@ func TestLoadDefaultsAndEnv(t *testing.T) {
 	if cfg.Bot.Engine != "codex" || cfg.Bot.Name != "Nectar" {
 		t.Fatalf("bot defaults = %#v", cfg.Bot)
 	}
+	if cfg.OpenCode.Standalone {
+		t.Fatal("opencode should default to the shared server")
+	}
 	timeout, err := cfg.Timeout()
 	if err != nil {
 		t.Fatal(err)
@@ -46,20 +49,20 @@ func TestCodexBackendDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Codex.Backend != "exec" {
-		t.Fatalf("default codex backend = %q, want exec", cfg.Codex.Backend)
+	if cfg.Codex.Backend != "app-server" {
+		t.Fatalf("default codex backend = %q, want app-server", cfg.Codex.Backend)
 	}
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[codex]\nbackend = \"app_server\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[codex]\nbackend = \"exec\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Codex.Backend != "app-server" {
-		t.Fatalf("normalized codex backend = %q, want app-server", cfg.Codex.Backend)
+	if cfg.Codex.Backend != "exec" {
+		t.Fatalf("explicit codex backend = %q, want exec", cfg.Codex.Backend)
 	}
 
 	if err := os.WriteFile(path, []byte("[codex]\nbackend = \"other\"\n"), 0o600); err != nil {
@@ -75,12 +78,12 @@ func TestClaudeAndPiBackendDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Claude.Backend != "print" || cfg.Pi.Backend != "json" {
+	if cfg.Claude.Backend != "stream-json" || cfg.Pi.Backend != "rpc" {
 		t.Fatalf("default backends = claude:%q pi:%q", cfg.Claude.Backend, cfg.Pi.Backend)
 	}
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	body := "[claude]\nbackend = \"stream_json\"\n[pi]\nbackend = \"rpc\"\n"
+	body := "[claude]\nbackend = \"print\"\n[pi]\nbackend = \"json\"\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -88,8 +91,8 @@ func TestClaudeAndPiBackendDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Claude.Backend != "stream-json" || cfg.Pi.Backend != "rpc" {
-		t.Fatalf("normalized backends = claude:%q pi:%q", cfg.Claude.Backend, cfg.Pi.Backend)
+	if cfg.Claude.Backend != "print" || cfg.Pi.Backend != "json" {
+		t.Fatalf("explicit backends = claude:%q pi:%q", cfg.Claude.Backend, cfg.Pi.Backend)
 	}
 
 	if err := os.WriteFile(path, []byte("[claude]\nbackend = \"other\"\n"), 0o600); err != nil {

@@ -239,7 +239,7 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 
 `/help`, `/commands`, and short questions such as "what commands are available" return the command card without invoking the engine.
 
-Steering only applies to the explicit commands. Ordinary messages still queue while a task is running. Codex requires `[codex].backend = "app-server"`; Claude Code requires `[claude].backend = "stream-json"`; Pi requires `[pi].backend = "rpc"`; OpenCode requires a shared server (`standalone = false` or `server_url`). Unsupported engines return an explicit error instead of silently queueing.
+Steering only applies to the explicit commands. Ordinary messages still queue while a task is running. Codex, Claude Code, Pi, and OpenCode use steering-capable transports by default. Steering is disabled only when Codex is explicitly set to `exec`, Claude to `print`, Pi to `json`, or OpenCode to `standalone = true`. Unsupported engines such as Cursor return an explicit error instead of silently queueing.
 
 ### Sessions
 

@@ -243,7 +243,7 @@ Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当
 
 群聊里的 `/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/status`、`/stop` 和插话命令仅限 `bot.admin_users`；单聊保持单人使用行为。
 
-插话只对显式命令生效，普通消息在任务运行中仍然进入队列。当前支持 Codex（`[codex].backend = "app-server"`）、Claude Code（`[claude].backend = "stream-json"`）、Pi（`[pi].backend = "rpc"`）和共享 server 模式下的 OpenCode；其他引擎暂不支持时会直接提示，不会静默改为排队。
+插话只对显式命令生效，普通消息在任务运行中仍然进入队列。Codex、Claude Code、Pi 和 OpenCode 默认使用支持插话的 transport；只有显式把 Codex 切回 `exec`、Claude 切回 `print`、Pi 切回 `json`，或把 OpenCode 设为 `standalone = true` 时才会失去插话能力。Cursor 等暂不支持的引擎会直接提示，不会静默改为排队。
 
 会话持久化在 `~/.nectar/sessions.json`。启动时会自动迁移 version 1 文件，下一次写入使用 version 2 结构。
 
