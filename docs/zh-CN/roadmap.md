@@ -1,5 +1,13 @@
 # 路线图与待实现
 
+## v0.8.1 已完成
+
+- 会话管理 v2：稳定的 Nectar 会话 ID、名称、当前会话指针、每会话用量和消息数，以及 version 1 会话文件自动迁移
+- 新增 `/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive` 聊天命令；`/new [name]` 保留旧会话
+- 按会话的 FIFO 队列，并对共享同一 workspace 的运行做串行化
+- 排队消息复用一张卡片，从 Queued 原地更新为 Working 和 Complete
+- 钉钉卡片保留单换行，会话卡片改用 Markdown 表格对齐，并支持 Complete/Finalizing 两阶段收尾
+
 ## v0.8.0 已完成
 
 - 本地优先的 memory 层：profile / project / chat 作用域，显式 `/remember` 与 `/memory` 管理

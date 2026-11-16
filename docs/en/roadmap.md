@@ -1,5 +1,13 @@
 # Roadmap
 
+## v0.8.1 complete
+
+- Session management v2: stable Nectar session ids, names, active-session pointers, per-session usage and message counts, and automatic migration from version 1 session files
+- New `/list`, `/switch`, `/current`, `/rename`, `/archive`, and `/unarchive` chat commands; `/new [name]` keeps previous sessions
+- Per-session FIFO queues, with workspace-level serialization for runs that share files
+- Queued messages reuse one card that updates in place from Queued to Working to Complete
+- DingTalk cards preserve single line breaks, session cards use Markdown tables, and cards finalize in two stages before usage metadata arrives
+
 ## v0.8.0 complete
 
 - Local-first memory layer with profile / project / chat scopes, explicit `/remember`, and `/memory` management
