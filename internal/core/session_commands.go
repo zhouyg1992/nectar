@@ -54,7 +54,7 @@ func (r *Router) handleSessionCommand(key SessionKey, msg platform.Message, text
 			r.sendCommandResult(msg, platform.CardError, "⚠️ Switch Failed", err.Error())
 			return true
 		}
-		r.sendCommandResult(msg, platform.CardInfo, "🔀 Session Switched", sessionDetailText(session, r.engine.Name(), r.resolvedModel()))
+		r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Switched", sessionDetailText(session, r.engine.Name(), r.resolvedModel()))
 		return true
 	}
 
