@@ -41,8 +41,6 @@ type streamRun struct {
 	mu       sync.Mutex
 	session  string
 	finished bool
-	finishMu sync.Mutex
-	finish   *time.Timer
 }
 
 func NewStreamAdapter(cfg Config) *StreamAdapter {
@@ -79,7 +77,7 @@ func (a *StreamAdapter) Steer(ctx context.Context, sessionID string, text string
 	if run == nil {
 		return engine.ErrNoActiveTurn
 	}
-	return run.sendUser(ctx, text, true)
+	return run.sendUser(ctx, text)
 }
 
 func (a *StreamAdapter) Cancel(_ context.Context, sessionID string) error {
@@ -182,7 +180,7 @@ func (a *StreamAdapter) run(parent context.Context, sessionID, prompt string, op
 	}
 	go run.readAndWait(maxOutput)
 
-	if err := run.sendUser(runCtx, prompt, false); err != nil {
+	if err := run.sendUser(runCtx, prompt); err != nil {
 		cancel()
 		return nil, fmt.Errorf("send initial claude prompt: %w", err)
 	}
@@ -218,7 +216,7 @@ func (a *StreamAdapter) buildStreamArgs(sessionID string, opts engine.EngineOpti
 	return args
 }
 
-func (r *streamRun) sendUser(ctx context.Context, text string, steer bool) error {
+func (r *streamRun) sendUser(ctx context.Context, text string) error {
 	message := map[string]any{
 		"type": "user",
 		"message": map[string]any{
@@ -238,9 +236,6 @@ func (r *streamRun) sendUser(ctx context.Context, text string, steer bool) error
 	r.mu.Unlock()
 	if finished {
 		return engine.ErrNoActiveTurn
-	}
-	if steer {
-		r.cancelFinish()
 	}
 	select {
 	case <-ctx.Done():
@@ -269,17 +264,17 @@ func (r *streamRun) readAndWait(maxOutput int) {
 			r.adapter.track(event.SessionID, r)
 		}
 		if event.Type == engine.EventDone {
-			// Claude can emit a result for the current turn before a queued
-			// steer starts its follow-up turn. Keep the input stream alive for
-			// a short quiet period so that follow-up can begin.
-			r.scheduleFinish(time.Second)
+			r.mu.Lock()
+			r.finished = true
+			r.mu.Unlock()
 			doneSent = true
-		} else {
-			r.cancelFinish()
 		}
 		select {
 		case r.events <- event:
 		case <-r.ctx.Done():
+		}
+		if event.Type == engine.EventDone {
+			r.cancel()
 		}
 	}
 
@@ -296,7 +291,6 @@ func (r *streamRun) readAndWait(maxOutput int) {
 		}
 		emit(engine.Event{Type: engine.EventDone})
 	}
-	r.cancelFinish()
 	close(r.done)
 	r.mu.Lock()
 	sessionID := r.session
@@ -305,29 +299,6 @@ func (r *streamRun) readAndWait(maxOutput int) {
 		r.adapter.untrack(sessionID)
 	}
 	close(r.events)
-}
-
-func (r *streamRun) scheduleFinish(after time.Duration) {
-	r.finishMu.Lock()
-	defer r.finishMu.Unlock()
-	if r.finish != nil {
-		r.finish.Stop()
-	}
-	r.finish = time.AfterFunc(after, func() {
-		r.mu.Lock()
-		r.finished = true
-		r.mu.Unlock()
-		r.cancel()
-	})
-}
-
-func (r *streamRun) cancelFinish() {
-	r.finishMu.Lock()
-	if r.finish != nil {
-		r.finish.Stop()
-		r.finish = nil
-	}
-	r.finishMu.Unlock()
 }
 
 var _ engine.EngineAdapter = (*StreamAdapter)(nil)

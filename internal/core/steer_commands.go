@@ -38,8 +38,8 @@ func (r *Router) handleSteerCommand(key SessionKey, msg platform.Message, text s
 	var run *sessionRun
 	for _, candidate := range r.runningForKey(key) {
 		if candidate.sessionID == session.ID {
-			copy := candidate
-			run = &copy
+			runCopy := candidate
+			run = &runCopy
 			break
 		}
 	}

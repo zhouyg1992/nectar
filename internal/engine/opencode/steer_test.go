@@ -63,4 +63,45 @@ func TestSteerCallsSharedServerAPI(t *testing.T) {
 	}
 }
 
+func TestBuildArgsPrefersServerURL(t *testing.T) {
+	adapter := NewAdapter(Config{
+		Executable: "opencode",
+		WorkingDir: t.TempDir(),
+		Standalone: true,
+		ServerURL:  "http://127.0.0.1:4096",
+	})
+	args := adapter.buildArgs("", "hello", engine.EngineOptions{})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--server http://127.0.0.1:4096") {
+		t.Fatalf("run args missing server: %v", args)
+	}
+	if strings.Contains(joined, "--standalone") {
+		t.Fatalf("run args unexpectedly use standalone: %v", args)
+	}
+}
+
+func TestSteerEscapesSessionID(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is unix-only")
+	}
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args.txt")
+	script := filepath.Join(dir, "opencode")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$OPENCODE_ARGS_FILE\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPENCODE_ARGS_FILE", argsFile)
+	adapter := NewAdapter(Config{Executable: script, WorkingDir: dir, Standalone: false})
+	if err := adapter.Steer(context.Background(), "sess/1", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "/api/session/sess%2F1/prompt") {
+		t.Fatalf("session id was not escaped:\n%s", data)
+	}
+}
+
 var _ engine.Steerer = (*Adapter)(nil)

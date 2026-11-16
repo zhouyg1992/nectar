@@ -520,8 +520,8 @@ func (r *appServerRun) readLoop(maxOutput int) {
 }
 
 func (r *appServerRun) waitLoop() {
-	waitErr := r.cmd.Wait()
 	<-r.readerDone
+	waitErr := r.cmd.Wait()
 
 	r.mu.Lock()
 	r.closed = true

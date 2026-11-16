@@ -99,7 +99,7 @@ opencode run --format json "Reply with exactly OK"
 
 Nectar uses OpenCode's shared server and resumes with `--session`. When `model` is empty, Nectar tries to resolve the default model from `~/.config/opencode/opencode.json`.
 
-OpenCode steering uses the shared server API's `delivery = "steer"` path. Set `standalone = true` explicitly to use a private server, which disables steering.
+OpenCode steering uses the shared server API's `delivery = "steer"` path. When `server_url` is set, runs, usage, and steering share that server and `standalone` is ignored. A private server is used only when `standalone = true` and no `server_url` is set, which disables steering.
 
 ## Pi
 

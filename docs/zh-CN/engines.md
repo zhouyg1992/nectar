@@ -99,7 +99,7 @@ opencode run --format json "Reply with exactly OK"
 
 Nectar 通过 OpenCode 共享 server 执行任务，并用 `--session` 续接会话。`model` 为空时会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。
 
-OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。显式设置 `standalone = true` 会改用私有 server，此时插话不可用。
+OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。设置 `server_url` 时，run、usage 和 steer 会共用同一个 server，并忽略 `standalone`。只有 `standalone = true` 且没有 `server_url` 时才使用私有 server，此时插话不可用。
 
 ## Pi
 

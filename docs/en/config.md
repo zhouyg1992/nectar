@@ -117,14 +117,14 @@ timeout = "30m"
 max_output_bytes = 2097152
 context_window = 0            # 0 = read from OpenCode config
 standalone = false            # shared server by default; enables /steer
-server_url = ""               # optional existing server, e.g. http://127.0.0.1:4096
+server_url = ""               # optional shared server for run/export/steer; overrides standalone
 auto_approve = true           # required for non-interactive bot use
 per_chat_workspace = false
 ```
 
 When `model` is empty, Nectar tries to resolve the default model from `~/.config/opencode/opencode.json`. The context limit comes from the model's `limit.context`; set `context_window` manually when the model is not declared there.
 
-OpenCode uses its shared server by default and steers with `delivery = "steer"`. Only an explicit `standalone = true` switches to a private server, which disables `/steer`.
+OpenCode uses its shared server by default and steers with `delivery = "steer"`. When `server_url` is set, normal runs, usage, and steering all use that server and `standalone` is ignored. A private server is used only when `standalone = true` and no `server_url` is set; in that case `/steer` is unavailable.
 
 ### Cursor Agent
 

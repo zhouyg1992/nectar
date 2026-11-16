@@ -117,14 +117,14 @@ timeout = "30m"
 max_output_bytes = 2097152
 context_window = 0            # 0 = 从 OpenCode 配置自动解析
 standalone = false            # 默认使用共享 server，支持 /steer
-server_url = ""               # 可选：连接已有 server，例如 http://127.0.0.1:4096
+server_url = ""               # 可选：run/export/steer 共用此 server，并忽略 standalone
 auto_approve = true           # 非交互 bot 场景需要
 per_chat_workspace = false
 ```
 
 `model` 为空时，Nectar 会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。上下文上限来自模型的 `limit.context`；模型未在 OpenCode 配置中声明时，可用 `context_window` 手动指定。
 
-OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。只有显式设置 `standalone = true` 时才会改用私有 server，此时 `/steer` 不可用。
+OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。设置 `server_url` 后，普通运行、usage 和插话都会指向同一个 server，并忽略 `standalone`。只有 `standalone = true` 且没有 `server_url` 时才使用私有 server，此时 `/steer` 不可用。
 
 ### Cursor Agent
 

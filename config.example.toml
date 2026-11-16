@@ -107,7 +107,8 @@ max_output_bytes = 2097152
 context_window = 0
 # false = use OpenCode's shared server, which is required for /steer.
 standalone = false
-# Optional existing shared server. Example: "http://127.0.0.1:4096".
+# Optional existing shared server. When set, run/export/steer all use it and
+# standalone is ignored. Example: "http://127.0.0.1:4096".
 # server_url = ""
 # true = pass --auto (non-interactive execution).
 auto_approve = true

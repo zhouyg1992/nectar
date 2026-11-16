@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 
@@ -37,10 +38,8 @@ func (a *Adapter) Steer(ctx context.Context, sessionID string, text string) erro
 		return fmt.Errorf("encode opencode steer request: %w", err)
 	}
 	args := []string{"api"}
-	if serverURL := strings.TrimSpace(a.cfg.ServerURL); serverURL != "" {
-		args = append(args, "--server", serverURL)
-	}
-	args = append(args, "--data", string(body), "POST", "/api/session/"+sessionID+"/prompt")
+	args = append(args, a.serverArgs()...)
+	args = append(args, "--data", string(body), "POST", "/api/session/"+url.PathEscape(sessionID)+"/prompt")
 	cmd := exec.CommandContext(ctx, a.cfg.Executable, args...)
 	cmd.Dir = firstNonEmpty(a.cfg.WorkingDir, ".")
 	cmd.Env = engineEnv(cmd.Dir, nil)
