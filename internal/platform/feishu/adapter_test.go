@@ -1,13 +1,47 @@
 package feishu
 
 import (
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/larksuite/oapi-sdk-go/v3/channel/safety"
 	channeltypes "github.com/larksuite/oapi-sdk-go/v3/channel/types"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/zhouyg1992/nectar/internal/attachment"
+	"github.com/zhouyg1992/nectar/internal/platform"
 )
+
+type fakeUploader struct {
+	imagePath string
+	filePath  string
+}
+
+func (f *fakeUploader) UploadImage(context.Context, string, string, io.Reader) (string, error) {
+	return "img_uploaded", nil
+}
+
+func (f *fakeUploader) UploadImagePath(_ context.Context, _ string, path string) (string, error) {
+	f.imagePath = path
+	return "img_uploaded", nil
+}
+
+func (f *fakeUploader) UploadFile(context.Context, string, string, io.Reader, *int) (string, error) {
+	return "file_uploaded", nil
+}
+
+func (f *fakeUploader) UploadFilePath(_ context.Context, _ string, path string) (string, error) {
+	f.filePath = path
+	return "file_uploaded", nil
+}
+
+func (f *fakeUploader) UploadMedia(context.Context, *channeltypes.UploadInput, *safety.SsrfGuardOptions) (*channeltypes.UploadResult, error) {
+	return &channeltypes.UploadResult{Kind: channeltypes.MediaKindFile, FileKey: "file_uploaded"}, nil
+}
 
 func TestToPlatformMessageStripsMentions(t *testing.T) {
 	msg := &channeltypes.NormalizedMessage{
@@ -25,6 +59,42 @@ func TestToPlatformMessageStripsMentions(t *testing.T) {
 	}
 	if got.MessageID != "m1" || got.ChatID != "c1" || got.Channel != "feishu" {
 		t.Fatalf("message = %#v", got)
+	}
+}
+
+func TestUploadMediaClassifiesImageAndFile(t *testing.T) {
+	dir := t.TempDir()
+	imagePath := filepath.Join(dir, "chart.png")
+	if err := os.WriteFile(imagePath, []byte("\x89PNG\r\n\x1a\nchart"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(dir, "report.txt")
+	if err := os.WriteFile(filePath, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	uploader := &fakeUploader{}
+	adapter := &Adapter{upload: uploader}
+	msgType, content, err := adapter.uploadMedia(context.Background(), platform.Media{
+		Type: "image", Path: imagePath, Name: "chart.png",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msgType != "image" || !strings.Contains(content, `"image_key":"img_uploaded"`) ||
+		uploader.imagePath != imagePath {
+		t.Fatalf("image upload = %q %q %#v", msgType, content, uploader)
+	}
+
+	msgType, content, err = adapter.uploadMedia(context.Background(), platform.Media{
+		Type: "file", Path: filePath, Name: "report.txt",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msgType != "file" || !strings.Contains(content, `"file_key":"file_uploaded"`) ||
+		uploader.filePath != filePath {
+		t.Fatalf("file upload = %q %q %#v", msgType, content, uploader)
 	}
 }
 

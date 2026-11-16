@@ -82,25 +82,28 @@ func (a *Adapter) call(ctx context.Context, method string, payload any, result a
 	if err != nil {
 		return fmt.Errorf("read telegram %s response: %w", method, err)
 	}
+	return decodeAPIResponse(method, resp.StatusCode, data, result)
+}
 
+func decodeAPIResponse(method string, statusCode int, data []byte, result any) error {
 	var envelope apiResponse
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		if resp.StatusCode >= http.StatusBadRequest {
+		if statusCode >= http.StatusBadRequest {
 			return &apiError{
 				Method:      method,
-				Code:        resp.StatusCode,
-				Description: http.StatusText(resp.StatusCode),
+				Code:        statusCode,
+				Description: http.StatusText(statusCode),
 			}
 		}
 		return fmt.Errorf(
 			"decode telegram %s response (status %d): %w",
-			method, resp.StatusCode, err,
+			method, statusCode, err,
 		)
 	}
 	if !envelope.OK {
 		code := envelope.ErrorCode
 		if code == 0 {
-			code = resp.StatusCode
+			code = statusCode
 		}
 		description := strings.TrimSpace(envelope.Description)
 		if description == "" {

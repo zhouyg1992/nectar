@@ -79,7 +79,13 @@ Inbound support:
 
 Files are downloaded to `.nectar/attachments/` under the current chat workspace and removed after the agent run. Albums (media groups) are briefly coalesced so one album does not start several agent turns.
 
-The cloud Bot API download limit is 20MB, and attachment downloads also use the core 30-second timeout. Compress or split larger files, or run a self-hosted Bot API server. Outbound images, files, and audio are not implemented yet.
+The cloud Bot API download limit is 20MB, and attachment downloads also use the core 30-second timeout. Compress or split larger files, or run a self-hosted Bot API server.
+
+Outbound images and files are supported: the agent copies files into
+`.nectar/outbox/` under the current workspace (`NECTAR_OUTBOX_DIR`). Nectar
+sends them after the turn and removes each file once delivery succeeds. Up to
+10 files, 50 MiB each; JPG/PNG images up to 10 MiB are sent as photos, and
+other content is sent as documents.
 
 Channel posts are not supported yet; use direct chats, groups, or forum topics.
 

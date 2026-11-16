@@ -486,6 +486,18 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
+	outbox, err := ensureOutboundDir(workdir)
+	if err != nil {
+		answer := "❌ Failed to prepare outbound media dir: " + err.Error()
+		finishErr := r.finish(msg, "", &platform.Card{
+			Status: platform.CardError,
+			Title:  cardTitleFailed,
+			Body:   answer,
+			Footer: cardFooter(modelName, 0, nil, r.cfg.ContextWindow),
+		}, answer)
+		return errors.Join(err, finishErr)
+	}
+	opts.Env["NECTAR_OUTBOX_DIR"] = outbox
 
 	initialCardID := ""
 	if notice != nil {
@@ -548,7 +560,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		lessonPrompt = defaultAttachmentPrompt(attachments)
 	}
 	prompt = buildAttachmentPrompt(prompt, attachments)
-	prompt = r.withIdentity(prompt)
+	prompt = r.withIdentity(prompt, workdir)
 	opts.Attachments = attachments
 
 	engineSessionID := session.EngineSessionID
@@ -787,6 +799,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 
 	answer := answerText()
+	outboundMedia := collectOutboundMedia(outbox, r.logger)
 
 	elapsed := time.Since(startedAt)
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
@@ -806,6 +819,11 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
 		}, answer)
 	}
+	var mediaErr error
+	if mediaErr = r.sendOutboundMedia(msg, outboundMedia); mediaErr != nil {
+		r.logger.Error("send outbound media failed", "chat", msg.ChatID, "error", mediaErr)
+		_ = r.reply(msg, "⚠️ 附件发送失败: "+mediaErr.Error())
+	}
 
 	if len(errTexts) > 0 && ctx.Err() == nil {
 		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), workdir)
@@ -816,7 +834,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	} else if failed {
 		runErr = fmt.Errorf("agent tool error: %s", execguard.Truncate(strings.Join(toolErrors, "\n"), 4<<10))
 	}
-	return errors.Join(runErr, finishErr)
+	return errors.Join(runErr, finishErr, mediaErr)
 }
 
 func initialCardBody(hasAttachments bool) string {
@@ -905,11 +923,11 @@ func (r *Router) status(key SessionKey) string {
 	return markdownKeyValue(rows)
 }
 
-func (r *Router) withIdentity(prompt string) string {
-	return r.identityBrief() + "\n\n" + prompt
+func (r *Router) withIdentity(prompt, workdir string) string {
+	return r.identityBrief(workdir) + "\n\n" + prompt
 }
 
-func (r *Router) identityBrief() string {
+func (r *Router) identityBrief(workdir string) string {
 	name := r.cfg.BotName
 	if name == "" {
 		name = "Nectar"
@@ -935,8 +953,11 @@ inside it. If asked what model powers you, answer with the underlying model.
 
 Nectar capabilities: coding tasks, persistent sessions, scheduled tasks, and
 long-term memory. Use the `+"`\"${NECTAR_CLI:-nectar}\" schedule`"+` and
-`+"`\"${NECTAR_CLI:-nectar}\" memory`"+` CLIs when appropriate.`,
-		name, version, r.platform.Name(), engineName, modelName, name)
+`+"`\"${NECTAR_CLI:-nectar}\" memory`"+` CLIs when appropriate.
+
+%s`,
+		name, version, r.platform.Name(), engineName, modelName, name,
+		outboundInstruction(workdir))
 }
 
 func (r *Router) aboutText() string {
@@ -980,6 +1001,25 @@ func (r *Router) reply(msg platform.Message, text string) error {
 		r.logger.Error("send reply failed", "chat", msg.ChatID, "error", err)
 	}
 	return err
+}
+
+func (r *Router) sendOutboundMedia(msg platform.Message, media []platform.Media) error {
+	if len(media) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, item := range media {
+		reply := replyTarget(msg)
+		reply.Media = []platform.Media{item}
+		if _, err := r.platform.Send(r.ctx, reply); err != nil {
+			errs = append(errs, fmt.Errorf("send outbound file %q: %w", item.Name, err))
+			continue
+		}
+		if err := os.Remove(item.Path); err != nil {
+			r.logger.Debug("remove sent outbound file failed", "path", item.Path, "error", err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Router) sendHelp(msg platform.Message) {

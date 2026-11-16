@@ -21,6 +21,7 @@ import (
 
 const (
 	defaultAPIBaseURL  = "https://api.dingtalk.com"
+	defaultOAPIBaseURL = "https://oapi.dingtalk.com"
 	defaultHTTPTimeout = 30 * time.Second
 	cardDegradeWindow  = 30 * time.Minute
 )
@@ -35,8 +36,9 @@ type Config struct {
 	CardEnabled  *bool
 
 	// Optional overrides for tests and self-hosted gateways.
-	APIBaseURL string
-	HTTPClient *http.Client
+	APIBaseURL  string
+	OAPIBaseURL string
+	HTTPClient  *http.Client
 }
 
 type Adapter struct {
@@ -45,6 +47,7 @@ type Adapter struct {
 	clientSecret string
 	robotCode    string
 	apiBaseURL   string
+	oapiBaseURL  string
 	httpClient   *http.Client
 	allowedUsers map[string]struct{}
 	allowedChats map[string]struct{}
@@ -81,6 +84,10 @@ func New(cfg Config) (*Adapter, error) {
 	if apiBaseURL == "" {
 		apiBaseURL = defaultAPIBaseURL
 	}
+	oapiBaseURL := strings.TrimRight(strings.TrimSpace(cfg.OAPIBaseURL), "/")
+	if oapiBaseURL == "" {
+		oapiBaseURL = defaultOAPIBaseURL
+	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
@@ -96,6 +103,7 @@ func New(cfg Config) (*Adapter, error) {
 		clientSecret: clientSecret,
 		robotCode:    robotCode,
 		apiBaseURL:   apiBaseURL,
+		oapiBaseURL:  oapiBaseURL,
 		httpClient:   httpClient,
 		allowedUsers: stringSet(cfg.AllowedUsers),
 		allowedChats: stringSet(cfg.AllowedChats),

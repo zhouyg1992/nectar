@@ -22,24 +22,37 @@ func (rc replyContext) useProactiveAPI() bool {
 }
 
 func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error) {
+	var firstID string
 	if reply.Card != nil {
-		return a.sendCard(ctx, reply)
-	}
-	if len(reply.Media) > 0 {
-		return "", errors.New("dingtalk outbound media is not implemented yet")
+		id, err := a.sendCard(ctx, reply)
+		if err != nil {
+			return firstID, err
+		}
+		firstID = id
 	}
 	text := strings.TrimSpace(reply.Text)
-	if text == "" {
+	if text != "" {
+		rc, err := a.replyContext(reply)
+		if err != nil {
+			return firstID, err
+		}
+		if err := a.sendMarkdown(ctx, rc, text); err != nil {
+			return firstID, err
+		}
+	}
+	for _, media := range reply.Media {
+		id, err := a.sendMedia(ctx, reply, media)
+		if err != nil {
+			return firstID, fmt.Errorf("send dingtalk media: %w", err)
+		}
+		if firstID == "" {
+			firstID = id
+		}
+	}
+	if firstID == "" && text == "" && reply.Card == nil && len(reply.Media) == 0 {
 		return "", errors.New("dingtalk reply is empty")
 	}
-	rc, err := a.replyContext(reply)
-	if err != nil {
-		return "", err
-	}
-	if err := a.sendMarkdown(ctx, rc, text); err != nil {
-		return "", err
-	}
-	return "", nil
+	return firstID, nil
 }
 
 func (a *Adapter) replyContext(reply platform.Reply) (replyContext, error) {

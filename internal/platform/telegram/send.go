@@ -1,10 +1,17 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"mime/multipart"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +23,8 @@ const (
 	minEditIntervalPrivate = 2 * time.Second
 	minEditIntervalGroup   = 4 * time.Second
 	maxSendAttempts        = 3
+	maxOutboundPhotoBytes  = 10 << 20
+	maxOutboundFileBytes   = 50 << 20
 )
 
 type sendMessageRequest struct {
@@ -51,10 +60,6 @@ type linkPreviewOptions struct {
 }
 
 func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error) {
-	if len(reply.Media) > 0 {
-		return "", errors.New("telegram outbound media is not implemented yet")
-	}
-
 	chatID, err := strconv.ParseInt(strings.TrimSpace(reply.ChatID), 10, 64)
 	if err != nil || chatID == 0 {
 		return "", fmt.Errorf("telegram reply has invalid chat id %q", reply.ChatID)
@@ -67,39 +72,178 @@ func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error
 		source = cardSource(*reply.Card)
 	}
 	source = strings.TrimSpace(source)
-	if source == "" {
-		return "", errors.New("telegram reply is empty")
-	}
-
-	chunks := renderTelegramChunks(source)
-	if len(chunks) == 0 {
+	if source == "" && len(reply.Media) == 0 {
 		return "", errors.New("telegram reply is empty")
 	}
 
 	var firstID string
-	for index, chunk := range chunks {
-		params := sendMessageRequest{
-			ChatID:             chatID,
-			Text:               chunk.html,
-			MessageThreadID:    threadID,
-			ParseMode:          "HTML",
-			LinkPreviewOptions: &linkPreviewOptions{IsDisabled: true},
+	if source != "" {
+		chunks := renderTelegramChunks(source)
+		if len(chunks) == 0 {
+			return "", errors.New("telegram reply is empty")
 		}
-		if index == 0 && replyTo != 0 {
-			params.ReplyParameters = &replyParameters{
-				MessageID:                replyTo,
-				AllowSendingWithoutReply: true,
+		for index, chunk := range chunks {
+			params := sendMessageRequest{
+				ChatID:             chatID,
+				Text:               chunk.html,
+				MessageThreadID:    threadID,
+				ParseMode:          "HTML",
+				LinkPreviewOptions: &linkPreviewOptions{IsDisabled: true},
+			}
+			if index == 0 && replyTo != 0 {
+				params.ReplyParameters = &replyParameters{
+					MessageID:                replyTo,
+					AllowSendingWithoutReply: true,
+				}
+			}
+			id, err := a.sendRendered(ctx, params, chunk.plain)
+			if err != nil {
+				return firstID, fmt.Errorf("send telegram message: %w", err)
+			}
+			if firstID == "" {
+				firstID = id
 			}
 		}
-		id, err := a.sendRendered(ctx, params, chunk.plain)
+	}
+
+	for index, media := range reply.Media {
+		replyToMedia := int64(0)
+		if firstID == "" && index == 0 {
+			replyToMedia = replyTo
+		}
+		id, err := a.sendMedia(ctx, chatID, threadID, replyToMedia, media)
 		if err != nil {
-			return firstID, fmt.Errorf("send telegram message: %w", err)
+			return firstID, fmt.Errorf("send telegram media: %w", err)
 		}
 		if firstID == "" {
 			firstID = id
 		}
 	}
 	return firstID, nil
+}
+
+func (a *Adapter) sendMedia(
+	ctx context.Context,
+	chatID int64,
+	threadID int64,
+	replyTo int64,
+	media platform.Media,
+) (string, error) {
+	path := strings.TrimSpace(media.Path)
+	if path == "" {
+		return "", errors.New("telegram media path is empty")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("stat telegram media: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		return "", errors.New("telegram media must be a non-empty regular file")
+	}
+	if info.Size() > maxOutboundFileBytes {
+		return "", fmt.Errorf("telegram file is %d bytes; limit is %d", info.Size(), maxOutboundFileBytes)
+	}
+
+	name := strings.TrimSpace(media.Name)
+	if name == "" {
+		name = filepath.Base(path)
+	}
+	method := "sendDocument"
+	field := "document"
+	if strings.EqualFold(media.Type, "image") &&
+		telegramPhotoName(name) &&
+		info.Size() <= maxOutboundPhotoBytes {
+		method = "sendPhoto"
+		field = "photo"
+	}
+
+	fields := map[string]string{
+		"chat_id": strconv.FormatInt(chatID, 10),
+	}
+	if threadID != 0 {
+		fields["message_thread_id"] = strconv.FormatInt(threadID, 10)
+	}
+	if replyTo != 0 {
+		replyParameters, err := json.Marshal(replyParameters{
+			MessageID:                replyTo,
+			AllowSendingWithoutReply: true,
+		})
+		if err != nil {
+			return "", fmt.Errorf("encode telegram reply parameters: %w", err)
+		}
+		fields["reply_parameters"] = string(replyParameters)
+	}
+
+	var result tgMessage
+	if err := a.withRateLimitRetry(ctx, func() error {
+		return a.callMultipart(ctx, method, fields, field, path, name, &result)
+	}); err != nil {
+		return "", err
+	}
+	if result.MessageID == 0 {
+		return "", nil
+	}
+	return strconv.FormatInt(result.MessageID, 10), nil
+}
+
+func (a *Adapter) callMultipart(
+	ctx context.Context,
+	method string,
+	fields map[string]string,
+	fileField string,
+	filePath string,
+	fileName string,
+	result any,
+) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("read telegram media: %w", err)
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return fmt.Errorf("encode telegram %s field: %w", method, err)
+		}
+	}
+	part, err := writer.CreateFormFile(fileField, fileName)
+	if err != nil {
+		return fmt.Errorf("encode telegram %s file: %w", method, err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return fmt.Errorf("encode telegram %s file: %w", method, err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("encode telegram %s body: %w", method, err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.apiURL(method), &body)
+	if err != nil {
+		return fmt.Errorf("create telegram %s request: %w", method, a.redactError(err))
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("User-Agent", "nectar")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("call telegram %s: %w", method, a.redactError(err))
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return fmt.Errorf("read telegram %s response: %w", method, err)
+	}
+	return decodeAPIResponse(method, resp.StatusCode, responseBody, result)
+}
+
+func telegramPhotoName(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".jpg", ".jpeg", ".png":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *Adapter) Update(ctx context.Context, messageID string, reply platform.Reply) error {

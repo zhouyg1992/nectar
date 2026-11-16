@@ -63,8 +63,10 @@ type Reply struct {
 
 // Media is a local file to upload back to the chat platform.
 type Media struct {
-	Type string
-	Path string
+	Type     string
+	Path     string
+	Name     string
+	MimeType string
 }
 
 // Capabilities describes the optional features a platform supports.

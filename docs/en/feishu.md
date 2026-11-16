@@ -48,6 +48,17 @@ Feishu inbound messages support `text`, `post`, `image`, and `file`:
 - Small text files such as text, Markdown, code, and JSON are injected directly into the current prompt (up to 48 KiB) so the agent does not ignore local paths.
 - Audio, video, and merged forwarded messages are not supported yet.
 
+For outbound files, the agent copies images or files it wants to return into
+`.nectar/outbox/` under the current workspace (`NECTAR_OUTBOX_DIR` points to
+that directory). Nectar sends them after the turn and removes each file once
+delivery succeeds:
+
+- Up to 10 files, 50 MiB each. The Feishu adapter additionally limits images to
+  10 MiB and regular files to 30 MiB.
+- Images are sent as separate image messages; other files (including audio,
+  video, and unsupported image formats) are sent as file messages.
+- Outbound files in a topic use `reply_in_thread=true` to stay in the same topic.
+
 ## No reply
 
 Check in order:

@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,9 +18,12 @@ import (
 )
 
 type capturedCall struct {
-	Method  string
-	Payload map[string]any
-	Path    string
+	Method   string
+	Payload  map[string]any
+	Path     string
+	Form     map[string]string
+	FileName string
+	FileData []byte
 }
 
 type fakeBotAPI struct {
@@ -38,12 +42,42 @@ func (f *fakeBotAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 	var payload map[string]any
-	if r.Body != nil {
+	form := make(map[string]string)
+	var fileName string
+	var fileData []byte
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(64 << 20); err == nil {
+			for key, values := range r.MultipartForm.Value {
+				if len(values) > 0 {
+					form[key] = values[0]
+				}
+			}
+			for _, files := range r.MultipartForm.File {
+				for _, header := range files {
+					file, err := header.Open()
+					if err != nil {
+						continue
+					}
+					data, _ := io.ReadAll(file)
+					_ = file.Close()
+					fileName = header.Filename
+					fileData = data
+					break
+				}
+				if fileName != "" {
+					break
+				}
+			}
+		}
+	} else if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&payload)
 	}
 
 	f.mu.Lock()
-	f.calls = append(f.calls, capturedCall{Method: method, Payload: payload, Path: r.URL.Path})
+	f.calls = append(f.calls, capturedCall{
+		Method: method, Payload: payload, Path: r.URL.Path,
+		Form: form, FileName: fileName, FileData: fileData,
+	})
 	f.mu.Unlock()
 
 	result := f.handle(method, payload)
@@ -386,6 +420,64 @@ func TestSendChunksLongMessage(t *testing.T) {
 	reply, _ := first["reply_parameters"].(map[string]any)
 	if reply["message_id"] != float64(55) {
 		t.Fatalf("reply_parameters = %#v", reply)
+	}
+}
+
+func TestSendOutboundMedia(t *testing.T) {
+	var nextID atomic.Int64
+	adapter, fake := newFakeAdapter(t, func(method string, _ map[string]any) any {
+		if method == "sendPhoto" || method == "sendDocument" {
+			return map[string]any{"message_id": nextID.Add(1)}
+		}
+		return nil
+	})
+
+	dir := t.TempDir()
+	imagePath := dir + "/chart.png"
+	if err := os.WriteFile(imagePath, []byte("\x89PNG\r\n\x1a\nchart"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	filePath := dir + "/report.txt"
+	if err := os.WriteFile(filePath, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := adapter.Send(context.Background(), platform.Reply{
+		ChatID:   "42",
+		ThreadID: "7",
+		ReplyTo:  "55",
+		Media: []platform.Media{
+			{Type: "image", Path: imagePath, Name: "chart.png"},
+			{Type: "file", Path: filePath, Name: "report.txt"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	photos := fake.callsFor("sendPhoto")
+	if len(photos) != 1 {
+		t.Fatalf("sendPhoto calls = %d", len(photos))
+	}
+	if photos[0].Form["chat_id"] != "42" ||
+		photos[0].Form["message_thread_id"] != "7" ||
+		photos[0].FileName != "chart.png" ||
+		string(photos[0].FileData) != "\x89PNG\r\n\x1a\nchart" {
+		t.Fatalf("photo call = %#v", photos[0])
+	}
+	if !strings.Contains(photos[0].Form["reply_parameters"], `"message_id":55`) {
+		t.Fatalf("reply_parameters = %q", photos[0].Form["reply_parameters"])
+	}
+
+	documents := fake.callsFor("sendDocument")
+	if len(documents) != 1 {
+		t.Fatalf("sendDocument calls = %d", len(documents))
+	}
+	if documents[0].Form["chat_id"] != "42" || documents[0].FileName != "report.txt" ||
+		string(documents[0].FileData) != "report" {
+		t.Fatalf("document call = %#v", documents[0])
+	}
+	if _, ok := documents[0].Form["reply_parameters"]; ok {
+		t.Fatalf("continuation media should not reply again: %#v", documents[0].Form)
 	}
 }
 
