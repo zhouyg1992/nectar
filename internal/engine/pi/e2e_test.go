@@ -65,6 +65,40 @@ func TestPiEndToEnd(t *testing.T) {
 	}
 }
 
+// TestPiRPCEndToEnd exercises the RPC transport with the installed CLI.
+func TestPiRPCEndToEnd(t *testing.T) {
+	if os.Getenv("NECTAR_PI_RPC_E2E") == "" {
+		t.Skip("set NECTAR_PI_RPC_E2E=1 to run against the real pi CLI")
+	}
+	executable := os.Getenv("PI_PATH")
+	if executable == "" {
+		executable = "pi"
+	}
+	adapter := NewRPCAdapter(Config{
+		Executable:     executable,
+		Provider:       os.Getenv("PI_PROVIDER"),
+		Model:          os.Getenv("PI_MODEL"),
+		WorkingDir:     t.TempDir(),
+		Timeout:        2 * time.Minute,
+		TrustWorkspace: true,
+	})
+	opts := engine.EngineOptions{Timeout: 2 * time.Minute}
+	events, err := adapter.Start(context.Background(), "Reply with exactly: ok", opts)
+	text, sessionID, done, errText := collect(t, events, err)
+	if errText != "" {
+		t.Fatalf("rpc error: %s", errText)
+	}
+	if !done {
+		t.Fatal("rpc start did not emit done")
+	}
+	if sessionID == "" {
+		t.Fatal("rpc start did not emit a session id")
+	}
+	if !strings.Contains(strings.ToLower(text), "ok") {
+		t.Fatalf("rpc text = %q", text)
+	}
+}
+
 func collect(t *testing.T, events <-chan engine.Event, err error) (string, string, bool, string) {
 	t.Helper()
 	if err != nil {

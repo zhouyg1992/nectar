@@ -229,6 +229,7 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 | `/status` | 查看当前引擎、模型和会话 |
 | `/about`、`/whoami` | 查看 Nectar 版本、平台、底层引擎和模型 |
 | `/stop` | 中断当前任务 |
+| `/steer <text>`、`/append <text>`、`/ps <text>`、`/btw <text>` | 向正在运行的任务插入补充信息；需要支持 steer 的引擎 |
 | `/cron`、`/schedule` | 定时任务入口 |
 | `/memory` | 查看、审核、固定或删除记忆 |
 | `/remember` | 显式保存一条记忆 |
@@ -240,7 +241,9 @@ nectar uninstall [--config PATH] [--binary PATH] [--purge-data] [--keep-binary] 
 
 Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当前会话，但不会删除旧会话。`/list` 显示最近的会话、短 ID、引擎、上下文占用和最后活动时间。可以用 `/switch <id>`、`/switch #2` 或 `/switch <name>` 切换当前会话；数字快捷方式只统计未归档会话，已归档会话在 `/list all` 中以 `archived:` 前缀显示。`/rename`、`/archive` 和 `/unarchive` 用于管理列表。
 
-群聊里的 `/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/status` 和 `/stop` 仅限 `bot.admin_users`；单聊保持单人使用行为。
+群聊里的 `/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/status`、`/stop` 和插话命令仅限 `bot.admin_users`；单聊保持单人使用行为。
+
+插话只对显式命令生效，普通消息在任务运行中仍然进入队列。Codex、Claude Code、Pi 和 OpenCode 默认使用支持插话的 transport；只有显式把 Codex 切回 `exec`、Claude 切回 `print`、Pi 切回 `json`，或在没有 `server_url` 时把 OpenCode 设为 `standalone = true`，才会失去插话能力。Cursor 等暂不支持的引擎会直接提示，不会静默改为排队。
 
 会话持久化在 `~/.nectar/sessions.json`。启动时会自动迁移 version 1 文件，下一次写入使用 version 2 结构。
 

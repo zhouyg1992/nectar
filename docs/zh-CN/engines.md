@@ -35,7 +35,16 @@ nectar service restart
 codex exec --json --skip-git-repo-check "reply with OK"
 ```
 
-Nectar 通过 `codex exec --json` 执行任务，并用 `resume` 续接会话。模型、推理强度、sandbox 和工作目录在 `[codex]` 中配置。
+Nectar 默认通过 Codex app-server 执行任务，模型、推理强度、sandbox 和工作目录在 `[codex]` 中配置。
+
+默认配置已支持插话（`/steer`、`/append`、`/ps`、`/btw`）：
+
+```toml
+[codex]
+backend = "app-server"
+```
+
+app-server backend 通过 Codex 的 `turn/start`、`turn/steer` 和 `turn/interrupt` 接口工作。该协议目前仍标记为 experimental，建议锁定可用的 Codex 版本。显式设置 `backend = "exec"` 可回退到旧传输，但不支持插话。
 
 如果服务环境找不到 `codex`，把 `[codex].path` 设置为绝对路径。
 
@@ -48,7 +57,16 @@ claude auth login
 claude -p --permission-mode plan "Reply with exactly OK"
 ```
 
-Nectar 通过 `claude -p --output-format stream-json --verbose --include-partial-messages` 执行任务，通过 stdin 传入 prompt，并用 `--resume` 续接会话。
+Nectar 默认通过 Claude Code streaming-input 执行任务，并用 `--resume` 续接会话。
+
+默认配置已支持插话：
+
+```toml
+[claude]
+backend = "stream-json"
+```
+
+该模式使用 `--input-format stream-json` 保持进程存活，`/steer` 会向同一进程追加用户消息。显式设置 `backend = "print"` 可回退到旧的一次性模式，但不支持插话。
 
 `auto_approve = true` 会映射为 `--dangerously-skip-permissions`，适合无人值守的 bot 场景；关闭时使用 `permission_mode`。
 
@@ -79,7 +97,9 @@ Nectar 使用 `-p --output-format stream-json --stream-partial-output`，并用 
 opencode run --format json "Reply with exactly OK"
 ```
 
-Nectar 通过 `opencode run --format json` 执行任务，并用 `--session` 续接会话。`model` 为空时会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。
+Nectar 通过 OpenCode 共享 server 执行任务，并用 `--session` 续接会话。`model` 为空时会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。
+
+OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。设置 `server_url` 时，run、usage 和 steer 会共用同一个 server，并忽略 `standalone`。只有 `standalone = true` 且没有 `server_url` 时才使用私有 server，此时插话不可用。
 
 ## Pi
 
@@ -90,7 +110,16 @@ pi auth check --provider anthropic
 pi --mode json "Reply with exactly OK"
 ```
 
-Nectar 通过 `pi --mode json` 执行任务，通过 stdin 传入 prompt，并用 `--session` 续接会话。`provider`、`model` 和 `thinking` 会直接透传为 Pi 参数。
+Nectar 默认通过 Pi RPC 执行任务，并用 `--session` 续接会话。`provider`、`model` 和 `thinking` 会直接透传为 Pi 参数。
+
+默认配置已支持插话：
+
+```toml
+[pi]
+backend = "rpc"
+```
+
+RPC backend 使用 `pi --mode rpc`，`/steer` 会发送 Pi 原生的 `steer` 命令。显式设置 `backend = "json"` 可回退到旧模式，但不支持插话。
 
 ## 常见问题
 

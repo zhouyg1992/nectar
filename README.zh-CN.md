@@ -169,6 +169,7 @@ nectar uninstall                      卸载 Nectar
 | `/unarchive <id\|name>` | 恢复已归档会话 |
 | `/status` | 查看当前引擎、模型和会话 |
 | `/stop` | 中断当前任务 |
+| `/steer`、`/append`、`/ps`、`/btw` | 向运行中的任务插入补充信息（需对应引擎的常驻 backend） |
 | `/cron`、`/schedule` | 定时任务入口 |
 | `/help`、`/commands` | 显示命令卡片，不调用引擎 |
 
@@ -185,7 +186,7 @@ nectar uninstall                      卸载 Nectar
 
 详见[定时任务](docs/zh-CN/schedule.md)，或在聊天里发送 `/cron help`。定时任务默认开启，无需在配置里添加 `[schedule]`。管理命令仅限 `bot.admin_users`；该列表为空时不限制管理员。参见[安全加固](#可选安全加固)。
 
-群聊里的会话管理命令（`/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/stop`、`/status`）仅限 `bot.admin_users`；单聊保持单人使用行为。
+群聊里的会话管理命令（`/new`、`/list`、`/switch`、`/current`、`/rename`、`/archive`、`/unarchive`、`/stop`、`/status`）和插话命令仅限 `bot.admin_users`；单聊保持单人使用行为。
 
 ## 维护
 

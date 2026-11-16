@@ -169,6 +169,7 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 | `/unarchive <id\|name>` | Restore an archived session |
 | `/status` | Show the current engine, model, and session |
 | `/stop` | Cancel the current run |
+| `/steer`, `/append`, `/ps`, `/btw` | Insert text into a running turn (requires a persistent engine backend) |
 | `/cron`, `/schedule` | Scheduled task entry point |
 | `/help`, `/commands` | Show the command card without invoking the engine |
 
@@ -185,7 +186,7 @@ Aliases: `schedule ls` = `list`, `schedule stop` = `cancel`, `schedule del` / `r
 
 See [scheduled tasks](docs/en/schedule.md) for details, or send `/cron help` in chat. Scheduled tasks are enabled by default; no `[schedule]` section is required. Only users in `bot.admin_users` can manage them; an empty list removes that restriction. See [hardening access](#optional-harden-access).
 
-In group chats, session management commands (`/new`, `/list`, `/switch`, `/current`, `/rename`, `/archive`, `/unarchive`, `/stop`, `/status`) are limited to `bot.admin_users`. Direct messages keep the single-user behavior.
+In group chats, session management and steering commands are limited to `bot.admin_users`. Direct messages keep the single-user behavior.
 
 ## Maintenance
 

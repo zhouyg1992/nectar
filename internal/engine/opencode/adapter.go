@@ -21,6 +21,7 @@ const defaultMaxOutputBytes = 2 << 20
 
 type Config struct {
 	Executable     string
+	ServerURL      string
 	Model          string
 	Agent          string
 	WorkingDir     string
@@ -259,9 +260,7 @@ func (a *Adapter) sessionUsage(sessionID, workdir string) *tokenUsage {
 	defer cancel()
 
 	args := []string{"session", "export"}
-	if a.cfg.Standalone {
-		args = append(args, "--standalone")
-	}
+	args = append(args, a.serverModeArgs()...)
 	args = append(args, sessionID)
 	cmd := exec.CommandContext(ctx, a.cfg.Executable, args...)
 	cmd.Dir = workdir
@@ -301,9 +300,7 @@ func (a *Adapter) sessionUsage(sessionID, workdir string) *tokenUsage {
 func (a *Adapter) buildArgs(sessionID, prompt string, opts engine.EngineOptions) []string {
 	model := firstNonEmpty(opts.Model, a.cfg.Model)
 	args := []string{"run", "--format", "json"}
-	if a.cfg.Standalone {
-		args = append(args, "--standalone")
-	}
+	args = append(args, a.serverModeArgs()...)
 	if a.cfg.AutoApprove {
 		args = append(args, "--auto")
 	}
@@ -323,6 +320,23 @@ func (a *Adapter) buildArgs(sessionID, prompt string, opts engine.EngineOptions)
 	}
 	args = append(args, prompt)
 	return args
+}
+
+func (a *Adapter) serverArgs() []string {
+	if serverURL := strings.TrimSpace(a.cfg.ServerURL); serverURL != "" {
+		return []string{"--server", serverURL}
+	}
+	return nil
+}
+
+func (a *Adapter) serverModeArgs() []string {
+	if args := a.serverArgs(); len(args) > 0 {
+		return args
+	}
+	if a.cfg.Standalone {
+		return []string{"--standalone"}
+	}
+	return nil
 }
 
 func (a *Adapter) track(sessionID string, cancel context.CancelFunc) {

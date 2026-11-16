@@ -93,6 +93,7 @@ allowed_chats = []
 ```toml
 [codex]
 path = "codex"
+backend = "app-server"         # app-server | exec；默认支持 /steer
 model = ""                    # 空则使用 Codex 自身配置的模型
 effort = ""                   # 例如 high，透传为 model_reasoning_effort
 sandbox = "workspace-write"   # read-only / workspace-write / danger-full-access
@@ -115,12 +116,15 @@ working_dir = "~/.nectar/workspace"
 timeout = "30m"
 max_output_bytes = 2097152
 context_window = 0            # 0 = 从 OpenCode 配置自动解析
-standalone = true             # 每次运行使用私有 server
+standalone = false            # 默认使用共享 server，支持 /steer
+server_url = ""               # 可选：run/export/steer 共用此 server，并忽略 standalone
 auto_approve = true           # 非交互 bot 场景需要
 per_chat_workspace = false
 ```
 
 `model` 为空时，Nectar 会尝试从 `~/.config/opencode/opencode.json` 读取默认模型。上下文上限来自模型的 `limit.context`；模型未在 OpenCode 配置中声明时，可用 `context_window` 手动指定。
+
+OpenCode 默认使用共享 server，插话通过 `delivery = "steer"` 实现。设置 `server_url` 后，普通运行、usage 和插话都会指向同一个 server，并忽略 `standalone`。只有 `standalone = true` 且没有 `server_url` 时才使用私有 server，此时 `/steer` 不可用。
 
 ### Cursor Agent
 
@@ -146,6 +150,7 @@ per_chat_workspace = false
 ```toml
 [claude]
 path = "claude"
+backend = "stream-json"       # stream-json | print；默认支持 /steer
 model = ""                    # 例如 claude-sonnet-4-5；空则使用 Claude Code 默认模型
 fallback_model = ""           # 可选备用模型
 permission_mode = ""          # acceptEdits | plan | bypassPermissions | manual | dontAsk | auto
@@ -165,6 +170,7 @@ token 用量和上下文上限从最终 `result` 事件读取，`context_window`
 ```toml
 [pi]
 path = "pi"
+backend = "rpc"               # rpc | json；默认支持 /steer
 provider = ""                 # 可选 provider 覆盖
 model = ""                    # 例如 claude-sonnet-4-5；空则使用 Pi 默认模型
 thinking = ""                 # off | minimal | low | medium | high | xhigh | max

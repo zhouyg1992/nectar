@@ -19,6 +19,9 @@ const (
 type rawEvent struct {
 	Type                  string             `json:"type"`
 	ID                    string             `json:"id"`
+	Command               string             `json:"command"`
+	Success               bool               `json:"success"`
+	Data                  *rawResponseData   `json:"data"`
 	Cwd                   string             `json:"cwd"`
 	Message               *rawMessage        `json:"message"`
 	Messages              []rawMessage       `json:"messages"`
@@ -32,6 +35,10 @@ type rawEvent struct {
 	ErrorMessage          string             `json:"errorMessage"`
 }
 
+type rawResponseData struct {
+	SessionID string `json:"sessionId"`
+}
+
 type rawAssistantEvent struct {
 	Type     string `json:"type"`
 	Delta    string `json:"delta"`
@@ -40,12 +47,12 @@ type rawAssistantEvent struct {
 }
 
 type rawMessage struct {
-	Role         string       `json:"role"`
-	Content      []rawContent `json:"content"`
-	Usage        *rawUsage    `json:"usage"`
-	Model        string       `json:"model"`
-	StopReason   string       `json:"stopReason"`
-	ErrorMessage string       `json:"errorMessage"`
+	Role         string         `json:"role"`
+	Content      rawContentList `json:"content"`
+	Usage        *rawUsage      `json:"usage"`
+	Model        string         `json:"model"`
+	StopReason   string         `json:"stopReason"`
+	ErrorMessage string         `json:"errorMessage"`
 }
 
 type rawContent struct {
@@ -54,6 +61,22 @@ type rawContent struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+}
+
+type rawContentList []rawContent
+
+func (l *rawContentList) UnmarshalJSON(data []byte) error {
+	var items []rawContent
+	if err := json.Unmarshal(data, &items); err == nil {
+		*l = items
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		*l = rawContentList{{Type: "text", Text: text}}
+		return nil
+	}
+	return fmt.Errorf("pi message content must be a string or array")
 }
 
 type rawUsage struct {
@@ -79,8 +102,19 @@ func (u *rawUsage) empty() bool {
 	return u.contextTotal() == 0
 }
 
-// Parse translates Pi's JSON event stream into engine events.
+// Parse translates Pi's one-shot JSON event stream into engine events.
 func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
+	return parse(r, emit, maxOutputBytes, "agent_end")
+}
+
+// ParseRPC translates Pi's RPC event stream. agent_end only marks the end of
+// one low-level run; queued steering and follow-ups can continue afterwards, so
+// the RPC transport waits for agent_settled.
+func ParseRPC(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
+	return parse(r, emit, maxOutputBytes, "agent_settled")
+}
+
+func parse(r io.Reader, emit func(engine.Event), maxOutputBytes int, doneType string) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), maxEventLineBytes)
 
@@ -130,6 +164,12 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			sessionID = event.ID
 			emit(engine.Event{Type: engine.EventSessionStarted, SessionID: sessionID})
 		}
+		if event.Type == "response" && event.Command == "get_state" &&
+			event.Success && event.Data != nil && event.Data.SessionID != "" &&
+			event.Data.SessionID != sessionID {
+			sessionID = event.Data.SessionID
+			emit(engine.Event{Type: engine.EventSessionStarted, SessionID: sessionID})
+		}
 
 		switch event.Type {
 		case "message_start":
@@ -172,18 +212,20 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 			emitToolResult(event, emit)
 		case "compaction_end":
 			emitError(event.ErrorMessage)
-		case "agent_end":
+		case "agent_end", "agent_settled":
 			if usage := agentEndUsage(event); usage != nil {
 				lastUsage = usage
 			}
 			if last := lastAssistantMessage(event.Messages); last != nil && isMessageError(last) {
 				emitError(messageErrorText(last))
 			}
-			var turn *rawUsage
-			if turnUsageSet {
-				turn = &turnUsage
+			if event.Type == doneType {
+				var turn *rawUsage
+				if turnUsageSet {
+					turn = &turnUsage
+				}
+				emit(engine.Event{Type: engine.EventDone, Meta: usageMeta(lastUsage, turn)})
 			}
-			emit(engine.Event{Type: engine.EventDone, Meta: usageMeta(lastUsage, turn)})
 		}
 	}
 	if err := scanner.Err(); err != nil {

@@ -62,6 +62,9 @@ log_level = "info"
 [codex]
 # Executable name or absolute path. Default: codex.
 path = "codex"
+# Codex transport: app-server | exec. Default: app-server.
+# app-server enables /steer, /append, /ps, and /btw.
+backend = "app-server"
 # Model name. Empty = Codex default.
 # model = "gpt-5.2-codex"
 # Reasoning effort (e.g. minimal, low, medium, high). Empty = Codex default.
@@ -102,8 +105,11 @@ max_output_bytes = 2097152
 # Context window used for the card footer. 0 = read limit.context from the
 # OpenCode model configuration.
 context_window = 0
-# true = pass --standalone.
-standalone = true
+# false = use OpenCode's shared server, which is required for /steer.
+standalone = false
+# Optional existing shared server. When set, run/export/steer all use it and
+# standalone is ignored. Example: "http://127.0.0.1:4096".
+# server_url = ""
 # true = pass --auto (non-interactive execution).
 auto_approve = true
 # true = create a separate subdirectory per chat under working_dir.
@@ -142,6 +148,8 @@ per_chat_workspace = false
 [claude]
 # Executable name or absolute path. Default: claude.
 path = "claude"
+# Transport: stream-json | print. Default: stream-json (enables /steer).
+backend = "stream-json"
 # Model name. Empty = Claude Code default.
 # model = "claude-sonnet-4-5"
 # Fallback model used when the primary model is unavailable.
@@ -170,6 +178,8 @@ per_chat_workspace = false
 [pi]
 # Executable name or absolute path. Default: pi.
 path = "pi"
+# Transport: rpc | json. Default: rpc (enables /steer).
+backend = "rpc"
 # Provider name passed as --provider. Empty = Pi default.
 # provider = "anthropic"
 # Model name. Empty = Pi default model.
