@@ -51,13 +51,273 @@ func runBot(configPath string) error {
 	if err != nil {
 		return err
 	}
+	if len(cfg.Bots) == 0 {
+		return runLegacyBot(configPath)
+	}
+
+	logger := newLogger(platformLogLevel(cfg))
+	slog.SetDefault(logger)
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	runtimes := make([]*botRuntime, 0, len(bots))
+	workspaceLocks := execguard.NewWorkspaceLocks()
+	for _, bot := range bots {
+		runtime, err := newBotRuntime(ctx, bot, logger, workspaceLocks)
+		if err != nil {
+			return fmt.Errorf("bot %q: %w", bot.ID, err)
+		}
+		runtimes = append(runtimes, runtime)
+	}
+	return runBotRuntimes(ctx, runtimes, logger)
+}
+
+type botRuntime struct {
+	id           string
+	name         string
+	platformName string
+	cfg          config.Config
+	logger       *slog.Logger
+	platform     platform.PlatformAdapter
+	router       *core.Router
+	scheduler    *core.Scheduler
+	scheduleAPI  *core.ScheduleAPI
+	setup        engineSetup
+	workspaces   *execguard.Workspace
+	memories     memory.Store
+}
+
+func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog.Logger, workspaceLocks *execguard.WorkspaceLocks) (*botRuntime, error) {
+	cfg := bot.Config
+	logger := rootLogger.With("bot", bot.ID)
+
 	setup, err := setupEngine(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(cfg.Storage.DataDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create data dir: %w", err)
+	}
+	lessons, err := comb.NewFileStore(cfg.Storage.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	var memories memory.Store
+	if cfg.MemoryEnabled() {
+		store, err := memory.NewFileStore(cfg.Storage.DataDir)
+		if err != nil {
+			return nil, err
+		}
+		memories = store
+	}
+	workspaces, err := newWorkspaceForBot(cfg, setup, bot.ID, bot.WorktreeDir)
+	if err != nil {
+		return nil, err
+	}
+	platformAdapter, platformName, err := newPlatformAdapter(cfg)
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := core.NewPersistentSessionStore(filepath.Join(cfg.Storage.DataDir, "sessions.json"), bot.ID)
+	if err != nil {
+		logger.Warn("could not load persisted sessions; starting with empty sessions", "error", err)
+		sessions = core.NewSessionStore()
+	}
+	anchors, err := core.NewAnchorStore(cfg.Storage.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("load delivery anchors: %w", err)
+	}
+	router := core.NewRouter(
+		ctx,
+		platformAdapter,
+		setup.adapter,
+		sessions,
+		core.NewQueue(),
+		workspaces,
+		lessons,
+		memories,
+		decision.Noop{},
+		logger,
+		core.RouterConfig{
+			BotID:                  bot.ID,
+			AgentID:                cfg.Bot.Engine,
+			BotName:                cfg.Bot.Name,
+			Version:                version,
+			ModelName:              setup.model,
+			ContextWindow:          setup.contextWindow,
+			EngineOptions:          setup.options,
+			AdminUsers:             cfg.Bot.AdminUsers,
+			DataDir:                cfg.Storage.DataDir,
+			APISocket:              filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			WorkspaceLocks:         workspaceLocks,
+			MemoryMaxItems:         cfg.Memory.MaxItems,
+			MemoryMaxChars:         cfg.Memory.MaxChars,
+			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
+		},
+	)
+
+	var scheduler *core.Scheduler
+	var scheduleAPI *core.ScheduleAPI
+	if cfg.ScheduleEnabled() {
+		grace, err := cfg.ScheduleGrace()
+		if err != nil {
+			return nil, err
+		}
+		jitter, err := cfg.ScheduleJitter()
+		if err != nil {
+			return nil, err
+		}
+		timeout, err := cfg.ScheduleTimeout()
+		if err != nil {
+			return nil, err
+		}
+		scheduler, err = core.NewScheduler(core.SchedulerOptions{
+			StorePath:       filepath.Join(cfg.Storage.DataDir, "schedules.json"),
+			Anchors:         anchors,
+			DefaultTimezone: cfg.Schedule.Timezone,
+			StartupGrace:    grace,
+			HistoryLimit:    cfg.Schedule.HistoryLimit,
+			MaxConcurrent:   cfg.Schedule.MaxConcurrent,
+			Jitter:          jitter,
+			DefaultTimeout:  timeout,
+			Logger:          logger,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("load scheduled tasks: %w", err)
+		}
+		router.SetScheduling(anchors, scheduler)
+	} else {
+		router.SetScheduling(anchors, nil)
+	}
+	if scheduler != nil || memories != nil {
+		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
+			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			Scheduler:      scheduler,
+			Memory:         memories,
+			Logger:         logger,
+			DefaultChannel: platformName,
+			DefaultAgent:   cfg.Bot.Engine,
+			AdminUsers:     cfg.Bot.AdminUsers,
+		})
+	}
+	return &botRuntime{
+		id:           bot.ID,
+		name:         bot.Name,
+		platformName: platformName,
+		cfg:          cfg,
+		logger:       logger,
+		platform:     platformAdapter,
+		router:       router,
+		scheduler:    scheduler,
+		scheduleAPI:  scheduleAPI,
+		setup:        setup,
+		workspaces:   workspaces,
+		memories:     memories,
+	}, nil
+}
+
+func (b *botRuntime) run(ctx context.Context) error {
+	if b.scheduler != nil {
+		if err := b.scheduler.Start(ctx, func(runCtx context.Context, task core.ScheduledTask, anchor core.SessionAnchor) error {
+			return b.router.ExecuteScheduled(runCtx, platform.Message{
+				MessageID: anchor.MessageID,
+				Channel:   anchor.Channel,
+				ChatID:    anchor.ChatID,
+				ChatType:  anchor.ChatType,
+				UserID:    anchor.UserID,
+				Text:      task.Prompt,
+				ThreadID:  anchor.ThreadID,
+				Origin:    "schedule",
+			}, task.SessionID)
+		}); err != nil {
+			return err
+		}
+		defer b.scheduler.Stop()
+	}
+	if b.scheduleAPI != nil {
+		if err := b.scheduleAPI.Start(ctx); err != nil {
+			return err
+		}
+		defer b.scheduleAPI.Close()
+	}
+
+	b.logger.Info("bot starting",
+		"version", version,
+		"platform", b.platformName,
+		"engine", b.setup.name,
+		"workspace", b.workspaces.Root(),
+		"data_dir", b.cfg.Storage.DataDir,
+		"model", b.setup.model,
+		"context_window", b.setup.contextWindow,
+		"memory_enabled", b.memories != nil,
+		"schedule_enabled", b.scheduler != nil,
+		"workspace_mode", b.cfg.Bot.WorkspaceMode,
+	)
+	if b.setup.name == "codex" && b.setup.contextWindow == 0 {
+		b.logger.Warn("codex context window unknown; card footer will omit context usage (set codex.context_window to override)")
+	}
+	if len(b.cfg.Bot.AdminUsers) == 0 && len(b.cfg.Bot.AllowedChats) == 0 {
+		b.logger.Warn("no user/chat allowlist configured; anyone who can reach the bot may run the configured agent")
+	}
+	return b.platform.Start(ctx, b.router.Handle)
+}
+
+func runBotRuntimes(ctx context.Context, runtimes []*botRuntime, logger *slog.Logger) error {
+	type result struct {
+		id  string
+		err error
+	}
+	results := make(chan result, len(runtimes))
+	for _, runtime := range runtimes {
+		go func(runtime *botRuntime) {
+			results <- result{id: runtime.id, err: runtime.run(ctx)}
+		}(runtime)
+	}
+
+	remaining := len(runtimes)
+	failures := 0
+	var failure error
+	for remaining > 0 {
+		select {
+		case <-ctx.Done():
+			logger.Info("nectar shutting down", "bots", remaining)
+			return nil
+		case result := <-results:
+			remaining--
+			if result.err != nil && !errors.Is(result.err, context.Canceled) {
+				failures++
+				failure = errors.Join(failure, fmt.Errorf("%s: %w", result.id, result.err))
+				logger.Error("bot stopped", "bot", result.id, "error", result.err)
+			} else {
+				logger.Info("bot stopped", "bot", result.id)
+			}
+			if remaining == 0 && failures == len(runtimes) {
+				return failure
+			}
+		}
+	}
+	return nil
+}
+
+func runLegacyBot(configPath string) error {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
 	}
 
 	logger := newLogger(platformLogLevel(cfg))
 	slog.SetDefault(logger)
+
+	setup, err := setupEngine(cfg)
+	if err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(cfg.Storage.DataDir, 0o700); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
@@ -74,7 +334,7 @@ func runBot(configPath string) error {
 		}
 		memories = store
 	}
-	workspaces, err := execguard.NewWorkspace(setup.workspaceDir, setup.perChatWorkspace)
+	workspaces, err := newWorkspaceForBot(cfg, setup, "default", cfg.Storage.DataDir)
 	if err != nil {
 		return err
 	}
@@ -119,6 +379,7 @@ func runBot(configPath string) error {
 			AdminUsers:             cfg.Bot.AdminUsers,
 			DataDir:                cfg.Storage.DataDir,
 			APISocket:              filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
+			WorkspaceLocks:         execguard.NewWorkspaceLocks(),
 			MemoryMaxItems:         cfg.Memory.MaxItems,
 			MemoryMaxChars:         cfg.Memory.MaxChars,
 			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
@@ -242,6 +503,7 @@ func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, er
 		adapter, err := dingtalk.New(dingtalk.Config{
 			ClientID:     cfg.DingTalk.ClientID,
 			ClientSecret: cfg.DingTalk.ClientSecret,
+			BotName:      cfg.Bot.Name,
 			RobotCode:    cfg.DingTalk.RobotCode,
 			LogLevel:     cfg.DingTalk.LogLevel,
 			AllowedUsers: cfg.Bot.AdminUsers,
@@ -255,6 +517,7 @@ func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, er
 	case "telegram":
 		adapter, err := telegram.New(telegram.Config{
 			BotToken:     cfg.Telegram.BotToken,
+			BotName:      cfg.Bot.Name,
 			Proxy:        cfg.Telegram.Proxy,
 			APIBaseURL:   cfg.Telegram.APIBaseURL,
 			AllowedUsers: cfg.Bot.AdminUsers,
@@ -268,6 +531,7 @@ func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, er
 		adapter, err := feishu.New(feishu.Config{
 			AppID:        cfg.Feishu.AppID,
 			AppSecret:    cfg.Feishu.AppSecret,
+			BotName:      cfg.Bot.Name,
 			LogLevel:     cfg.Feishu.LogLevel,
 			AllowedUsers: cfg.Bot.AdminUsers,
 			AllowedChats: cfg.Bot.AllowedChats,
@@ -301,8 +565,28 @@ type engineSetup struct {
 	perChatWorkspace bool
 }
 
+func newWorkspaceForBot(cfg config.Config, setup engineSetup, botID, worktreeDir string) (*execguard.Workspace, error) {
+	mode := execguard.Mode(strings.ToLower(strings.TrimSpace(cfg.Bot.WorkspaceMode)))
+	if mode == "" {
+		mode = execguard.ModeShared
+	}
+	if setup.perChatWorkspace && mode == execguard.ModeShared {
+		mode = execguard.ModePerChat
+	}
+	return execguard.NewWorkspaceWithOptions(execguard.Options{
+		Root:    setup.workspaceDir,
+		Mode:    mode,
+		DataDir: worktreeDir,
+		BotID:   botID,
+	})
+}
+
 func setupEngine(cfg config.Config) (engineSetup, error) {
-	switch cfg.Bot.Engine {
+	return setupEngineByName(cfg, cfg.Bot.Engine)
+}
+
+func setupEngineByName(cfg config.Config, name string) (engineSetup, error) {
+	switch name {
 	case "codex":
 		timeout, err := cfg.Timeout()
 		if err != nil {
@@ -481,7 +765,7 @@ func setupEngine(cfg config.Config) (engineSetup, error) {
 			perChatWorkspace: cfg.Pi.PerChatWorkspace,
 		}, nil
 	default:
-		return engineSetup{}, fmt.Errorf("unsupported engine %q", cfg.Bot.Engine)
+		return engineSetup{}, fmt.Errorf("unsupported engine %q", name)
 	}
 }
 

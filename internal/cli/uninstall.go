@@ -12,6 +12,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/zhouyg1992/nectar/config"
+	execguard "github.com/zhouyg1992/nectar/internal/exec"
 	"github.com/zhouyg1992/nectar/internal/service"
 	"github.com/zhouyg1992/nectar/internal/skills"
 )
@@ -97,6 +98,9 @@ func runUninstall(args []string) error {
 	}
 
 	if *purgeData {
+		if err := removeBotWorktrees(resolvedConfig); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
+		}
 		if err := removeManagedDataDir(dataDir, home); err != nil {
 			cleanupErrs = append(cleanupErrs, err)
 		}
@@ -114,6 +118,36 @@ func runUninstall(args []string) error {
 	}
 	fmt.Println("Nectar uninstalled.")
 	return nil
+}
+
+func removeBotWorktrees(configPath string) error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("load bots for worktree cleanup: %w", err)
+	}
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		return fmt.Errorf("resolve bots for worktree cleanup: %w", err)
+	}
+	var errs []error
+	for _, bot := range bots {
+		root := workspaceForEngine(bot.Config)
+		if _, err := os.Stat(root); err != nil {
+			continue
+		}
+		workspace, err := workspaceForBot(bot)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("bot %s worktree: %w", bot.ID, err))
+			continue
+		}
+		if workspace.Mode() != execguard.ModeWorktree {
+			continue
+		}
+		if err := workspace.RemoveAllWorktrees(true); err != nil {
+			errs = append(errs, fmt.Errorf("bot %s worktrees: %w", bot.ID, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func pathWithin(path, dir string) bool {

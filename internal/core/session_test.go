@@ -190,6 +190,29 @@ func TestSessionStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestSessionStoreSeparatesBotsInSameChat(t *testing.T) {
+	store := NewSessionStore()
+	codexKey := SessionKey{BotID: "codex_dev", Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+	claudeKey := SessionKey{BotID: "claude_review", Channel: "feishu", ChatID: "c1", AgentID: "claude"}
+	codexSession, err := store.EnsureActive(codexKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claudeSession, err := store.EnsureActive(claudeKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if codexSession.ID == claudeSession.ID {
+		t.Fatalf("bots shared session %q", codexSession.ID)
+	}
+	if got, ok := store.Active(codexKey); !ok || got.ID != codexSession.ID {
+		t.Fatalf("codex active = %#v, %v", got, ok)
+	}
+	if got, ok := store.Active(claudeKey); !ok || got.ID != claudeSession.ID {
+		t.Fatalf("claude active = %#v, %v", got, ok)
+	}
+}
+
 func TestPersistentSessionStoreMigratesV1(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	legacy := `{

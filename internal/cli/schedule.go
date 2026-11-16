@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/zhouyg1992/nectar/config"
 )
 
 type scheduleCLIRequest struct {
@@ -50,10 +52,12 @@ type scheduleCLITask struct {
 }
 
 type scheduleCLITaskResponse struct {
+	Bot  string          `json:"bot,omitempty"`
 	Task scheduleCLITask `json:"task"`
 }
 
 type scheduleCLIListResponse struct {
+	Bot   string            `json:"bot,omitempty"`
 	Tasks []scheduleCLITask `json:"tasks"`
 }
 
@@ -95,8 +99,11 @@ func scheduleCLIList(args []string) error {
 	fs := flag.NewFlagSet("schedule list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	all := fs.Bool("all", false, "include completed and failed tasks")
+	allBots := fs.Bool("all-bots", false, "show tasks for all configured bots")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "schedule API socket")
+	configPath := fs.String("config", "", "path to config.toml")
+	botID := fs.String("bot", "", "bot id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -104,22 +111,87 @@ func scheduleCLIList(args []string) error {
 	if *all {
 		path += "?all=1"
 	}
-	var response scheduleCLIListResponse
-	if err := scheduleRequest(*socket, http.MethodGet, path, nil, &response); err != nil {
+	if *allBots {
+		return scheduleCLIListAllBots(*configPath, *jsonOut, path)
+	}
+	socketPath, bot, hasBot, err := resolveScheduleSocket(*socket, *configPath, *botID)
+	if err != nil {
 		return err
+	}
+	var response scheduleCLIListResponse
+	if err := scheduleRequest(socketPath, http.MethodGet, path, nil, &response); err != nil {
+		return err
+	}
+	if hasBot {
+		response.Bot = bot.ID
 	}
 	if *jsonOut {
 		return printJSON(response)
 	}
 	if len(response.Tasks) == 0 {
-		fmt.Println("No scheduled tasks.")
+		if hasBot {
+			fmt.Printf("Bot %s (%s): no scheduled tasks.\n", bot.ID, bot.Name)
+		} else {
+			fmt.Println("No scheduled tasks.")
+		}
 		return nil
+	}
+	if hasBot {
+		fmt.Printf("Bot %s (%s)\n\n", bot.ID, bot.Name)
 	}
 	for _, task := range response.Tasks {
 		fmt.Println(formatCLITask(task))
 		fmt.Println()
 	}
 	return nil
+}
+
+func scheduleCLIListAllBots(configPath string, jsonOut bool, path string) error {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return err
+	}
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		return err
+	}
+	if len(bots) == 0 {
+		return errors.New("no bots configured")
+	}
+	type botTasks struct {
+		Bot   string            `json:"bot"`
+		Name  string            `json:"name"`
+		Tasks []scheduleCLITask `json:"tasks"`
+		Error string            `json:"error,omitempty"`
+	}
+	results := make([]botTasks, 0, len(bots))
+	var errs []error
+	for _, bot := range bots {
+		var response scheduleCLIListResponse
+		if err := scheduleRequest(botAPISocket(bot), http.MethodGet, path, nil, &response); err != nil {
+			errs = append(errs, fmt.Errorf("bot %s: %w", bot.ID, err))
+			results = append(results, botTasks{Bot: bot.ID, Name: bot.Name, Error: err.Error()})
+			continue
+		}
+		results = append(results, botTasks{Bot: bot.ID, Name: bot.Name, Tasks: response.Tasks})
+	}
+	if jsonOut {
+		return printJSON(results)
+	}
+	for _, result := range results {
+		fmt.Printf("Bot %s (%s)\n", result.Bot, result.Name)
+		if result.Error != "" {
+			fmt.Printf("  Error: %s\n", result.Error)
+		} else if len(result.Tasks) == 0 {
+			fmt.Println("  No scheduled tasks.")
+		} else {
+			for _, task := range result.Tasks {
+				fmt.Println(formatCLITask(task))
+			}
+		}
+		fmt.Println()
+	}
+	return errors.Join(errs...)
 }
 
 func scheduleCLIAdd(args []string, preview bool) error {
@@ -143,7 +215,13 @@ func scheduleCLIAdd(args []string, preview bool) error {
 	agent := fs.String("agent", "", "target agent id")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "schedule API socket")
+	configPath := fs.String("config", "", "path to config.toml")
+	botID := fs.String("bot", "", "bot id")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	socketPath, bot, hasBot, err := resolveScheduleSocket(*socket, *configPath, *botID)
+	if err != nil {
 		return err
 	}
 
@@ -190,7 +268,7 @@ func scheduleCLIAdd(args []string, preview bool) error {
 	if preview {
 		path = "/schedule/preview"
 		var response scheduleCLIPreviewResponse
-		if err := scheduleRequest(*socket, http.MethodPost, path, req, &response); err != nil {
+		if err := scheduleRequest(socketPath, http.MethodPost, path, req, &response); err != nil {
 			return err
 		}
 		if *jsonOut {
@@ -203,11 +281,17 @@ func scheduleCLIAdd(args []string, preview bool) error {
 	}
 
 	var response scheduleCLITaskResponse
-	if err := scheduleRequest(*socket, http.MethodPost, path, req, &response); err != nil {
+	if err := scheduleRequest(socketPath, http.MethodPost, path, req, &response); err != nil {
 		return err
+	}
+	if hasBot {
+		response.Bot = bot.ID
 	}
 	if *jsonOut {
 		return printJSON(response)
+	}
+	if hasBot {
+		fmt.Printf("Bot %s (%s)\n", bot.ID, bot.Name)
 	}
 	fmt.Println(formatCLITask(response.Task))
 	return nil
@@ -219,7 +303,13 @@ func scheduleCLIAction(command string, args []string) error {
 	fs.SetOutput(os.Stderr)
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "schedule API socket")
+	configPath := fs.String("config", "", "path to config.toml")
+	botID := fs.String("bot", "", "bot id")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	socketPath, bot, hasBot, err := resolveScheduleSocket(*socket, *configPath, *botID)
+	if err != nil {
 		return err
 	}
 	if id == "" {
@@ -239,11 +329,14 @@ func scheduleCLIAction(command string, args []string) error {
 		path = "/schedule/" + id
 	}
 	var response map[string]any
-	if err := scheduleRequest(*socket, method, path, nil, &response); err != nil {
+	if err := scheduleRequest(socketPath, method, path, nil, &response); err != nil {
 		return err
 	}
 	if *jsonOut {
 		return printJSON(response)
+	}
+	if hasBot {
+		fmt.Printf("Bot %s (%s): ", bot.ID, bot.Name)
 	}
 	fmt.Printf("%s %s\n", id, command)
 	return nil
@@ -263,7 +356,13 @@ func scheduleCLIUpdate(args []string) error {
 	timezone := fs.String("timezone", "", "new IANA timezone")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	socket := fs.String("socket", "", "schedule API socket")
+	configPath := fs.String("config", "", "path to config.toml")
+	botID := fs.String("bot", "", "bot id")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	socketPath, bot, hasBot, err := resolveScheduleSocket(*socket, *configPath, *botID)
+	if err != nil {
 		return err
 	}
 	if id == "" {
@@ -302,11 +401,17 @@ func scheduleCLIUpdate(args []string) error {
 		req.Mode = "in"
 	}
 	var response scheduleCLITaskResponse
-	if err := scheduleRequest(*socket, http.MethodPatch, "/schedule/"+id, req, &response); err != nil {
+	if err := scheduleRequest(socketPath, http.MethodPatch, "/schedule/"+id, req, &response); err != nil {
 		return err
+	}
+	if hasBot {
+		response.Bot = bot.ID
 	}
 	if *jsonOut {
 		return printJSON(response)
+	}
+	if hasBot {
+		fmt.Printf("Bot %s (%s)\n", bot.ID, bot.Name)
 	}
 	fmt.Println(formatCLITask(response.Task))
 	return nil
@@ -444,7 +549,7 @@ func printJSON(value any) error {
 
 func printScheduleUsage() {
 	fmt.Print(`Usage:
-  nectar schedule list [--all] [--json] [--socket PATH]
+  nectar schedule list [--all] [--all-bots] [--json] [--config PATH] [--bot ID] [--socket PATH]
   nectar schedule add --cron "0 9 * * 1-5" --prompt "..."
   nectar schedule add --every 90m --prompt "..."
   nectar schedule add --in 30m --prompt "..."
@@ -456,6 +561,9 @@ func printScheduleUsage() {
 
 Target defaults come from NECTAR_CHANNEL, NECTAR_CHAT_ID, NECTAR_THREAD_ID and
 NECTAR_AGENT_ID, which nectar injects into agent sessions.
+
+Use --bot ID to target a specific bot. With --all-bots, list tasks for every
+configured bot and print the bot id/name.
 `)
 }
 

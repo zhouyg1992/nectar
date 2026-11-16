@@ -193,6 +193,38 @@ type blockingEngine struct {
 	release chan struct{}
 }
 
+type concurrentEngine struct {
+	mu      sync.Mutex
+	starts  int
+	started chan struct{}
+	release chan struct{}
+}
+
+func (c *concurrentEngine) Name() string { return "concurrent" }
+
+func (c *concurrentEngine) Start(context.Context, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	c.mu.Lock()
+	c.starts++
+	index := c.starts
+	c.mu.Unlock()
+	ch := make(chan engine.Event, 3)
+	go func() {
+		ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: fmt.Sprintf("session-%d", index)}
+		c.started <- struct{}{}
+		<-c.release
+		ch <- engine.Event{Type: engine.EventMessage, Text: "done"}
+		ch <- engine.Event{Type: engine.EventDone}
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (c *concurrentEngine) Resume(context.Context, string, string, engine.EngineOptions) (<-chan engine.Event, error) {
+	return nil, errors.New("not used")
+}
+
+func (c *concurrentEngine) Cancel(context.Context, string) error { return nil }
+
 func (f *fakeEngine) Name() string {
 	if f.name != "" {
 		return f.name
@@ -780,6 +812,7 @@ func TestRouterRecordsLessonOnError(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{fail: true}
 	router, lessons := newTestRouter(t, eng, plat)
+	router.cfg.DisableMemoryAutoLearn = true
 
 	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "break"})
 	waitForReplies(t, plat, 1)
@@ -822,7 +855,18 @@ func TestRouterSendsThinkingCardAndUpdatesFinal(t *testing.T) {
 		t.Fatalf("initial card = %#v", initial)
 	}
 
-	final := plat.lastUpdate()
+	deadline := time.Now().Add(5 * time.Second)
+	var final platform.Card
+	for {
+		final = plat.lastUpdate()
+		if final.Status == platform.CardComplete {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	if final.Status != platform.CardComplete || final.Title != cardTitleComplete || final.Body != "answer" {
 		t.Fatalf("final card = %#v", final)
 	}
@@ -1101,6 +1145,49 @@ func TestRouterStatusShowsEngineModelAndSession(t *testing.T) {
 	for _, want := range []string{"| Engine | fake |", "| Model | gpt-5.2-codex |", "| Session | session-123 |"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("status body = %q, want %q", body, want)
+		}
+	}
+}
+
+func TestRouterAllowsDifferentChatsToRunTogether(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &concurrentEngine{started: make(chan struct{}, 2), release: make(chan struct{})}
+	defer close(eng.release)
+
+	ws, err := execguard.NewWorkspace(t.TempDir(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lessons, err := comb.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	memories, err := memory.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := NewRouter(
+		context.Background(),
+		plat,
+		eng,
+		NewSessionStore(),
+		NewQueue(),
+		ws,
+		lessons,
+		memories,
+		decision.Noop{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		RouterConfig{AgentID: "codex"},
+	)
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "dm", MessageID: "m1", Text: "dm task"})
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "group", MessageID: "m2", Text: "group task"})
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-eng.started:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("only %d run(s) started; workspace lock still serialized chats", i)
 		}
 	}
 }

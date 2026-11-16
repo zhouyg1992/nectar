@@ -11,6 +11,7 @@ Nectar has two command surfaces:
 nectar [-config PATH]                 Run the bot in the foreground
 nectar -version                       Print the version
 nectar help                           Show CLI help
+nectar bots                           List configured bots
 nectar service <subcommand>           Manage the background service
 nectar update                         Update Nectar
 nectar schedule <subcommand>          Manage scheduled tasks
@@ -29,6 +30,24 @@ Global flags:
 
 > The installer starts the background service by default. To run the bot in the foreground, stop the service first with `nectar service stop` to avoid two instances connecting to the platform.
 
+## Multiple bots
+
+```bash
+nectar bots [-config PATH]
+```
+
+Lists the `[bot]` and `[bots.*]` entries after resolution, including ID, platform, engine, workspace, workspace mode, and data directory. `nectar` or the background service still starts all of them.
+
+## Worktrees
+
+```bash
+nectar worktrees list [--config PATH] [--bot ID] [--json]
+nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force]
+nectar worktrees remove --all [--config PATH] [--bot ID] [--force]
+```
+
+Lists or removes worktrees for the selected bot (`workspace_mode = worktree`, or `auto` on a git repository). Removing a worktree does not delete its branch; dirty worktrees require `--force`.
+
 ## Background service
 
 ```bash
@@ -37,7 +56,7 @@ nectar service start [--config PATH] [--binary PATH]
 nectar service stop [--config PATH] [--binary PATH]
 nectar service restart [--config PATH] [--binary PATH]
 nectar service status [--config PATH] [--binary PATH]
-nectar service logs [--config PATH] [--binary PATH] [-n N] [-f]
+nectar service logs [--config PATH] [--binary PATH] [-n N] [-f] [--bot ID]
 nectar service uninstall [--config PATH] [--binary PATH]
 ```
 
@@ -49,6 +68,7 @@ nectar service uninstall [--config PATH] [--binary PATH]
 | `--no-start` | Install and enable without starting immediately |
 | `-n N` | Number of log lines, default 200 |
 | `-f` | Follow logs |
+| `--bot ID` | Show logs for one bot |
 
 Examples:
 
@@ -58,6 +78,8 @@ nectar service logs -n 500
 nectar service logs -f
 nectar service restart
 ```
+
+With multiple bots, `service status` also prints each configured bot with its platform, engine, workspace, and data directory.
 
 ## Update
 
@@ -100,6 +122,8 @@ The CLI talks to the running bot over `~/.nectar/run/api.sock`, so the service m
 ```bash
 nectar schedule list [--all] [--json] [--socket PATH]
 ```
+
+With multiple bots, pass `--bot ID` to target one bot. `schedule list --all-bots` queries every bot and prints its ID and name.
 
 | Flag | Description |
 |---|---|
@@ -193,6 +217,8 @@ nectar memory update <id> <new text> [--json]
 nectar memory approve|reject|pin|unpin <id>
 nectar memory forget <id> --confirm
 ```
+
+With multiple bots, pass `--bot ID` to select that bot's data directory and access policy, or keep using `--socket` to target a specific bot API socket.
 
 - `--status candidate` is the default; candidates join retrieval only after approval. Use `--status active` when the user explicitly asks to remember something.
 - Scope defaults to `NECTAR_CHAT_ID` in an agent session, otherwise the current project.

@@ -324,7 +324,7 @@ func memoryVisible(item memory.Memory, scopeIDs []string) bool {
 	return false
 }
 
-func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, prompt, sessionID string, hasSession bool) string {
+func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, projectRoot, prompt, sessionID string, hasSession bool) string {
 	if r.memories == nil {
 		return prompt
 	}
@@ -332,7 +332,7 @@ func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, 
 	if scope := memoryChatScope(msg); scope != "" {
 		scopes = append(scopes, scope)
 	}
-	scopes = append(scopes, memory.ProjectScopeAliases(workdir)...)
+	scopes = append(scopes, memory.ProjectScopeAliases(projectRoot)...)
 	items, err := r.memories.Search(ctx, memory.SearchOptions{
 		Query:    prompt,
 		ScopeIDs: scopes,
@@ -437,11 +437,7 @@ func (r *Router) memoryProjectDir(msg platform.Message) string {
 	if r.workspaces == nil {
 		return ""
 	}
-	workdir, err := r.workspaces.ForChat(msg.ChatID)
-	if err != nil {
-		return ""
-	}
-	return workdir
+	return r.workspaces.MemoryRoot(msg.ChatID)
 }
 
 func memoryChatScope(msg platform.Message) string {

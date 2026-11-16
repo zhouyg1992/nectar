@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/channel"
@@ -41,6 +42,7 @@ const (
 type Config struct {
 	AppID     string
 	AppSecret string
+	BotName   string
 	LogLevel  string
 	// AllowedUsers limits DMs by open_id. Empty means any reachable user.
 	AllowedUsers []string
@@ -105,17 +107,22 @@ func (a *Adapter) Capabilities() platform.Capabilities {
 }
 
 func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) error {
+	a.logger.Info(ctx, fmt.Sprintf("[Nectar] feishu connecting bot=%s", a.botLabel()))
+	a.prewarmBotIdentity(ctx)
 	a.ch.OnReady(func() {
-		a.logger.Info(ctx, "[Nectar] feishu websocket connected; ready to receive messages")
+		a.logger.Info(ctx, fmt.Sprintf("[Nectar] feishu websocket connected bot=%s; ready to receive messages", a.botLabel()))
 	})
 	a.ch.OnReconnecting(func() {
-		a.logger.Warn(ctx, "[Nectar] feishu websocket reconnecting")
+		a.logger.Warn(ctx, fmt.Sprintf("[Nectar] feishu websocket reconnecting bot=%s", a.botLabel()))
 	})
 	a.ch.OnReconnected(func() {
-		a.logger.Info(ctx, "[Nectar] feishu websocket reconnected")
+		a.logger.Info(ctx, fmt.Sprintf("[Nectar] feishu websocket reconnected bot=%s", a.botLabel()))
+	})
+	a.ch.OnDisconnected(func() {
+		a.logger.Warn(ctx, fmt.Sprintf("[Nectar] feishu websocket disconnected bot=%s", a.botLabel()))
 	})
 	a.ch.OnError(func(err error) {
-		a.logger.Error(ctx, fmt.Sprintf("[Nectar] feishu channel error: %v", err))
+		a.logger.Error(ctx, fmt.Sprintf("[Nectar] feishu channel error bot=%s: %v", a.botLabel(), err))
 	})
 	a.ch.OnMessage(func(_ context.Context, msg *channeltypes.NormalizedMessage) error {
 		normalized := toPlatformMessage(msg)
@@ -135,6 +142,25 @@ func (a *Adapter) Start(ctx context.Context, handler func(platform.Message)) err
 	})
 
 	return a.ch.Start(ctx)
+}
+
+func (a *Adapter) prewarmBotIdentity(ctx context.Context) {
+	prewarmCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	go func() {
+		defer cancel()
+		if identity := a.ch.GetBotIdentity(prewarmCtx); identity == nil {
+			a.logger.Warn(ctx, fmt.Sprintf("[Nectar] feishu bot identity prewarm failed bot=%s", a.botLabel()))
+		} else {
+			a.logger.Info(ctx, fmt.Sprintf("[Nectar] feishu bot identity ready bot=%s", a.botLabel()))
+		}
+	}()
+}
+
+func (a *Adapter) botLabel() string {
+	if name := strings.TrimSpace(a.cfg.BotName); name != "" {
+		return name
+	}
+	return "feishu"
 }
 
 func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error) {

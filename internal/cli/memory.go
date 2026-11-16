@@ -23,6 +23,7 @@ type memoryCLIOptions struct {
 	chat       string
 	channel    string
 	configPath string
+	bot        string
 	socket     string
 	limit      int
 	jsonOut    bool
@@ -81,13 +82,13 @@ func runMemory(args []string) error {
 
 func printMemoryUsage() {
 	fmt.Print(`Usage:
-  nectar memory add [--kind profile|project|fact|lesson|episode]
+  nectar memory add [--bot ID] [--kind profile|project|fact|lesson|episode]
                     [--scope chat|project|global] [--status candidate|active]
                     [--tags a,b] [--source agent] [--socket PATH] [--json] <text>
-  nectar memory search [--scope chat|project|global|all] [--limit N] [--json] <query>
-  nectar memory list [--status active|pending|archived|all]
+  nectar memory search [--bot ID] [--scope chat|project|global|all] [--limit N] [--json] <query>
+  nectar memory list [--bot ID] [--status active|pending|archived|all]
                      [--scope chat|project|global|all] [--json]
-  nectar memory get <id> [--json]
+  nectar memory get [--bot ID] <id> [--json]
   nectar memory update <id> [--json] <new text>
   nectar memory approve|reject|pin|unpin <id>
   nectar memory forget <id> --confirm
@@ -134,7 +135,7 @@ func parseMemoryCLIOptions(args []string) ([]string, memoryCLIOptions, error) {
 			}
 			opts.confirm = true
 		case "--kind", "--scope", "--status", "--tags", "--source",
-			"--project", "--chat", "--channel", "--config", "--socket", "--limit":
+			"--project", "--chat", "--channel", "--config", "--bot", "--socket", "--limit":
 			if !hasValue {
 				i++
 				if i >= len(args) {
@@ -162,6 +163,8 @@ func parseMemoryCLIOptions(args []string) ([]string, memoryCLIOptions, error) {
 				opts.channel = value
 			case "--config":
 				opts.configPath = value
+			case "--bot":
+				opts.bot = value
 			case "--socket":
 				opts.socket = value
 			case "--limit":
@@ -307,6 +310,9 @@ func memoryCLIList(positional []string, opts memoryCLIOptions) error {
 	}
 	if opts.jsonOut {
 		return printJSON(memoryCLIListResult{Memories: items})
+	}
+	if bot := strings.TrimSpace(opts.bot); bot != "" {
+		fmt.Printf("Bot %s\n", bot)
 	}
 	counts := make(map[memory.Status]int)
 	allItems, err := store.List(context.Background(), memory.ListOptions{Scope: scope, ScopeIDs: scopeIDs})
@@ -463,7 +469,7 @@ func memoryCLIForget(positional []string, opts memoryCLIOptions) error {
 }
 
 func memoryCLILoad(opts memoryCLIOptions) (config.Config, memory.Store, error) {
-	cfg, err := config.Load(opts.configPath)
+	cfg, err := loadConfigForBot(opts.configPath, opts.bot)
 	if err != nil {
 		return config.Config{}, nil, err
 	}
@@ -555,7 +561,7 @@ func memoryCLIManageable(store memory.Store, id string, opts memoryCLIOptions) (
 		return memory.Memory{}, err
 	}
 	if item.Scope == memory.ScopeGlobal {
-		cfg, err := config.Load(opts.configPath)
+		cfg, err := loadConfigForBot(opts.configPath, opts.bot)
 		if err != nil {
 			return memory.Memory{}, err
 		}
@@ -617,7 +623,7 @@ func memoryCLIIsAdmin(cfg config.Config) bool {
 }
 
 func memoryCLIIsAdminForPath(opts memoryCLIOptions) bool {
-	cfg, err := config.Load(opts.configPath)
+	cfg, err := loadConfigForBot(opts.configPath, opts.bot)
 	if err != nil {
 		return false
 	}

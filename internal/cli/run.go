@@ -21,6 +21,10 @@ func Run(args []string, deps Deps) error {
 			return runService(args[1:])
 		case "update":
 			return runUpdate(args[1:], deps.Version)
+		case "bots":
+			return runBots(args[1:])
+		case "worktrees":
+			return runWorktrees(args[1:])
 		case "schedule":
 			return runSchedule(args[1:])
 		case "skills":
@@ -59,6 +63,8 @@ func printMainUsage() {
   nectar [-config PATH]
   nectar -version
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--timeout 10m]
+  nectar bots [-config PATH]
+  nectar worktrees <list|remove> [--config PATH] [--bot ID]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>
   nectar skills <install|uninstall>
   nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>

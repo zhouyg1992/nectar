@@ -82,7 +82,53 @@ engine = "codex"         # codex | opencode | cursor | claude | pi
 # platform = "feishu"    # feishu | dingtalk | telegram；单平台可省略
 admin_users = []
 allowed_chats = []
+# shared | per_chat | per_session | worktree | auto
+workspace_mode = "shared"
 ```
+
+## 多 Bot
+
+一个 Nectar 进程可以同时运行多个 Bot。每个 Bot 有独立的平台身份、引擎、工作区、会话、记忆和权限；在同一个群里分别 @ 对应 Bot 即可。
+
+```toml
+[bots.codex_dev]
+name = "Codex Dev"
+platform = "feishu"
+engine = "codex"
+workspace = "~/code/project-a"
+workspace_mode = "worktree"
+
+[bots.codex_dev.feishu]
+app_id = "cli_xxx"
+app_secret = "xxx"
+
+[bots.claude_review]
+name = "Claude Review"
+platform = "feishu"
+engine = "claude"
+workspace = "~/code/project-a"
+
+[bots.claude_review.feishu]
+app_id = "cli_yyy"
+app_secret = "yyy"
+```
+
+规则：
+
+- 每个 Bot 必须使用独立的平台应用/token；重复凭据会启动失败，避免同一条消息被两个 Bot 重复处理。
+- `[bots.<id>]` 始终使用 `~/.nectar/bots/<id>` 作为数据目录；再增加或删除 Bot 不会改变已有 Bot 的路径。旧 `[bot]` 仍使用 `storage.data_dir`。
+- 同一个 Bot 的不同 chat 默认并发执行，同一个 chat 内按会话串行；单聊和群聊不会互相等待。
+- 新 Bot 默认 `workspace_mode = "auto"`：工作区是已提交的 Git 仓库时为每个 session 创建独立 worktree，否则回退到 `per_chat`。
+- `workspace = "..."` 覆盖该 Bot 的引擎工作目录；`model = "..."` 覆盖该 Bot 当前引擎的模型。
+- 旧 `[bot]` + 全局 `[feishu]` / `[codex]` 配置继续可用；新增 `[bots.*]` 时会同时启动旧默认 Bot 和新增 Bot。
+
+`workspace_mode` 可选 `shared`、`per_chat`、`per_session`、`worktree`、`auto`。`worktree` 会从仓库当前 `HEAD` 创建 `nectar/<bot>/<session>` 分支和独立目录，适合多个 Agent 并行修改同一个仓库；worktree 目录在 `~/.nectar/worktrees/<bot>/<session>`。
+
+worktree 只包含已提交的 `HEAD`，主工作区里未提交的改动不会自动带进去；需要先提交或在主工作区继续处理。
+
+worktree 会按 session 复用。清理时可执行 `git -C <repo> worktree list` 查看，再用 `git -C <repo> worktree remove <path>` 删除。
+
+`per_chat` / `per_session` 会让多个 Agent 同时操作同一个目录，适合读取、分析和互不重叠的任务；要并行修改同一批文件，请使用 `worktree`。
 
 ## 引擎配置
 

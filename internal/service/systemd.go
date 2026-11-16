@@ -109,7 +109,7 @@ func (m *Manager) Status(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) Logs(ctx context.Context, lines int, follow bool) error {
+func (m *Manager) Logs(ctx context.Context, lines int, follow bool, filters []string) error {
 	if err := requireCommand("journalctl"); err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func (m *Manager) Logs(ctx context.Context, lines int, follow bool) error {
 	if follow {
 		args = append(args, "-f")
 	}
-	return run(ctx, "journalctl", args...)
+	return runFiltered(ctx, "journalctl", args, filters)
 }
 
 var _ Service = (*Manager)(nil)

@@ -9,8 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/BurntSushi/toml"
-
 	"github.com/zhouyg1992/nectar/config"
 	"github.com/zhouyg1992/nectar/internal/service"
 )
@@ -37,6 +35,7 @@ func runService(args []string) error {
 	noStart := fs.Bool("no-start", false, "install the service without starting it now")
 	lines := fs.Int("n", 200, "number of log lines")
 	follow := fs.Bool("f", false, "follow logs")
+	botFilter := fs.String("bot", "", "show logs for one bot")
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -80,12 +79,57 @@ func runService(args []string) error {
 	case "restart":
 		return manager.Restart(ctx)
 	case "status":
-		return manager.Status(ctx)
+		if err := manager.Status(ctx); err != nil {
+			return err
+		}
+		cfg, err := config.LoadFile(resolvedConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not load configured bots: %v\n", err)
+			return nil
+		}
+		bots, err := cfg.ResolveBots()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not resolve configured bots: %v\n", err)
+			return nil
+		}
+		if len(bots) > 0 {
+			fmt.Println()
+			return printConfiguredBots(bots)
+		}
+		return nil
 	case "logs":
-		return manager.Logs(ctx, *lines, *follow)
+		filters, err := serviceLogFilters(resolvedConfig, *botFilter)
+		if err != nil {
+			return err
+		}
+		return manager.Logs(ctx, *lines, *follow, filters)
 	default:
 		return fmt.Errorf("unknown service command %q", subcommand)
 	}
+}
+
+func serviceLogFilters(configPath, botID string) ([]string, error) {
+	botID = strings.TrimSpace(botID)
+	if botID == "" {
+		return nil, nil
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(cfg.Bots) == 0 && botID == "default" {
+		return nil, nil
+	}
+	bot, err := loadBotTarget(configPath, botID)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		"bot=" + bot.ID,
+		`bot="` + bot.ID + `"`,
+		"bot=" + bot.Name,
+		`bot="` + bot.Name + `"`,
+	}, nil
 }
 
 func resolveServiceConfig(path string) (string, error) {
@@ -110,86 +154,16 @@ func resolveServiceBinary(path string) (string, error) {
 // environment does not inherit the shell's FEISHU_* / DINGTALK_* / TELEGRAM_*
 // variables.
 func validateServiceConfig(path string) error {
-	var raw struct {
-		Bot struct {
-			Platform string `toml:"platform"`
-		} `toml:"bot"`
-		Feishu struct {
-			AppID     string `toml:"app_id"`
-			AppSecret string `toml:"app_secret"`
-		} `toml:"feishu"`
-		DingTalk struct {
-			ClientID     string `toml:"client_id"`
-			ClientSecret string `toml:"client_secret"`
-			AppKey       string `toml:"app_key"`
-			AppSecret    string `toml:"app_secret"`
-		} `toml:"dingtalk"`
-		Telegram struct {
-			BotToken string `toml:"bot_token"`
-		} `toml:"telegram"`
-	}
-	if _, err := toml.DecodeFile(path, &raw); err != nil {
+	cfg, err := config.LoadFile(path)
+	if err != nil {
 		return fmt.Errorf("load service config %s: %w", path, err)
 	}
-
-	platform := strings.ToLower(strings.TrimSpace(raw.Bot.Platform))
-	feishuAppID := strings.TrimSpace(raw.Feishu.AppID)
-	feishuSecret := strings.TrimSpace(raw.Feishu.AppSecret)
-	dingTalkID := strings.TrimSpace(firstNonEmpty(raw.DingTalk.ClientID, raw.DingTalk.AppKey))
-	dingTalkSecret := strings.TrimSpace(firstNonEmpty(raw.DingTalk.ClientSecret, raw.DingTalk.AppSecret))
-	telegramToken := strings.TrimSpace(raw.Telegram.BotToken)
-	feishuConfigured := !isPlaceholderAppID(feishuAppID) || !isPlaceholderSecret(feishuSecret)
-	dingTalkConfigured := !isPlaceholderDingTalkClientID(dingTalkID) || !isPlaceholderDingTalkSecret(dingTalkSecret)
-	telegramConfigured := !isPlaceholderTelegramToken(telegramToken)
-
-	if platform == "" {
-		var configured []string
-		if feishuConfigured {
-			configured = append(configured, "feishu")
-		}
-		if dingTalkConfigured {
-			configured = append(configured, "dingtalk")
-		}
-		if telegramConfigured {
-			configured = append(configured, "telegram")
-		}
-		switch len(configured) {
-		case 0:
-			platform = "feishu"
-		case 1:
-			platform = configured[0]
-		default:
-			return fmt.Errorf(
-				"multiple platform credentials are configured in %s (%s); set bot.platform to one of feishu, dingtalk, telegram",
-				path, strings.Join(configured, ", "),
-			)
-		}
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		return fmt.Errorf("service config %s: %w", path, err)
 	}
-
-	switch platform {
-	case "feishu":
-		if isPlaceholderAppID(feishuAppID) || isPlaceholderSecret(feishuSecret) {
-			return fmt.Errorf(
-				"feishu app_id/app_secret are not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
-				path,
-			)
-		}
-	case "dingtalk":
-		if isPlaceholderDingTalkClientID(dingTalkID) || isPlaceholderDingTalkSecret(dingTalkSecret) {
-			return fmt.Errorf(
-				"dingtalk client_id/client_secret are not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
-				path,
-			)
-		}
-	case "telegram":
-		if isPlaceholderTelegramToken(telegramToken) {
-			return fmt.Errorf(
-				"telegram bot_token is not configured in %s; edit the file first. Service mode reads credentials from this file, not from environment variables",
-				path,
-			)
-		}
-	default:
-		return fmt.Errorf("unsupported bot.platform %q in %s (supported: feishu, dingtalk, telegram)", platform, path)
+	if len(bots) == 0 {
+		return fmt.Errorf("service config %s has no usable bots", path)
 	}
 	return nil
 }
@@ -203,30 +177,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func isPlaceholderAppID(value string) bool {
-	return value == "" || value == "cli_xxx" || strings.HasPrefix(value, "cli_x")
-}
-
-func isPlaceholderSecret(value string) bool {
-	return value == "" || value == "xxx" || (len(value) >= 8 && strings.Trim(value, "x") == "")
-}
-
-func isPlaceholderDingTalkClientID(value string) bool {
-	value = strings.TrimSpace(value)
-	return value == "" || strings.Contains(value, "xxxxxxxx") || (len(value) >= 8 && strings.Trim(value, "x") == "")
-}
-
-func isPlaceholderDingTalkSecret(value string) bool {
-	value = strings.TrimSpace(value)
-	return isPlaceholderSecret(value) || strings.Contains(value, "xxxxxxxx")
-}
-
-func isPlaceholderTelegramToken(value string) bool {
-	value = strings.TrimSpace(value)
-	return value == "" || value == "xxx" || strings.Contains(value, "xxxxxxxx") ||
-		(len(value) >= 8 && strings.Trim(value, "x") == "")
-}
-
 func printServiceUsage() {
 	fmt.Print(`Usage:
   nectar service install [--config PATH] [--binary PATH] [--linger] [--no-start]
@@ -235,7 +185,7 @@ func printServiceUsage() {
   nectar service stop
   nectar service restart
   nectar service status
-  nectar service logs [-n 200] [-f]
+  nectar service logs [-n 200] [-f] [--bot ID]
 
 Options:
   --config PATH   path to config.toml (default ~/.nectar/config.toml)
@@ -244,5 +194,6 @@ Options:
   --no-start      install and enable the service without starting it now
   -n N            number of log lines (default 200)
   -f              follow logs
+  --bot ID        show logs for one bot
 `)
 }

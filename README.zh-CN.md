@@ -42,6 +42,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
 - **记忆可携带**：本地优先的 profile / project / chat 记忆，支持审核、检索注入和 Agent CLI 读写。
 - **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
+- **一个进程跑多个 Bot**：Codex、Claude、运维 Bot 各自拥有独立身份、工作区、会话和记忆，并支持每个 session 独立 git worktree。
 
 ## 快速开始
 
@@ -147,6 +148,8 @@ nectar service status                 查看状态
 nectar service logs                   查看日志
 nectar service uninstall              卸载服务
 
+nectar bots                           查看已配置的 Bot
+nectar worktrees list|remove          查看或清理 session worktree
 nectar update                         升级到最新版本
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
 nectar skills install|uninstall       Agent Skill 管理

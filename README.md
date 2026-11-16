@@ -42,6 +42,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
 - **Memory travels with you**: local-first profile / project / chat memory with review, retrieval, and an agent CLI.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
+- **Run several bots at once**: give Codex, Claude, and ops bots separate identities, workspaces, sessions, and memory in one process, with optional per-session git worktrees.
 
 ## Quick start
 
@@ -147,6 +148,8 @@ nectar service status                 Show status
 nectar service logs                   Show logs
 nectar service uninstall              Uninstall the service
 
+nectar bots                           List configured bots
+nectar worktrees list|remove          List or clean session worktrees
 nectar update                         Update to the latest release
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
 nectar skills install|uninstall       Manage agent skills

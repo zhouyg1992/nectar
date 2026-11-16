@@ -11,6 +11,7 @@ Nectar 有两类命令：
 nectar [-config PATH]                 前台运行 bot
 nectar -version                       查看版本
 nectar help                           查看 CLI 帮助
+nectar bots                           查看已配置的 Bot 列表
 nectar service <subcommand>           管理后台服务
 nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
@@ -29,6 +30,24 @@ nectar uninstall                      卸载 Nectar
 
 > 安装脚本默认已经启动后台服务。手动前台运行时先执行 `nectar service stop`，避免多个实例同时连接平台。
 
+## 多 Bot
+
+```bash
+nectar bots [-config PATH]
+```
+
+列出 `[bot]` 和 `[bots.*]` 解析后的 Bot，包括 ID、平台、引擎、工作区、workspace mode 和数据目录。实际运行仍由 `nectar` 或后台服务统一启动。
+
+## Worktree
+
+```bash
+nectar worktrees list [--config PATH] [--bot ID] [--json]
+nectar worktrees remove <session-id|path> [--config PATH] [--bot ID] [--force]
+nectar worktrees remove --all [--config PATH] [--bot ID] [--force]
+```
+
+只列出/删除当前 Bot 的 worktree（`workspace_mode = worktree` 或 Git 仓库上的 `auto`）。删除 worktree 不会删除对应分支；有未提交改动时默认拒绝，使用 `--force` 强制删除。
+
 ## 后台服务
 
 ```bash
@@ -37,7 +56,7 @@ nectar service start [--config PATH] [--binary PATH]
 nectar service stop [--config PATH] [--binary PATH]
 nectar service restart [--config PATH] [--binary PATH]
 nectar service status [--config PATH] [--binary PATH]
-nectar service logs [--config PATH] [--binary PATH] [-n N] [-f]
+nectar service logs [--config PATH] [--binary PATH] [-n N] [-f] [--bot ID]
 nectar service uninstall [--config PATH] [--binary PATH]
 ```
 
@@ -49,6 +68,7 @@ nectar service uninstall [--config PATH] [--binary PATH]
 | `--no-start` | 只安装并启用服务，不立即启动 |
 | `-n N` | 日志行数，默认 200 |
 | `-f` | 持续跟随日志 |
+| `--bot ID` | 只显示指定 Bot 的日志 |
 
 示例：
 
@@ -58,6 +78,8 @@ nectar service logs -n 500
 nectar service logs -f
 nectar service restart
 ```
+
+多 Bot 配置下，`service status` 会在服务状态后按 Bot 列出 ID、平台、引擎、工作区和数据目录。
 
 ## 更新
 
@@ -100,6 +122,8 @@ CLI 通过 `~/.nectar/run/api.sock` 与正在运行的 bot 通信，因此需要
 ```bash
 nectar schedule list [--all] [--json] [--socket PATH]
 ```
+
+多 Bot 时使用 `--bot ID` 指定目标 Bot；`schedule list --all-bots` 会逐 Bot 查询并显示 Bot ID/名称。
 
 | 参数 | 说明 |
 |---|---|
@@ -191,6 +215,8 @@ nectar memory update <id> <new text> [--json]
 nectar memory approve|reject|pin|unpin <id>
 nectar memory forget <id> --confirm
 ```
+
+多 Bot 时使用 `--bot ID` 选择对应 Bot 的数据目录和权限配置；也可以继续用 `--socket` 直连某个 Bot 的本地 API。
 
 - 默认 `--status candidate`，审核后才注入；用户在聊天中明确要求记住时可传 `--status active`。
 - `--scope` 默认使用 `NECTAR_CHAT_ID` 对应的聊天；不在 Agent 会话中时默认当前项目。
