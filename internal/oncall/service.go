@@ -29,6 +29,7 @@ type Options struct {
 	DefaultMaxAgentRuns int
 	MaxConcurrent       int
 	TickInterval        time.Duration
+	ProbeTimeout        time.Duration
 
 	Probes     Prober
 	Resolver   RepoResolver
@@ -109,6 +110,9 @@ func New(opts Options) (*Service, error) {
 	}
 	if opts.TickInterval <= 0 {
 		opts.TickInterval = time.Second
+	}
+	if opts.ProbeTimeout <= 0 {
+		opts.ProbeTimeout = 30 * time.Second
 	}
 	store, err := NewStore(opts.StorePath)
 	if err != nil {
@@ -441,7 +445,9 @@ func (s *Service) checkShift(ctx context.Context, shift Shift, force bool) (*Job
 	defer s.endCheck(shift.ID)
 	now := s.now().UTC()
 	next := now.Add(intervalFor(shift, s.opts.DefaultEvery))
-	observation, err := s.probes.Check(ctx, shift)
+	probeCtx, cancel := context.WithTimeout(ctx, s.opts.ProbeTimeout)
+	observation, err := s.probes.Check(probeCtx, shift)
+	cancel()
 	shift.LastChecked = now
 	shift.NextCheck = next
 	shift.UpdatedAt = now
