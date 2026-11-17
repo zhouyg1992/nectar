@@ -352,3 +352,25 @@ func TestNewWiresEventDispatcher(t *testing.T) {
 		t.Fatal("ws client has no event dispatcher; channel messages would be dropped")
 	}
 }
+
+func TestToPlatformMessageMarksBotSender(t *testing.T) {
+	senderType := "bot"
+	msg := &channeltypes.NormalizedMessage{
+		MessageID: "m1",
+		ChatID:    "c1",
+		ChatType:  "group",
+		Content:   "🔁 Relay handoff",
+		RawEvent: &larkim.P2MessageReceiveV1{
+			Event: &larkim.P2MessageReceiveV1Data{
+				Sender: &larkim.EventSender{SenderType: &senderType},
+			},
+		},
+	}
+	if got := toPlatformMessage(msg); !got.FromBot {
+		t.Fatal("bot sender was not marked")
+	}
+	senderType = "user"
+	if got := toPlatformMessage(msg); got.FromBot {
+		t.Fatal("user sender was marked as a bot")
+	}
+}

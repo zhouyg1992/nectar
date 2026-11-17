@@ -496,9 +496,17 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 		Attachments: attachments,
 		ReplyTo:     msg.MessageID,
 	}
-	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok &&
-		raw.Event != nil && raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
-		out.ThreadID = *raw.Event.Message.ThreadId
+	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok && raw.Event != nil {
+		if raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
+			out.ThreadID = *raw.Event.Message.ThreadId
+		}
+		// Relay mirrors are posted by a sibling bot. Mark them so the router
+		// drops them before they can trigger another run; the zero-width
+		// marker is only a fallback for platforms that lack this signal.
+		if raw.Event.Sender != nil && raw.Event.Sender.SenderType != nil &&
+			strings.EqualFold(strings.TrimSpace(*raw.Event.Sender.SenderType), "bot") {
+			out.FromBot = true
+		}
 	}
 	return out
 }
