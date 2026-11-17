@@ -627,6 +627,9 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 	if cfg.Relay.Session != "per_root" {
 		t.Fatalf("relay session = %q", cfg.Relay.Session)
 	}
+	if !cfg.RelayFirstMentionOnly() {
+		t.Fatal("relay first_mention_only should default to true")
+	}
 	if ttl, err := cfg.RelayRootTTL(); err != nil || ttl != 30*time.Minute {
 		t.Fatalf("relay root ttl = %v, %v", ttl, err)
 	}
@@ -649,12 +652,15 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 		}
 	}
 
-	write("[relay]\nenabled = true\necho = \"off\"\nmax_generation = 2\n")
+	write("[relay]\nenabled = true\necho = \"off\"\nmax_generation = 2\nfirst_mention_only = false\n")
 	cfg, err = Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !cfg.RelayEnabled() || cfg.Relay.Echo != "off" || cfg.Relay.MaxGeneration != 2 {
 		t.Fatalf("relay config = %#v", cfg.Relay)
+	}
+	if cfg.RelayFirstMentionOnly() {
+		t.Fatal("relay first_mention_only = false was not honored")
 	}
 }

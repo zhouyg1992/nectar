@@ -66,21 +66,21 @@ func (r *Router) SendRelayMirror(ctx context.Context, envelope RelayEnvelope, ta
 		targetName = envelope.To
 	}
 	body := fmt.Sprintf("%s → %s\n%s\nWaiting for the answer.", name, targetName, mirrorSummary(envelope.Body, 80))
-	marker := relayMirrorMarker(envelope.ID)
 	reply := platform.Reply{
 		ChatID:   envelope.ChatID,
 		ChatType: envelope.ChatType,
 		ThreadID: envelope.ThreadID,
 	}
 	if r.platform.Capabilities().Card {
+		// Feishu-style platforms drop mirrors by sender type, so the card does
+		// not need a marker and must not show one.
 		reply.Card = &platform.Card{
 			Status: platform.CardInfo,
 			Title:  "🔁 Relay handoff",
 			Body:   body,
-			Footer: marker,
 		}
 	} else {
-		reply.Text = "🔁 Relay handoff\n" + body + "\n" + marker
+		reply.Text = "🔁 Relay handoff\n" + body + "\n" + relayMirrorMarker()
 	}
 	return r.platform.Send(ctx, reply)
 }
@@ -273,4 +273,26 @@ func (r *Router) handleRelayCommand(msg platform.Message, text string) bool {
 	}
 	r.sendCommandResult(msg, platform.CardInfo, "🛑 Relay", body)
 	return true
+}
+
+// addressedToAnotherBot reports that a group message @-mentioned several
+// configured bots and the first one is a peer. That peer will handle the
+// message and, if it needs help, relay here; acting on the raw message too
+// would duplicate the work. Platforms that cannot report bot mention names
+// leave Mentions empty and keep the old behavior.
+func (r *Router) addressedToAnotherBot(msg platform.Message) bool {
+	if !isGroupChat(msg) || msg.Origin != "" || len(msg.Mentions) == 0 {
+		return false
+	}
+	for _, mention := range msg.Mentions {
+		if !mention.IsBot {
+			continue
+		}
+		id, ok := r.relay.BotIDByName(mention.Name)
+		if !ok {
+			continue
+		}
+		return id != r.EffectiveBotID()
+	}
+	return false
 }

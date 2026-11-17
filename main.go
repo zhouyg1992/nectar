@@ -138,6 +138,7 @@ func newRelayHub(cfg config.Config, logger *slog.Logger) (*core.RelayHub, error)
 		MaxEnvelopesPerRoot: cfg.Relay.MaxEnvelopesPerRoot,
 		MaxRunsPerRoot:      cfg.Relay.MaxRunsPerRoot,
 		RootTTL:             ttl,
+		FirstMentionOnly:    cfg.RelayFirstMentionOnly(),
 		Logger:              logger,
 	})
 	if err != nil {

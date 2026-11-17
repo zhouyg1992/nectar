@@ -141,6 +141,8 @@ func writeRelayError(w http.ResponseWriter, err error) {
 			status = http.StatusNotFound
 		case ErrRelayRejected, ErrRelayNotInChat:
 			status = http.StatusForbidden
+		case ErrRelayMutual:
+			status = http.StatusConflict
 		case ErrRelayDisabled:
 			status = http.StatusServiceUnavailable
 		}

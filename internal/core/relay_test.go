@@ -47,6 +47,7 @@ func newRelayRig(t *testing.T, opts RelayHubOptions) *relayRig {
 	if err != nil {
 		t.Fatal(err)
 	}
+	hub.opts.FirstMentionOnly = true
 	rig := &relayRig{
 		hub:        hub,
 		coderEng:   &fakeEngine{},
@@ -272,7 +273,7 @@ func TestRelayRejectsExpiredToken(t *testing.T) {
 func TestRouterDropsBotAndMirrorMessages(t *testing.T) {
 	rig := newRelayRig(t, RelayHubOptions{})
 	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "hello", FromBot: true})
-	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m2", Text: "hello " + relayMirrorMarker("env_1")})
+	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m2", Text: "hello " + relayMirrorMarker()})
 	time.Sleep(50 * time.Millisecond)
 	if starts, resumes, _ := rig.coderEng.counts(); starts+resumes != 0 {
 		t.Fatalf("dropped messages still ran the engine: starts=%d resumes=%d", starts, resumes)
@@ -523,4 +524,150 @@ func TestRelayAPIOverUnixSocket(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("cancel status = %d", status)
 	}
+}
+
+func TestRelayMirrorMarkerIsInvisible(t *testing.T) {
+	marker := relayMirrorMarker()
+	if strings.Contains(marker, "nectar") || strings.Contains(marker, "relay") {
+		t.Fatalf("marker contains visible text: %q", marker)
+	}
+	rig := newRelayRig(t, RelayHubOptions{})
+	if !rig.hub.IsMirrorText("handoff " + marker) {
+		t.Fatal("invisible marker was not recognized")
+	}
+	envelope := RelayEnvelope{ID: "env_mirror", ChatID: "c1", Body: "review this diff"}
+	if _, err := rig.coderRouter.SendRelayMirror(context.Background(), envelope, "Reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rig.coderPlat.lastReply(); strings.Contains(got, "nectar-relay") || strings.Contains(got, "env_mirror") {
+		t.Fatalf("mirror leaks plumbing: %q", got)
+	}
+}
+
+func TestRelayRejectedSendLeavesNoRoot(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c9"})
+	_, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "hi"})
+	if RelayErrorCode(err) != ErrRelayNotInChat {
+		t.Fatalf("error = %v", err)
+	}
+	if roots := rig.hub.Roots(); len(roots) != 0 {
+		t.Fatalf("rejected send left %d roots", len(roots))
+	}
+}
+
+func TestRelayLoadPrunesEmptyRoots(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	roots := map[string]*RelayRoot{
+		"root_empty": {ID: "root_empty", OriginBot: "coder", Channel: "feishu", ChatID: "c1", State: relayRootOpen, CreatedAt: now},
+		"root_used":  {ID: "root_used", OriginBot: "coder", Channel: "feishu", ChatID: "c1", State: relayRootOpen, CreatedAt: now},
+	}
+	envelopes := map[string]*RelayEnvelope{
+		"env_used": {ID: "env_used", RootID: "root_used", Kind: RelayKindHandoff, Channel: "feishu", ChatID: "c1", State: RelayStateDone, CreatedAt: now},
+	}
+	data, err := marshalRelayState(roots, envelopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRelayStateFile(filepath.Join(dir, "relay", "state.json"), data); err != nil {
+		t.Fatal(err)
+	}
+	hub, err := NewRelayHub(RelayHubOptions{DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hub.Close()
+	loaded := hub.Roots()
+	if len(loaded) != 1 || loaded[0].ID != "root_used" {
+		t.Fatalf("roots after prune = %#v", loaded)
+	}
+	if loaded[0].EnvelopeCount != 1 {
+		t.Fatalf("envelope count = %d", loaded[0].EnvelopeCount)
+	}
+}
+
+func TestRelayRejectsMutualRelay(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	roots := map[string]*RelayRoot{
+		"root_mutual": {
+			ID: "root_mutual", OriginBot: "reviewer", OriginSessionID: "s-review",
+			Channel: "feishu", ChatID: "c1", State: relayRootOpen, CreatedAt: now,
+		},
+	}
+	envelopes := map[string]*RelayEnvelope{
+		"env_pending": {
+			ID: "env_pending", RootID: "root_mutual", Kind: RelayKindAsk,
+			Channel: "feishu", ChatID: "c1", From: "reviewer", To: "coder", Gen: 1,
+			State: RelayStateRunning, CreatedAt: now,
+		},
+	}
+	data, err := marshalRelayState(roots, envelopes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRelayStateFile(filepath.Join(dir, "relay", "state.json"), data); err != nil {
+		t.Fatal(err)
+	}
+	rig := newRelayRig(t, RelayHubOptions{DataDir: dir})
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1"})
+	if _, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "also review mine"}); RelayErrorCode(err) != ErrRelayMutual {
+		t.Fatalf("mutual relay error = %v", err)
+	}
+	// A different chat is unaffected.
+	rig.hub.NoteChat("c2", "coder")
+	rig.hub.NoteChat("c2", "reviewer")
+	other := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c2"})
+	if _, err := rig.hub.Send(rig.hub.TokenBinding(other), RelaySendRequest{To: "reviewer", Body: "different chat"}); err != nil {
+		t.Fatalf("different chat rejected: %v", err)
+	}
+}
+
+func TestRouterFirstMentionOnly(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	msg := platform.Message{
+		Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "please help",
+		Mentions: []platform.Mention{
+			{Name: "Coder", IsBot: true},
+			{Name: "Reviewer", IsBot: true},
+		},
+	}
+	rig.reviewRouter.Handle(msg)
+	time.Sleep(50 * time.Millisecond)
+	if starts, resumes, _ := rig.reviewEng.counts(); starts+resumes != 0 {
+		t.Fatalf("reviewer acted on a message addressed to coder: starts=%d resumes=%d", starts, resumes)
+	}
+	rig.coderRouter.Handle(msg)
+	waitForReplies(t, rig.coderPlat, 1)
+	if starts, _, _ := rig.coderEng.counts(); starts != 1 {
+		t.Fatalf("coder engine starts = %d", starts)
+	}
+}
+
+func TestRouterFirstMentionIgnoresHumanMentions(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	msg := platform.Message{
+		Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "please help",
+		Mentions: []platform.Mention{
+			{Name: "张三", IsBot: false},
+			{Name: "Reviewer", IsBot: true},
+		},
+	}
+	rig.reviewRouter.Handle(msg)
+	waitForReplies(t, rig.reviewPlat, 1)
+}
+
+func TestRouterFirstMentionCanBeDisabled(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.hub.opts.FirstMentionOnly = false
+	msg := platform.Message{
+		Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "please help",
+		Mentions: []platform.Mention{
+			{Name: "Coder", IsBot: true},
+			{Name: "Reviewer", IsBot: true},
+		},
+	}
+	rig.reviewRouter.Handle(msg)
+	waitForReplies(t, rig.reviewPlat, 1)
 }

@@ -22,6 +22,14 @@ Nectar injects these variables into your run:
 Never print or paste `NECTAR_RELAY_TOKEN`. The daemon derives your identity,
 root and generation from it and ignores any identity you try to set.
 
+## Several bots in one chat
+
+A group message that @-mentions several Nectar bots is handled only by the
+first bot mentioned. If you are not that bot, the message was not for you: do
+not do the task yourself and do not relay it onward. Wait for a fenced relay
+request instead. A plain chat message is never a relay request, even when it
+names you as the reviewer.
+
 ## Commands
 
 ```sh
@@ -81,6 +89,9 @@ changes. Relay again only if the result genuinely needs another hop.
 - `ERR_NOT_IN_CHAT` — the target has not been seen in this chat. Ask the user
   to mention it in the group once; relay only works inside a shared chat.
 - `ERR_REJECTED` — the target refused this sender or the request is invalid.
+- `ERR_MUTUAL_RELAY` — the target already has an ask running in your direction
+  in this chat. Do not relay back and forth; finish the work you already have
+  or report to the user.
 - `ERR_UNAUTHORIZED` — no valid run token; you are not inside a Nectar run.
 
 Do not retry an error by rephrasing the same message in a loop.

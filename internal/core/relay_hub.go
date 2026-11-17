@@ -26,6 +26,7 @@ type RelayHubOptions struct {
 	MaxEnvelopesPerRoot int
 	MaxRunsPerRoot      int
 	RootTTL             time.Duration
+	FirstMentionOnly    bool
 	Logger              *slog.Logger
 }
 
@@ -212,6 +213,33 @@ func (h *RelayHub) Echo() string {
 	return h.opts.Echo
 }
 
+// FirstMentionOnly reports whether a group message that mentions several
+// configured bots is handled only by the first bot that was mentioned.
+func (h *RelayHub) FirstMentionOnly() bool {
+	return h.opts.FirstMentionOnly
+}
+
+// BotIDByName resolves a mention name to a configured bot, matching the
+// display name or the bot id case-insensitively.
+func (h *RelayHub) BotIDByName(name string) (string, bool) {
+	want := normalizeMentionName(name)
+	if want == "" {
+		return "", false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, bot := range h.bots {
+		if normalizeMentionName(bot.name) == want || normalizeMentionName(bot.id) == want {
+			return bot.id, true
+		}
+	}
+	return "", false
+}
+
+func normalizeMentionName(name string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(name)), ""))
+}
+
 // Peers lists the roster for a chat, including busy state.
 func (h *RelayHub) Peers(chatID string) []RelayPeer {
 	h.mu.Lock()
@@ -261,15 +289,38 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayTargetUnknown, "unknown bot %q", targetID)
 	}
-	root, err := h.ensureRootLocked(binding)
-	if err != nil {
-		h.mu.Unlock()
-		return nil, err
-	}
 	gen := binding.Gen + 1
 	if gen > h.opts.MaxGeneration {
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayGenLimit, "relay chain reached %d hops (max %d)", gen, h.opts.MaxGeneration)
+	}
+	if len(target.acceptFrom) > 0 && !containsString(target.acceptFrom, binding.BotID) {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayRejected, "%s does not accept relay from %s", targetID, binding.BotID)
+	}
+	chatID := binding.ChatID
+	if binding.RootID != "" {
+		existingRoot := h.roots[binding.RootID]
+		if existingRoot == nil {
+			h.mu.Unlock()
+			return nil, relayError(ErrRelayTargetUnknown, "unknown relay root %q", binding.RootID)
+		}
+		chatID = existingRoot.ChatID
+	}
+	if !h.chatHasLocked(chatID, targetID) {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayNotInChat, "%s has not been seen in this chat", targetID)
+	}
+	if h.mutualRelayLocked(binding.BotID, targetID, chatID) {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayMutual, "mutual relay with %s is already in progress in this chat", targetID)
+	}
+	// Every validation that can fail runs before the root is created, so a
+	// rejected send never leaves an empty root behind.
+	root, err := h.ensureRootLocked(binding)
+	if err != nil {
+		h.mu.Unlock()
+		return nil, err
 	}
 	if time.Since(root.CreatedAt) > h.opts.RootTTL {
 		root.State = relayRootClosed
@@ -284,14 +335,6 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 	if root.RunCount >= h.opts.MaxRunsPerRoot {
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayBudget, "relay root reached %d target runs", h.opts.MaxRunsPerRoot)
-	}
-	if len(target.acceptFrom) > 0 && !containsString(target.acceptFrom, binding.BotID) {
-		h.mu.Unlock()
-		return nil, relayError(ErrRelayRejected, "%s does not accept relay from %s", targetID, binding.BotID)
-	}
-	if !h.chatHasLocked(root.ChatID, targetID) {
-		h.mu.Unlock()
-		return nil, relayError(ErrRelayNotInChat, "%s has not been seen in this chat", targetID)
 	}
 	kind := RelayKindAsk
 	if req.NoReply {
@@ -593,6 +636,28 @@ func (h *RelayHub) envelopeByKeyLocked(from, to, key string) *RelayEnvelope {
 	return nil
 }
 
+// mutualRelayLocked reports an in-flight ask in the opposite direction inside
+// the same chat, which usually means two bots were both driven by one human
+// message and are now reviewing each other.
+func (h *RelayHub) mutualRelayLocked(from, to, chatID string) bool {
+	for _, envelope := range h.envelopes {
+		if envelope.Kind != RelayKindAsk || envelope.ChatID != chatID {
+			continue
+		}
+		if envelope.State != RelayStatePending && envelope.State != RelayStateRunning {
+			continue
+		}
+		if envelope.From != to || envelope.To != from {
+			continue
+		}
+		if root := h.roots[envelope.RootID]; root != nil && root.State != relayRootOpen {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func (h *RelayHub) chatHasLocked(chatID, botID string) bool {
 	members := h.chats[chatID]
 	if members == nil {
@@ -661,16 +726,27 @@ func (h *RelayHub) load() error {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for _, root := range state.Roots {
-		if root != nil && root.ID != "" {
-			root.Envelopes = nil
-			h.roots[root.ID] = root
-		}
-	}
 	for _, envelope := range state.Envelopes {
 		if envelope != nil && envelope.ID != "" {
 			h.envelopes[envelope.ID] = envelope
 		}
+	}
+	counts := make(map[string]int, len(h.envelopes))
+	for _, envelope := range h.envelopes {
+		counts[envelope.RootID]++
+	}
+	for _, root := range state.Roots {
+		if root == nil || root.ID == "" {
+			continue
+		}
+		root.Envelopes = nil
+		root.EnvelopeCount = counts[root.ID]
+		// Earlier builds could journal a root before a rejected send; drop
+		// roots that never produced an envelope.
+		if root.EnvelopeCount == 0 {
+			continue
+		}
+		h.roots[root.ID] = root
 	}
 	return nil
 }

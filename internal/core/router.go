@@ -323,6 +323,9 @@ func (r *Router) Handle(msg platform.Message) {
 			return
 		}
 		r.relay.NoteChat(msg.ChatID, r.EffectiveBotID())
+		if r.relay.FirstMentionOnly() && r.addressedToAnotherBot(msg) {
+			return
+		}
 	}
 	key := SessionKey{
 		BotID:    r.cfg.BotID,

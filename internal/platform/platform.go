@@ -27,6 +27,15 @@ type Card struct {
 	Footer   string
 }
 
+// Mention is one @-mention from an inbound message, in text order. Platforms
+// that cannot report names leave this empty; Name is matched against the
+// configured bot names to route multi-bot mentions.
+type Mention struct {
+	Name  string
+	ID    string
+	IsBot bool
+}
+
 // Message is the normalized form of an inbound chat message.
 type Message struct {
 	Channel   string
@@ -35,6 +44,7 @@ type Message struct {
 	ChatType  string
 	UserID    string
 	Text      string
+	Mentions  []Mention
 	// Origin is empty for inbound chat messages, "schedule" for tasks fired
 	// by the scheduler, and "relay" for prompts delivered by the multi-bot
 	// relay bus. Non-empty origins skip slash-command parsing.

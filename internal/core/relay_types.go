@@ -50,6 +50,7 @@ const (
 	ErrRelayNotInChat     = "ERR_NOT_IN_CHAT"
 	ErrRelayRejected      = "ERR_REJECTED"
 	ErrRelayUnauthorized  = "ERR_UNAUTHORIZED"
+	ErrRelayMutual        = "ERR_MUTUAL_RELAY"
 )
 
 // RelayError carries a stable code so the API and CLI can expose it without
@@ -181,13 +182,14 @@ type relayStateFile struct {
 
 const relayStateVersion = 1
 
-// relayMirrorMarker makes mirror text recognizable on inbound even when the
-// platform does not report sender type. It uses zero-width characters so the
-// text reads normally in the chat.
-const relayMirrorMarkerPrefix = "⁣nectar-relay⁣"
+// relayMirrorMarkerPrefix makes mirror text recognizable on inbound even when
+// the platform does not report sender type. It is a pure zero-width sequence
+// (INVISIBLE SEPARATOR, ZERO WIDTH SPACE, INVISIBLE SEPARATOR) so humans never
+// see plumbing in the chat.
+const relayMirrorMarkerPrefix = "\u2063\u200b\u2063"
 
-func relayMirrorMarker(envelopeID string) string {
-	return relayMirrorMarkerPrefix + envelopeID
+func relayMirrorMarker() string {
+	return relayMirrorMarkerPrefix
 }
 
 func newRelayID(prefix string) string {

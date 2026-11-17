@@ -374,3 +374,26 @@ func TestToPlatformMessageMarksBotSender(t *testing.T) {
 		t.Fatal("user sender was marked as a bot")
 	}
 }
+
+func TestToPlatformMessageMapsMentions(t *testing.T) {
+	msg := &channeltypes.NormalizedMessage{
+		MessageID: "m1",
+		ChatID:    "c1",
+		ChatType:  "group",
+		Content:   "hello",
+		Mentions: []channeltypes.Mention{
+			{Key: "@_user_1", Name: "机器人1号", OpenID: "ou_bot_1", IsBot: true},
+			{Key: "@_user_2", Name: "张三", UserID: "u_1"},
+		},
+	}
+	got := toPlatformMessage(msg)
+	if len(got.Mentions) != 2 {
+		t.Fatalf("mentions = %#v", got.Mentions)
+	}
+	if !got.Mentions[0].IsBot || got.Mentions[0].Name != "机器人1号" || got.Mentions[0].ID != "ou_bot_1" {
+		t.Fatalf("bot mention = %#v", got.Mentions[0])
+	}
+	if got.Mentions[1].IsBot || got.Mentions[1].ID != "u_1" {
+		t.Fatalf("user mention = %#v", got.Mentions[1])
+	}
+}

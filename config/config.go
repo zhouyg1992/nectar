@@ -209,6 +209,7 @@ const (
 type RelayConfig struct {
 	Enabled             *bool  `toml:"enabled"`
 	Echo                string `toml:"echo"`
+	FirstMentionOnly    *bool  `toml:"first_mention_only"`
 	MaxGeneration       int    `toml:"max_generation"`
 	MaxEnvelopesPerRoot int    `toml:"max_envelopes_per_root"`
 	MaxRunsPerRoot      int    `toml:"max_runs_per_root"`
@@ -371,6 +372,12 @@ func (c Config) DashboardEnabled() bool {
 // RelayEnabled reports whether multi-bot relay is turned on. Relay is opt-in.
 func (c Config) RelayEnabled() bool {
 	return c.Relay.Enabled != nil && *c.Relay.Enabled
+}
+
+// RelayFirstMentionOnly reports whether a group message that mentions several
+// configured bots is handled only by the first bot mentioned. Defaults to true.
+func (c Config) RelayFirstMentionOnly() bool {
+	return c.Relay.FirstMentionOnly == nil || *c.Relay.FirstMentionOnly
 }
 
 func (c Config) RelayRootTTL() (time.Duration, error) {

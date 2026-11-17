@@ -486,6 +486,14 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 	}
 	text = stripInboundMentions(text, msg.Mentions, msg.MentionAll)
 
+	mentions := make([]platform.Mention, 0, len(msg.Mentions))
+	for _, mention := range msg.Mentions {
+		id := mention.OpenID
+		if id == "" {
+			id = mention.UserID
+		}
+		mentions = append(mentions, platform.Mention{Name: mention.Name, ID: id, IsBot: mention.IsBot})
+	}
 	out := platform.Message{
 		Channel:     "feishu",
 		MessageID:   msg.MessageID,
@@ -493,6 +501,7 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 		ChatType:    msg.ChatType,
 		UserID:      msg.UserID,
 		Text:        normalizeInboundText(text, attachments),
+		Mentions:    mentions,
 		Attachments: attachments,
 		ReplyTo:     msg.MessageID,
 	}
