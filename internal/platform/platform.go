@@ -35,9 +35,14 @@ type Message struct {
 	ChatType  string
 	UserID    string
 	Text      string
-	// Origin is empty for inbound chat messages and "schedule" for tasks fired
-	// by the scheduler. Scheduled prompts skip slash-command parsing.
-	Origin      string
+	// Origin is empty for inbound chat messages, "schedule" for tasks fired
+	// by the scheduler, and "relay" for prompts delivered by the multi-bot
+	// relay bus. Non-empty origins skip slash-command parsing.
+	Origin string
+	// FromBot reports that the platform attributes the message to another
+	// bot. Nectar drops such messages so a relay mirror cannot trigger the
+	// bot it was meant to be visible to.
+	FromBot     bool
 	Attachments []attachment.Resource
 	ReplyTo     string
 	ThreadID    string

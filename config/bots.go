@@ -68,7 +68,30 @@ func (c Config) ResolveBots() ([]ResolvedBot, error) {
 	}
 
 	sort.Slice(bots, func(i, j int) bool { return bots[i].ID < bots[j].ID })
+	if err := validateRelayAcceptFrom(bots); err != nil {
+		return nil, err
+	}
 	return bots, nil
+}
+
+// validateRelayAcceptFrom rejects allowlists that name bots this process does
+// not run; a typo would otherwise silently block every relay to the peer.
+func validateRelayAcceptFrom(bots []ResolvedBot) error {
+	known := make(map[string]struct{}, len(bots))
+	for _, bot := range bots {
+		known[bot.ID] = struct{}{}
+	}
+	for _, bot := range bots {
+		for _, peer := range bot.Config.Bot.RelayAcceptFrom {
+			if _, ok := known[peer]; !ok {
+				return fmt.Errorf("bots.%s.relay_accept_from references unknown bot %q", bot.ID, peer)
+			}
+			if peer == bot.ID {
+				return fmt.Errorf("bots.%s.relay_accept_from must not include itself", bot.ID)
+			}
+		}
+	}
+	return nil
 }
 
 func (c Config) resolveLegacyBot() (ResolvedBot, error) {
@@ -145,12 +168,16 @@ func (c Config) resolveBotEntry(key string, entry BotEntry) (ResolvedBot, error)
 		return ResolvedBot{}, err
 	}
 	cfg.Bot = BotConfig{
-		Name:          name,
-		Engine:        engine,
-		Platform:      platform,
-		AdminUsers:    cloneStrings(entry.AdminUsers),
-		AllowedChats:  cloneStrings(entry.AllowedChats),
-		WorkspaceMode: workspaceMode,
+		Name:            name,
+		Engine:          engine,
+		Platform:        platform,
+		AdminUsers:      cloneStrings(entry.AdminUsers),
+		AllowedChats:    cloneStrings(entry.AllowedChats),
+		WorkspaceMode:   workspaceMode,
+		Role:            strings.TrimSpace(entry.Role),
+		Description:     strings.TrimSpace(entry.Description),
+		Capabilities:    cleanStrings(entry.Capabilities),
+		RelayAcceptFrom: cleanStrings(entry.RelayAcceptFrom),
 	}
 
 	if workspace := strings.TrimSpace(entry.Workspace); workspace != "" {
@@ -344,6 +371,18 @@ func copyTelegram(base TelegramConfig, override *TelegramConfig) TelegramConfig 
 
 func cloneStrings(values []string) []string {
 	return append([]string(nil), values...)
+}
+
+// cleanStrings trims each entry and drops blanks, so relay allowlists and
+// capability lists compare by exact bot id.
+func cleanStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func containsKey(values []string, want string) bool {

@@ -609,3 +609,52 @@ func TestClaudeRejectsInvalidPermissionMode(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestRelayDefaultsAndValidation(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RelayEnabled() {
+		t.Fatal("relay should be disabled by default")
+	}
+	if cfg.Relay.Echo != "summary" || DefaultRelayEcho != "summary" {
+		t.Fatalf("relay echo = %q", cfg.Relay.Echo)
+	}
+	if cfg.Relay.MaxGeneration != 4 || cfg.Relay.MaxEnvelopesPerRoot != 12 || cfg.Relay.MaxRunsPerRoot != 8 {
+		t.Fatalf("relay budgets = %#v", cfg.Relay)
+	}
+	if cfg.Relay.Session != "per_root" {
+		t.Fatalf("relay session = %q", cfg.Relay.Session)
+	}
+	if ttl, err := cfg.RelayRootTTL(); err != nil || ttl != 30*time.Minute {
+		t.Fatalf("relay root ttl = %v, %v", ttl, err)
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	write := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, body := range map[string]string{
+		"echo":    "[relay]\nenabled = true\necho = \"loud\"\n",
+		"session": "[relay]\nenabled = true\nsession = \"active\"\n",
+		"ttl":     "[relay]\nenabled = true\nroot_ttl = \"soon\"\n",
+	} {
+		write(body)
+		if _, err := Load(path); err == nil {
+			t.Fatalf("expected relay %s validation error", name)
+		}
+	}
+
+	write("[relay]\nenabled = true\necho = \"off\"\nmax_generation = 2\n")
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.RelayEnabled() || cfg.Relay.Echo != "off" || cfg.Relay.MaxGeneration != 2 {
+		t.Fatalf("relay config = %#v", cfg.Relay)
+	}
+}
