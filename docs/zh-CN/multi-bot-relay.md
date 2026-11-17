@@ -580,5 +580,4 @@ CLI 继续复用 `NECTAR_API_SOCKET`；`--bot` / `--socket` 的解析方式与 `
 ## 来源
 
 - 当前仓库源码与 v0.10.1 文档。
-- v1《nectar 多 bot 协作方案》中对 cc-connect、metabot、botmux、lark-multi-cli-bridge、telegram-ai-bridge 的对比。
 - 本文中的实现细节均以当前代码为准；未验证项已在文中标注。
