@@ -486,18 +486,19 @@ func (r *appServerRun) writeJSON(payload any) error {
 func (r *appServerRun) readLoop(maxOutput int) {
 	defer close(r.readerDone)
 	scanner := bufio.NewScanner(r.stdout)
-	scanner.Buffer(make([]byte, 64*1024), appServerMaxEventLineBytes)
-	total := 0
+	maxEventLine := maxOutput
+	if maxEventLine <= 0 {
+		maxEventLine = appServerMaxEventLineBytes
+	}
+	initialBuffer := 64 * 1024
+	if initialBuffer > maxEventLine {
+		initialBuffer = maxEventLine
+	}
+	scanner.Buffer(make([]byte, initialBuffer), maxEventLine)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
-		}
-		total += len(line)
-		if maxOutput > 0 && total > maxOutput {
-			r.emit(engine.Event{Type: engine.EventError, Text: fmt.Sprintf("codex app-server output exceeded %d bytes", maxOutput)})
-			r.cancel()
-			return
 		}
 		var envelope rpcEnvelope
 		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
@@ -515,7 +516,12 @@ func (r *appServerRun) readLoop(maxOutput int) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		r.emit(engine.Event{Type: engine.EventError, Text: fmt.Sprintf("read codex app-server output: %v", err)})
+		message := fmt.Sprintf("read codex app-server output: %v", err)
+		if errors.Is(err, bufio.ErrTooLong) {
+			message = fmt.Sprintf("codex app-server event exceeded %d bytes", maxEventLine)
+		}
+		r.emit(engine.Event{Type: engine.EventError, Text: message})
+		r.cancel()
 	}
 }
 

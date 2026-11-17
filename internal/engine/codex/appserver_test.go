@@ -73,6 +73,81 @@ done:
 	}
 }
 
+func TestAppServerAdapterAllowsCumulativeOutputAboveLimit(t *testing.T) {
+	events := startFakeAppServer(t, "cumulative", 1024)
+	got := collectAppServerEvents(t, events, 3*time.Second)
+
+	sawDone := false
+	for _, event := range got {
+		if event.Type == engine.EventError {
+			t.Fatalf("unexpected error event: %#v", event)
+		}
+		if event.Type == engine.EventDone {
+			sawDone = true
+		}
+	}
+	if !sawDone {
+		t.Fatalf("turn did not complete: %#v", got)
+	}
+}
+
+func TestAppServerAdapterRejectsOversizedEvent(t *testing.T) {
+	events := startFakeAppServer(t, "oversized", 1024)
+	got := collectAppServerEvents(t, events, 3*time.Second)
+
+	for _, event := range got {
+		if event.Type == engine.EventError && strings.Contains(event.Text, "codex app-server event exceeded 1024 bytes") {
+			return
+		}
+	}
+	t.Fatalf("missing oversized-event error: %#v", got)
+}
+
+func startFakeAppServer(t *testing.T, outputMode string, maxOutputBytes int) <-chan engine.Event {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is unix-only")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "codex")
+	body := "#!/bin/sh\nexec \"$NECTAR_TEST_BINARY\" -test.run=TestAppServerFakeProcess -- \"$@\"\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NECTAR_TEST_BINARY", os.Args[0])
+	t.Setenv("NECTAR_FAKE_APPSERVER", "1")
+	t.Setenv("NECTAR_FAKE_APPSERVER_OUTPUT_MODE", outputMode)
+
+	adapter := NewAppServerAdapter(Config{
+		Executable:     script,
+		WorkingDir:     dir,
+		Timeout:        5 * time.Second,
+		MaxOutputBytes: maxOutputBytes,
+	})
+	events, err := adapter.Start(context.Background(), "do the task", engine.EngineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events
+}
+
+func collectAppServerEvents(t *testing.T, events <-chan engine.Event, timeout time.Duration) []engine.Event {
+	t.Helper()
+	var got []engine.Event
+	deadline := time.After(timeout)
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				return got
+			}
+			got = append(got, event)
+		case <-deadline:
+			t.Fatalf("timed out; events = %#v", got)
+		}
+	}
+}
+
 // TestAppServerFakeProcess is a tiny app-server peer used by the parent test.
 // It deliberately exits with os.Exit so the Go test harness does not append
 // non-JSON output to the protocol stream.
@@ -92,6 +167,24 @@ func TestAppServerFakeProcess(t *testing.T) {
 	}
 	notify := func(method string, params any) {
 		write(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
+	}
+	agentMessage := func(text string) {
+		notify("item/completed", map[string]any{
+			"threadId":      "thread-1",
+			"turnId":        "turn-1",
+			"completedAtMs": 1,
+			"item": map[string]any{
+				"id":   "i1",
+				"type": "agentMessage",
+				"text": text,
+			},
+		})
+	}
+	completeTurn := func() {
+		notify("turn/completed", map[string]any{
+			"threadId": "thread-1",
+			"turn":     map[string]any{"id": "turn-1", "status": "completed", "items": []any{}},
+		})
 	}
 
 	for {
@@ -116,26 +209,23 @@ func TestAppServerFakeProcess(t *testing.T) {
 				"threadId": "thread-1",
 				"turn":     map[string]any{"id": "turn-1", "status": "inProgress", "items": []any{}},
 			})
+			switch os.Getenv("NECTAR_FAKE_APPSERVER_OUTPUT_MODE") {
+			case "cumulative":
+				for i := 0; i < 20; i++ {
+					agentMessage(strings.Repeat("x", 100))
+				}
+				completeTurn()
+			case "oversized":
+				agentMessage(strings.Repeat("x", 1024))
+			}
 		case "turn/steer":
 			if got := fmt.Sprint(request.Params["expectedTurnId"]); got != "turn-1" {
 				write(map[string]any{"jsonrpc": "2.0", "id": request.ID, "error": map[string]any{"code": -32000, "message": "bad turn id " + got}})
 				continue
 			}
 			response(request.ID, map[string]any{"turnId": "turn-1"})
-			notify("item/completed", map[string]any{
-				"threadId":      "thread-1",
-				"turnId":        "turn-1",
-				"completedAtMs": 1,
-				"item": map[string]any{
-					"id":   "i1",
-					"type": "agentMessage",
-					"text": "steered: " + fmt.Sprint(request.Params["input"].([]any)[0].(map[string]any)["text"]),
-				},
-			})
-			notify("turn/completed", map[string]any{
-				"threadId": "thread-1",
-				"turn":     map[string]any{"id": "turn-1", "status": "completed", "items": []any{}},
-			})
+			agentMessage("steered: " + fmt.Sprint(request.Params["input"].([]any)[0].(map[string]any)["text"]))
+			completeTurn()
 		case "turn/interrupt":
 			response(request.ID, map[string]any{})
 		default:
