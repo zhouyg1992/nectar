@@ -62,6 +62,26 @@ func TestToPlatformMessageStripsMentions(t *testing.T) {
 	}
 }
 
+func TestToPlatformMessageDetectsBotSender(t *testing.T) {
+	senderType := "bot"
+	msg := &channeltypes.NormalizedMessage{
+		MessageID: "m1",
+		ChatID:    "c1",
+		ChatType:  "group",
+		UserID:    "bot",
+		Content:   "[interactive card]",
+		RawEvent: &larkim.P2MessageReceiveV1{
+			Event: &larkim.P2MessageReceiveV1Data{
+				Sender: &larkim.EventSender{SenderType: &senderType},
+			},
+		},
+	}
+	got := toPlatformMessage(msg)
+	if !got.FromBot {
+		t.Fatalf("FromBot = false for bot sender: %#v", got)
+	}
+}
+
 func TestUploadMediaClassifiesImageAndFile(t *testing.T) {
 	dir := t.TempDir()
 	imagePath := filepath.Join(dir, "chart.png")

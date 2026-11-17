@@ -4,6 +4,7 @@
 - [配置参考](config.md)
 - [安装与升级](install.md)
 - [命令参考](commands.md)
+- [多 Bot 协作方案 v2](multi-bot-relay.md)
 - [飞书配置与排查](feishu.md)
 - [钉钉配置与排查](dingtalk.md)
 - [Telegram 配置与排查](telegram.md)

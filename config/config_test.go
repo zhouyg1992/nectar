@@ -57,6 +57,89 @@ func TestMemoryDefaultScopeValidation(t *testing.T) {
 	}
 }
 
+func TestRelayConfigAndBotMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `
+[relay]
+enabled = true
+echo = "full"
+max_generation = 2
+max_envelopes_per_root = 5
+max_runs_per_root = 3
+root_ttl = "10m"
+session = "per_root"
+
+[bots.reviewer]
+name = "Reviewer"
+platform = "feishu"
+engine = "claude"
+workspace = "~/code/project"
+workspace_mode = "shared"
+role = "reviewer"
+description = "read-only diff review"
+capabilities = ["review", "security"]
+relay_accept_from = ["coder"]
+relay_prompt = "minimal"
+
+[bots.reviewer.feishu]
+app_id = "cli_reviewer"
+app_secret = "secret_reviewer"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.RelayEnabled() {
+		t.Fatal("relay should be enabled")
+	}
+	if cfg.Relay.Echo != "full" || cfg.Relay.MaxGeneration != 2 || cfg.Relay.MaxRunsPerRoot != 3 {
+		t.Fatalf("relay config = %#v", cfg.Relay)
+	}
+	ttl, err := cfg.RelayRootTTL()
+	if err != nil || ttl != 10*time.Minute {
+		t.Fatalf("ttl = %v, err = %v", ttl, err)
+	}
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bots) != 1 {
+		t.Fatalf("bots = %#v", bots)
+	}
+	bot := bots[0].Config.Bot
+	if bot.Role != "reviewer" || bot.Description != "read-only diff review" {
+		t.Fatalf("bot metadata = %#v", bot)
+	}
+	if len(bot.Capabilities) != 2 || bot.Capabilities[0] != "review" {
+		t.Fatalf("capabilities = %#v", bot.Capabilities)
+	}
+	if len(bot.RelayAcceptFrom) != 1 || bot.RelayAcceptFrom[0] != "coder" {
+		t.Fatalf("accept from = %#v", bot.RelayAcceptFrom)
+	}
+	if bot.RelayPrompt != "minimal" {
+		t.Fatalf("relay prompt = %q", bot.RelayPrompt)
+	}
+}
+
+func TestRelayConfigValidation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[relay]\nenabled = true\necho = \"loud\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid relay.echo error")
+	}
+	if err := os.WriteFile(path, []byte("[relay]\nroot_ttl = \"0s\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid relay.root_ttl error")
+	}
+}
+
 func TestLoadRejectsInvalidTimeout(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[codex]\ntimeout = \"soon\"\n"), 0o600); err != nil {

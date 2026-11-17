@@ -68,9 +68,16 @@ func runBot(configPath string) error {
 
 	runtimes := make([]*botRuntime, 0, len(bots))
 	workspaceLocks := execguard.NewWorkspaceLocks()
+	relayHub, err := newRelayHub(cfg, logger)
+	if err != nil {
+		return err
+	}
+	if relayHub != nil {
+		defer relayHub.Close()
+	}
 	var setupErrs []error
 	for _, bot := range bots {
-		runtime, err := newBotRuntime(ctx, bot, logger, workspaceLocks)
+		runtime, err := newBotRuntime(ctx, bot, logger, workspaceLocks, relayHub)
 		if err != nil {
 			logger.Error("bot failed to initialize", "bot", bot.ID, "error", err)
 			setupErrs = append(setupErrs, fmt.Errorf("bot %q: %w", bot.ID, err))
@@ -89,6 +96,11 @@ func runBot(configPath string) error {
 		logger.Warn("dashboard did not start", "error", err)
 	} else if dashboardServer != nil {
 		defer dashboardServer.Close()
+	}
+	if relayHub != nil {
+		if err := relayHub.Start(ctx); err != nil {
+			return err
+		}
 	}
 	return runBotRuntimes(ctx, runtimes, logger)
 }
@@ -109,7 +121,7 @@ type botRuntime struct {
 	memories     memory.Store
 }
 
-func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog.Logger, workspaceLocks *execguard.WorkspaceLocks) (*botRuntime, error) {
+func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog.Logger, workspaceLocks *execguard.WorkspaceLocks, relayHub *core.RelayHub) (*botRuntime, error) {
 	cfg := bot.Config
 	logger := rootLogger.With("bot", bot.ID)
 
@@ -177,8 +189,22 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 			MemoryMaxChars:         cfg.Memory.MaxChars,
 			MemoryDefaultScope:     cfg.MemoryDefaultScope(),
 			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
+			Relay:                  relayHub,
 		},
 	)
+	if relayHub != nil {
+		relayHub.Register(core.RelayBotConfig{
+			ID:           router.EffectiveBotID(),
+			Name:         bot.Name,
+			Role:         cfg.Bot.Role,
+			Description:  cfg.Bot.Description,
+			Capabilities: cfg.Bot.Capabilities,
+			AcceptFrom:   cfg.Bot.RelayAcceptFrom,
+			AllowedChats: cfg.Bot.AllowedChats,
+			PromptMode:   cfg.Bot.RelayPrompt,
+			Router:       router,
+		})
+	}
 
 	var scheduler *core.Scheduler
 	var scheduleAPI *core.ScheduleAPI
@@ -213,7 +239,7 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 	} else {
 		router.SetScheduling(anchors, nil)
 	}
-	if scheduler != nil || memories != nil {
+	if scheduler != nil || memories != nil || relayHub != nil {
 		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
 			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
 			Scheduler:      scheduler,
@@ -222,6 +248,7 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 			DefaultChannel: platformName,
 			DefaultAgent:   cfg.Bot.Engine,
 			AdminUsers:     cfg.Bot.AdminUsers,
+			Relay:          relayHub,
 		})
 	}
 	return &botRuntime{
@@ -424,6 +451,13 @@ func runLegacyBot(configPath string) error {
 
 	logger := newLogger(platformLogLevel(cfg))
 	slog.SetDefault(logger)
+	relayHub, err := newRelayHub(cfg, logger)
+	if err != nil {
+		return err
+	}
+	if relayHub != nil {
+		defer relayHub.Close()
+	}
 
 	setup, err := setupEngine(cfg)
 	if err != nil {
@@ -495,8 +529,22 @@ func runLegacyBot(configPath string) error {
 			MemoryMaxChars:         cfg.Memory.MaxChars,
 			MemoryDefaultScope:     cfg.MemoryDefaultScope(),
 			DisableMemoryAutoLearn: !cfg.MemoryAutoLearnFailures(),
+			Relay:                  relayHub,
 		},
 	)
+	if relayHub != nil {
+		relayHub.Register(core.RelayBotConfig{
+			ID:           router.EffectiveBotID(),
+			Name:         cfg.Bot.Name,
+			Role:         cfg.Bot.Role,
+			Description:  cfg.Bot.Description,
+			Capabilities: cfg.Bot.Capabilities,
+			AcceptFrom:   cfg.Bot.RelayAcceptFrom,
+			AllowedChats: cfg.Bot.AllowedChats,
+			PromptMode:   cfg.Bot.RelayPrompt,
+			Router:       router,
+		})
+	}
 
 	var scheduler *core.Scheduler
 	var scheduleAPI *core.ScheduleAPI
@@ -546,7 +594,7 @@ func runLegacyBot(configPath string) error {
 	} else {
 		router.SetScheduling(anchors, nil)
 	}
-	if scheduler != nil || memories != nil {
+	if scheduler != nil || memories != nil || relayHub != nil {
 		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
 			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
 			Scheduler:      scheduler,
@@ -555,6 +603,7 @@ func runLegacyBot(configPath string) error {
 			DefaultChannel: platformName,
 			DefaultAgent:   cfg.Bot.Engine,
 			AdminUsers:     cfg.Bot.AdminUsers,
+			Relay:          relayHub,
 		})
 		if err := scheduleAPI.Start(ctx); err != nil {
 			return err
@@ -595,6 +644,11 @@ func runLegacyBot(configPath string) error {
 	}
 	if len(cfg.Bot.AdminUsers) == 0 && len(cfg.Bot.AllowedChats) == 0 {
 		logger.Warn("no user/chat allowlist configured; anyone who can reach the bot may run the configured agent")
+	}
+	if relayHub != nil {
+		if err := relayHub.Start(ctx); err != nil {
+			return err
+		}
 	}
 
 	errCh := make(chan error, 1)
@@ -664,6 +718,30 @@ func newPlatformAdapter(cfg config.Config) (platform.PlatformAdapter, string, er
 	default:
 		return nil, "", fmt.Errorf("unsupported bot.platform %q", cfg.Bot.Platform)
 	}
+}
+
+func newRelayHub(cfg config.Config, logger *slog.Logger) (*core.RelayHub, error) {
+	if !cfg.RelayEnabled() {
+		return nil, nil
+	}
+	ttl, err := cfg.RelayRootTTL()
+	if err != nil {
+		return nil, err
+	}
+	return core.NewRelayHub(core.RelayOptions{
+		Enabled:             true,
+		Echo:                cfg.Relay.Echo,
+		MaxGeneration:       cfg.Relay.MaxGeneration,
+		MaxEnvelopesPerRoot: cfg.Relay.MaxEnvelopesPerRoot,
+		MaxRunsPerRoot:      cfg.Relay.MaxRunsPerRoot,
+		RootTTL:             ttl,
+		PingPongWindow:      cfg.Relay.PingPongWindow,
+		Session:             cfg.Relay.Session,
+		ArtifactMaxBytes:    cfg.Relay.ArtifactMaxBytes,
+		AllowOperatorSend:   cfg.Relay.AllowOperatorSend,
+		DataDir:             cfg.Storage.DataDir,
+		Logger:              logger,
+	})
 }
 
 func platformLogLevel(cfg config.Config) string {

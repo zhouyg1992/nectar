@@ -190,6 +190,48 @@ func TestSessionStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestSessionStoreCreateDetachedKeepsActiveSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+
+	store, err := NewPersistentSessionStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := store.EnsureActive(key, "human")
+	if err != nil {
+		t.Fatal(err)
+	}
+	detached, err := store.CreateDetached(key, "relay:root-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ActiveID(key); got != active.ID {
+		t.Fatalf("active = %q, want %q", got, active.ID)
+	}
+	if items := store.List(key, false); len(items) != 2 {
+		t.Fatalf("list length = %d, want 2", len(items))
+	}
+	found, ok := store.FindByName(key, "relay:root-1")
+	if !ok || found.ID != detached.ID {
+		t.Fatalf("FindByName() = %#v, %v", found, ok)
+	}
+	if _, err := store.SetActive(key, detached.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ActiveID(key); got != detached.ID {
+		t.Fatalf("active after switch = %q, want %q", got, detached.ID)
+	}
+
+	reloaded, err := NewPersistentSessionStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reloaded.FindByName(key, "relay:root-1"); !ok || got.ID != detached.ID {
+		t.Fatalf("reloaded detached session = %#v, %v", got, ok)
+	}
+}
+
 func TestSessionStoreSeparatesBotsInSameChat(t *testing.T) {
 	store := NewSessionStore()
 	codexKey := SessionKey{BotID: "codex_dev", Channel: "feishu", ChatID: "c1", AgentID: "codex"}

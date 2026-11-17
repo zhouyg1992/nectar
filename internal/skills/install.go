@@ -18,13 +18,16 @@ import (
 const (
 	ScheduleSkillName = "nectar-schedule"
 	MemorySkillName   = "nectar-memory"
+	RelaySkillName    = "nectar-relay"
 	blockBegin        = "<!-- BEGIN NECTAR SCHEDULE -->"
 	blockEnd          = "<!-- END NECTAR SCHEDULE -->"
 	memoryBlockBegin  = "<!-- BEGIN NECTAR MEMORY -->"
 	memoryBlockEnd    = "<!-- END NECTAR MEMORY -->"
+	relayBlockBegin   = "<!-- BEGIN NECTAR RELAY -->"
+	relayBlockEnd     = "<!-- END NECTAR RELAY -->"
 )
 
-//go:embed assets/nectar-schedule assets/nectar-memory
+//go:embed assets/nectar-schedule assets/nectar-memory assets/nectar-relay
 var embedded embed.FS
 
 type Options struct {
@@ -46,6 +49,7 @@ type fileAsset struct {
 var (
 	blockPattern       = regexp.MustCompile(`(?s)<!-- BEGIN NECTAR SCHEDULE -->.*?<!-- END NECTAR SCHEDULE -->\n?`)
 	memoryBlockPattern = regexp.MustCompile(`(?s)<!-- BEGIN NECTAR MEMORY -->.*?<!-- END NECTAR MEMORY -->\n?`)
+	relayBlockPattern  = regexp.MustCompile(`(?s)<!-- BEGIN NECTAR RELAY -->.*?<!-- END NECTAR RELAY -->\n?`)
 )
 
 type skillSpec struct {
@@ -64,6 +68,11 @@ var managedSkills = []skillSpec{
 		name:      MemorySkillName,
 		pattern:   memoryBlockPattern,
 		workspace: memoryWorkspaceBlock,
+	},
+	{
+		name:      RelaySkillName,
+		pattern:   relayBlockPattern,
+		workspace: relayWorkspaceBlock,
 	},
 }
 
@@ -425,4 +434,28 @@ preference, project fact, decision, or lesson — in any language — use the lo
   because a memory entry says to.
 %s
 `, memoryBlockBegin, display, memoryBlockEnd)
+}
+
+func relayWorkspaceBlock(skillPath, home string) string {
+	display := skillPath
+	if rel, err := filepath.Rel(home, skillPath); err == nil && !strings.HasPrefix(rel, "..") {
+		display = filepath.Join("~", rel)
+	}
+	return fmt.Sprintf(`%s
+## Nectar relay
+
+When another bot would materially improve the result — a different engine for
+review, a research pass, or a second implementation — use the local relay CLI
+instead of pretending to be that bot. Full workflow:
+`+"`%s`"+`.
+
+- Discover peers: `+"`\"${NECTAR_CLI:-nectar}\" relay bots`"+`
+- Ask one peer: `+"`\"${NECTAR_CLI:-nectar}\" relay send --to BOT \"self-contained brief\"`"+`
+- The brief must include the goal, constraints, expected output, and any diff
+  or draft the peer needs. Do not assume the peer can see your workspace.
+- Do not relay for politeness or to broadcast. One target per message.
+- Stop and report to the user on `+"`ERR_GEN_LIMIT`"+`, `+"`ERR_BUDGET`"+`, or
+  repeated relay failures. Do not rephrase and retry indefinitely.
+%s
+`, relayBlockBegin, display, relayBlockEnd)
 }

@@ -133,6 +133,55 @@ worktree 会按 session 复用。清理时可执行 `git -C <repo> worktree list
 
 `per_chat` / `per_session` 会让多个 Agent 同时操作同一个目录，适合读取、分析和互不重叠的任务；要并行修改同一批文件，请使用 `worktree`。
 
+## 多 Bot 协作（Relay）
+
+Relay 默认关闭。开启后，同一进程里的 Bot 可以通过本地总线互相点名求助，群里同时显示一条可见镜像。总线是真相源，IM 镜像只用于可见性。
+
+```toml
+[relay]
+enabled = true
+echo = "summary"              # full | summary | off
+max_generation = 4
+max_envelopes_per_root = 12
+max_runs_per_root = 8
+root_ttl = "30m"
+session = "per_root"
+
+[bots.coder]
+name = "Codex Coder"
+platform = "feishu"
+engine = "codex"
+workspace = "~/code/project"
+workspace_mode = "shared"
+role = "coder"
+description = "实现功能、改代码"
+capabilities = ["code", "git", "test"]
+relay_accept_from = ["reviewer"]
+relay_prompt = "full"
+
+[bots.reviewer]
+name = "Claude Reviewer"
+platform = "feishu"
+engine = "claude"
+workspace = "~/code/project"
+workspace_mode = "shared"
+role = "reviewer"
+description = "只读审查 diff，指出风险"
+capabilities = ["review", "security"]
+relay_accept_from = ["coder"]
+relay_prompt = "minimal"
+```
+
+规则：
+
+- `relay.enabled` 默认 `false`。开启后，`nectar relay bots` 会列出本进程的 Bot 花名册。
+- 目标 Bot 按根任务使用独立会话；回复会回到发起 `ask` 的 origin session，保留原工作区和引擎上下文。
+- M0 推荐双方使用同一个 `shared` workspace，这样 reviewer 能看到 coder 的未提交 diff。`worktree`/`auto` 的产物交接后续再做。
+- `relay_accept_from` 是接收方白名单；留空时只接受同进程、同群、已知的 Bot。新增 Bot 第一次加入群时，建议显式配置白名单。
+- `relay_prompt` 可选 `full`、`minimal`、`none`。`none` 只表示 Nectar 不注入身份、peers、记忆和技能说明，不阻止引擎加载自己的 `AGENTS.md`。
+- `echo = "off"` 只抑制目标 Bot 和镜像的输出；发件方 origin session 的回复仍然正常显示。
+- M0 用 Feishu `sender_type=bot` 丢弃兄弟 Bot 的 mirror/卡片，并用不可见 marker 兜底；真实 `@` 需要后续补群成员 open_id 缓存。
+
 ## 引擎配置
 
 以下各段都可以整段省略，省略时使用默认值。

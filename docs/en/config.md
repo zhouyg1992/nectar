@@ -133,6 +133,55 @@ Worktrees are reused per session. Use `git -C <repo> worktree list` to inspect t
 
 `per_chat` / `per_session` let multiple agents work in the same directory concurrently. They are a good fit for read-only, analysis, or non-overlapping tasks; use `worktree` when agents edit the same repository in parallel.
 
+## Multi-bot relay
+
+Relay is disabled by default. When enabled, bots in the same Nectar process can ask one another through the local bus, while the group gets a visible mirror. The bus is the source of truth; the IM message is only for visibility.
+
+```toml
+[relay]
+enabled = true
+echo = "summary"              # full | summary | off
+max_generation = 4
+max_envelopes_per_root = 12
+max_runs_per_root = 8
+root_ttl = "30m"
+session = "per_root"
+
+[bots.coder]
+name = "Codex Coder"
+platform = "feishu"
+engine = "codex"
+workspace = "~/code/project"
+workspace_mode = "shared"
+role = "coder"
+description = "Implement features and change code"
+capabilities = ["code", "git", "test"]
+relay_accept_from = ["reviewer"]
+relay_prompt = "full"
+
+[bots.reviewer]
+name = "Claude Reviewer"
+platform = "feishu"
+engine = "claude"
+workspace = "~/code/project"
+workspace_mode = "shared"
+role = "reviewer"
+description = "Read-only diff review and risk analysis"
+capabilities = ["review", "security"]
+relay_accept_from = ["coder"]
+relay_prompt = "minimal"
+```
+
+Rules:
+
+- `relay.enabled` defaults to `false`. Once enabled, `nectar relay bots` lists the in-process roster.
+- The target bot uses a detached per-root session; replies return to the origin session that sent the `ask`, preserving its workspace and engine context.
+- M0 recommends a shared workspace for both bots so the reviewer sees uncommitted changes. Worktree artifact handoff comes later.
+- `relay_accept_from` is the receiver allowlist. When empty, only same-process, same-chat, known bots are accepted; configure it explicitly for a new bot's first relay.
+- `relay_prompt` accepts `full`, `minimal`, or `none`. `none` only disables Nectar's identity/peers/memory/skill injections; the engine's own `AGENTS.md` and skills can still load.
+- `echo = "off"` suppresses the target bot and mirror only; the sender's origin turn still runs and displays.
+- M0 drops sibling-bot mirrors/cards using Feishu `sender_type=bot`, with an invisible marker as fallback. Real `@` mentions still need a chat-member open_id cache later.
+
 ## Engines
 
 Every section below can be omitted; defaults apply.

@@ -34,9 +34,14 @@ type Message struct {
 	ChatID    string
 	ChatType  string
 	UserID    string
-	Text      string
-	// Origin is empty for inbound chat messages and "schedule" for tasks fired
-	// by the scheduler. Scheduled prompts skip slash-command parsing.
+	// FromBot is true when the platform reports that the message was sent by a
+	// bot. Relay uses it to drop sibling-bot mirrors before they reach the
+	// router.
+	FromBot bool
+	Text    string
+	// Origin is empty for inbound chat messages, "schedule" for tasks fired by
+	// the scheduler, and "relay" for bot-to-bot relay runs. System-origin
+	// prompts skip slash-command parsing.
 	Origin      string
 	Attachments []attachment.Resource
 	ReplyTo     string
@@ -55,10 +60,17 @@ type Reply struct {
 	Text          string
 	Card          *Card
 	Media         []Media
+	Mentions      []Mention
 	ThreadID      string
 	ReplyInThread bool
 	// ReplyContext is copied from the inbound Message by the router.
 	ReplyContext any
+}
+
+type Mention struct {
+	OpenID string
+	UserID string
+	Name   string
 }
 
 // Media is a local file to upload back to the chat platform.

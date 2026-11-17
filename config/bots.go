@@ -145,13 +145,22 @@ func (c Config) resolveBotEntry(key string, entry BotEntry) (ResolvedBot, error)
 		return ResolvedBot{}, err
 	}
 	cfg.Bot = BotConfig{
-		Name:          name,
-		Engine:        engine,
-		Platform:      platform,
-		AdminUsers:    cloneStrings(entry.AdminUsers),
-		AllowedChats:  cloneStrings(entry.AllowedChats),
-		WorkspaceMode: workspaceMode,
+		Name:            name,
+		Engine:          engine,
+		Platform:        platform,
+		AdminUsers:      cloneStrings(entry.AdminUsers),
+		AllowedChats:    cloneStrings(entry.AllowedChats),
+		WorkspaceMode:   workspaceMode,
+		Role:            strings.TrimSpace(entry.Role),
+		Description:     strings.TrimSpace(entry.Description),
+		Capabilities:    cleanList(entry.Capabilities),
+		RelayAcceptFrom: cleanList(entry.RelayAcceptFrom),
 	}
+	prompt, err := normalizeRelayPrompt("bots."+id+".relay_prompt", entry.RelayPrompt)
+	if err != nil {
+		return ResolvedBot{}, err
+	}
+	cfg.Bot.RelayPrompt = prompt
 
 	if workspace := strings.TrimSpace(entry.Workspace); workspace != "" {
 		expanded, err := expandHome(workspace)

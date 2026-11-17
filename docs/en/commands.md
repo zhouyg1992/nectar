@@ -17,6 +17,7 @@ nectar update                         Update Nectar
 nectar schedule <subcommand>          Manage scheduled tasks
 nectar skills <subcommand>            Manage agent skills
 nectar memory <subcommand>            Manage local memory
+nectar relay <subcommand>             Manage multi-bot relay
 nectar dashboard [--config PATH]      Print the local console login URL
 nectar uninstall                      Uninstall Nectar
 ```
@@ -63,6 +64,19 @@ nectar bots [-config PATH]
 ```
 
 Lists the `[bot]` and `[bots.*]` entries after resolution, including ID, platform, engine, workspace, workspace mode, and data directory. `nectar` or the background service still starts all of them.
+
+## Multi-bot relay
+
+```bash
+nectar relay bots [--socket PATH] [--config PATH] [--bot ID]
+nectar relay send --to BOT [--session NAME] [--mode queue] [--echo full|summary|off]
+                   [--prompt-mode full|minimal|none] [--idempotency-key K] BODY
+nectar relay roots [--socket PATH]
+nectar relay show ROOT [--socket PATH]
+nectar relay cancel ROOT [--socket PATH]
+```
+
+`nectar relay send` is asynchronous and returns an envelope ID. When the target bot finishes, its final answer is delivered back to the origin session that sent the `ask`. Agents are identified by the injected `NECTAR_RELAY_TOKEN`; operators can use `--bot`/`--socket`, but sending still requires `relay.allow_operator_send = true`. M0 does not implement `--wait` or `--mode steer`.
 
 ## Worktrees
 

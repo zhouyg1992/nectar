@@ -176,6 +176,7 @@ func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error
 			ChatID:         reply.ChatID,
 			ReplyMessageID: reply.ReplyTo,
 			Markdown:       text,
+			Mentions:       toChannelMentions(reply.Mentions),
 		})
 		if err != nil {
 			return "", fmt.Errorf("send text: %w", err)
@@ -216,6 +217,21 @@ func (a *Adapter) Send(ctx context.Context, reply platform.Reply) (string, error
 		return "", errors.New("empty reply")
 	}
 	return firstID, nil
+}
+
+func toChannelMentions(mentions []platform.Mention) []channeltypes.Mention {
+	if len(mentions) == 0 {
+		return nil
+	}
+	out := make([]channeltypes.Mention, 0, len(mentions))
+	for _, mention := range mentions {
+		out = append(out, channeltypes.Mention{
+			OpenID: mention.OpenID,
+			UserID: mention.UserID,
+			Name:   mention.Name,
+		})
+	}
+	return out
 }
 
 func (a *Adapter) sendThreadReply(ctx context.Context, reply platform.Reply) (string, error) {
@@ -496,9 +512,14 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 		Attachments: attachments,
 		ReplyTo:     msg.MessageID,
 	}
-	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok &&
-		raw.Event != nil && raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
-		out.ThreadID = *raw.Event.Message.ThreadId
+	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok && raw.Event != nil {
+		if raw.Event.Sender != nil && raw.Event.Sender.SenderType != nil &&
+			strings.EqualFold(*raw.Event.Sender.SenderType, "bot") {
+			out.FromBot = true
+		}
+		if raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
+			out.ThreadID = *raw.Event.Message.ThreadId
+		}
 	}
 	return out
 }

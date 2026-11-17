@@ -27,6 +27,7 @@ type Config struct {
 	Memory    MemoryConfig        `toml:"memory"`
 	Schedule  ScheduleConfig      `toml:"schedule"`
 	Dashboard DashboardConfig     `toml:"dashboard"`
+	Relay     RelayConfig         `toml:"relay"`
 }
 
 type FeishuConfig struct {
@@ -124,29 +125,39 @@ type PiConfig struct {
 }
 
 type BotConfig struct {
-	Name          string   `toml:"name"`
-	Engine        string   `toml:"engine"`
-	Platform      string   `toml:"platform"`
-	AdminUsers    []string `toml:"admin_users"`
-	AllowedChats  []string `toml:"allowed_chats"`
-	WorkspaceMode string   `toml:"workspace_mode"`
+	Name            string   `toml:"name"`
+	Engine          string   `toml:"engine"`
+	Platform        string   `toml:"platform"`
+	AdminUsers      []string `toml:"admin_users"`
+	AllowedChats    []string `toml:"allowed_chats"`
+	WorkspaceMode   string   `toml:"workspace_mode"`
+	Role            string   `toml:"role"`
+	Description     string   `toml:"description"`
+	Capabilities    []string `toml:"capabilities"`
+	RelayAcceptFrom []string `toml:"relay_accept_from"`
+	RelayPrompt     string   `toml:"relay_prompt"`
 }
 
 // BotEntry describes an additional bot in the same Nectar process. Each entry
 // has its own platform identity, engine, workspace, session store, and memory.
 type BotEntry struct {
-	Name          string          `toml:"name"`
-	Platform      string          `toml:"platform"`
-	Engine        string          `toml:"engine"`
-	Workspace     string          `toml:"workspace"`
-	Model         string          `toml:"model"`
-	DataDir       string          `toml:"data_dir"`
-	AdminUsers    []string        `toml:"admin_users"`
-	AllowedChats  []string        `toml:"allowed_chats"`
-	WorkspaceMode string          `toml:"workspace_mode"`
-	Feishu        *FeishuConfig   `toml:"feishu"`
-	DingTalk      *DingTalkConfig `toml:"dingtalk"`
-	Telegram      *TelegramConfig `toml:"telegram"`
+	Name            string          `toml:"name"`
+	Platform        string          `toml:"platform"`
+	Engine          string          `toml:"engine"`
+	Workspace       string          `toml:"workspace"`
+	Model           string          `toml:"model"`
+	DataDir         string          `toml:"data_dir"`
+	AdminUsers      []string        `toml:"admin_users"`
+	AllowedChats    []string        `toml:"allowed_chats"`
+	WorkspaceMode   string          `toml:"workspace_mode"`
+	Role            string          `toml:"role"`
+	Description     string          `toml:"description"`
+	Capabilities    []string        `toml:"capabilities"`
+	RelayAcceptFrom []string        `toml:"relay_accept_from"`
+	RelayPrompt     string          `toml:"relay_prompt"`
+	Feishu          *FeishuConfig   `toml:"feishu"`
+	DingTalk        *DingTalkConfig `toml:"dingtalk"`
+	Telegram        *TelegramConfig `toml:"telegram"`
 }
 
 type StorageConfig struct {
@@ -180,6 +191,20 @@ type DashboardConfig struct {
 	TokenFile   string `toml:"token_file"`
 	AllowRemote bool   `toml:"allow_remote"`
 	ReadOnly    bool   `toml:"read_only"`
+}
+
+// RelayConfig controls bot-to-bot relay. It is disabled by default.
+type RelayConfig struct {
+	Enabled             *bool  `toml:"enabled"`
+	Echo                string `toml:"echo"`
+	MaxGeneration       int    `toml:"max_generation"`
+	MaxEnvelopesPerRoot int    `toml:"max_envelopes_per_root"`
+	MaxRunsPerRoot      int    `toml:"max_runs_per_root"`
+	RootTTL             string `toml:"root_ttl"`
+	PingPongWindow      int    `toml:"pingpong_window"`
+	Session             string `toml:"session"`
+	ArtifactMaxBytes    int64  `toml:"artifact_max_bytes"`
+	AllowOperatorSend   bool   `toml:"allow_operator_send"`
 }
 
 func defaults() Config {
@@ -244,6 +269,16 @@ func defaults() Config {
 		},
 		Dashboard: DashboardConfig{
 			Listen: "127.0.0.1:8787",
+		},
+		Relay: RelayConfig{
+			Echo:                "summary",
+			MaxGeneration:       4,
+			MaxEnvelopesPerRoot: 12,
+			MaxRunsPerRoot:      8,
+			RootTTL:             "30m",
+			PingPongWindow:      4,
+			Session:             "per_root",
+			ArtifactMaxBytes:    10 << 20,
 		},
 	}
 }
@@ -324,6 +359,25 @@ func (c Config) MemoryAutoLearnFailures() bool {
 
 func (c Config) DashboardEnabled() bool {
 	return c.Dashboard.Enabled != nil && *c.Dashboard.Enabled
+}
+
+func (c Config) RelayEnabled() bool {
+	return c.Relay.Enabled != nil && *c.Relay.Enabled
+}
+
+func (c Config) RelayRootTTL() (time.Duration, error) {
+	value := strings.TrimSpace(c.Relay.RootTTL)
+	if value == "" {
+		return 30 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid relay.root_ttl %q: %w", value, err)
+	}
+	if d <= 0 {
+		return 0, errors.New("relay.root_ttl must be positive")
+	}
+	return d, nil
 }
 
 func (c Config) DashboardTokenPath() string {
@@ -508,6 +562,9 @@ func normalize(cfg *Config) error {
 	if !cfg.Dashboard.AllowRemote && !isLoopbackHost(host) {
 		return fmt.Errorf("dashboard.listen %q is not loopback; set dashboard.allow_remote = true to allow it", cfg.Dashboard.Listen)
 	}
+	if err := normalizeRelay(cfg); err != nil {
+		return err
+	}
 	switch cfg.Memory.DefaultScope {
 	case "bot", "chat", "project":
 	default:
@@ -598,6 +655,15 @@ func normalize(cfg *Config) error {
 	if strings.TrimSpace(cfg.Bot.Name) == "" {
 		cfg.Bot.Name = "Nectar"
 	}
+	cfg.Bot.Role = strings.TrimSpace(cfg.Bot.Role)
+	cfg.Bot.Description = strings.TrimSpace(cfg.Bot.Description)
+	cfg.Bot.Capabilities = cleanList(cfg.Bot.Capabilities)
+	cfg.Bot.RelayAcceptFrom = cleanList(cfg.Bot.RelayAcceptFrom)
+	prompt, err := normalizeRelayPrompt("bot.relay_prompt", cfg.Bot.RelayPrompt)
+	if err != nil {
+		return err
+	}
+	cfg.Bot.RelayPrompt = prompt
 	if strings.TrimSpace(cfg.Bot.WorkspaceMode) == "" {
 		cfg.Bot.WorkspaceMode = "shared"
 	}
@@ -672,6 +738,73 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	return nil
+}
+
+func normalizeRelay(cfg *Config) error {
+	cfg.Relay.Echo = strings.ToLower(strings.TrimSpace(cfg.Relay.Echo))
+	if cfg.Relay.Echo == "" {
+		cfg.Relay.Echo = "summary"
+	}
+	switch cfg.Relay.Echo {
+	case "full", "summary", "off":
+	default:
+		return fmt.Errorf("unsupported relay.echo %q (supported: full, summary, off)", cfg.Relay.Echo)
+	}
+	if cfg.Relay.MaxGeneration <= 0 {
+		cfg.Relay.MaxGeneration = 4
+	}
+	if cfg.Relay.MaxEnvelopesPerRoot <= 0 {
+		cfg.Relay.MaxEnvelopesPerRoot = 12
+	}
+	if cfg.Relay.MaxRunsPerRoot <= 0 {
+		cfg.Relay.MaxRunsPerRoot = 8
+	}
+	if cfg.Relay.PingPongWindow <= 0 {
+		cfg.Relay.PingPongWindow = 4
+	}
+	cfg.Relay.Session = strings.ToLower(strings.TrimSpace(cfg.Relay.Session))
+	if cfg.Relay.Session == "" {
+		cfg.Relay.Session = "per_root"
+	}
+	switch cfg.Relay.Session {
+	case "per_root", "active":
+	default:
+		return fmt.Errorf("unsupported relay.session %q (supported: per_root, active)", cfg.Relay.Session)
+	}
+	if cfg.Relay.ArtifactMaxBytes <= 0 {
+		cfg.Relay.ArtifactMaxBytes = 10 << 20
+	}
+	if _, err := cfg.RelayRootTTL(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizeRelayPrompt(name, value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "full", nil
+	}
+	switch value {
+	case "full", "minimal", "none":
+		return value, nil
+	default:
+		return "", fmt.Errorf("unsupported %s %q (supported: full, minimal, none)", name, value)
+	}
+}
+
+func cleanList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func isLoopbackHost(host string) bool {

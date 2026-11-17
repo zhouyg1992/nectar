@@ -131,6 +131,18 @@ func (f *fakePlatform) lastReply() string {
 	return f.replies[len(f.replies)-1]
 }
 
+func (f *fakePlatform) repliesSnapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.replies...)
+}
+
+func (f *fakePlatform) sentCardsSnapshot() []platform.Card {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]platform.Card(nil), f.sentCards...)
+}
+
 func (f *fakePlatform) cardUpdateCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1370,6 +1382,110 @@ func TestInitialCardBody(t *testing.T) {
 	if got := initialCardBody(true); got != "Gathering your attachments…" {
 		t.Fatalf("initialCardBody(true) = %q", got)
 	}
+}
+
+func TestStagedPlaceholderBody(t *testing.T) {
+	tests := []struct {
+		name           string
+		elapsed        time.Duration
+		hasAttachments bool
+		sawReasoning   bool
+		toolCount      int
+		want           string
+	}{
+		{
+			name:    "initial",
+			elapsed: 0,
+			want:    "Hold on, warming up the hive…",
+		},
+		{
+			name:           "attachments",
+			elapsed:        0,
+			hasAttachments: true,
+			want:           "Gathering your attachments…",
+		},
+		{
+			name:         "reasoning before first stage",
+			elapsed:      5 * time.Second,
+			sawReasoning: true,
+			want:         "Thinking through the task…",
+		},
+		{
+			name:      "tools before first stage",
+			elapsed:   5 * time.Second,
+			toolCount: 2,
+			want:      "Gathering results…",
+		},
+		{
+			name:    "first stage thinking",
+			elapsed: placeholderStageOneAfter,
+			want:    "Still thinking… 15s",
+		},
+		{
+			name:      "first stage working",
+			elapsed:   20 * time.Second,
+			toolCount: 1,
+			want:      "Still working… 20s",
+		},
+		{
+			name:    "second stage",
+			elapsed: placeholderStageTwoAfter,
+			want:    "Still working — complex tasks can take a few minutes… 45s",
+		},
+		{
+			name:    "second stage past a minute",
+			elapsed: 65 * time.Second,
+			want:    "Still working — complex tasks can take a few minutes… 1m 5s",
+		},
+		{
+			name:    "second stage exact minute",
+			elapsed: time.Minute,
+			want:    "Still working — complex tasks can take a few minutes… 1m",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stagedPlaceholderBody(tt.elapsed, tt.hasAttachments, tt.sawReasoning, tt.toolCount); got != tt.want {
+				t.Fatalf("stagedPlaceholderBody() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRouterRefreshesPlaceholderElapsed(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &blockingEngine{
+		startCh: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.CardUpdateInterval = time.Nanosecond
+	router.cfg.PlaceholderRefreshInterval = 150 * time.Millisecond
+
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "run"})
+	waitForCardSends(t, plat, 1)
+	waitForCardUpdates(t, plat, 2)
+
+	plat.mu.Lock()
+	initial := plat.sentCards[0]
+	updates := append([]platform.Card(nil), plat.updates...)
+	plat.mu.Unlock()
+
+	if initial.Status != platform.CardThinking || initial.Title != cardTitleThinking || initial.Body != initialCardBody(false) {
+		t.Fatalf("initial card = %#v", initial)
+	}
+	if updates[0].Status != platform.CardThinking || updates[0].Title != cardTitleThinking {
+		t.Fatalf("placeholder update = %#v", updates[0])
+	}
+	if updates[0].Body != initialCardBody(false) {
+		t.Fatalf("placeholder body = %q", updates[0].Body)
+	}
+	if updates[0].Footer == updates[1].Footer {
+		t.Fatalf("placeholder footer did not refresh: %q", updates[0].Footer)
+	}
+
+	close(eng.release)
+	waitForCardStatus(t, plat, platform.CardComplete)
 }
 
 func TestRouterShowsToolCountAndReplacesIntermediateOutput(t *testing.T) {

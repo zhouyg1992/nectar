@@ -29,29 +29,37 @@ const (
 	cardTitleFailed   = "⚠️ Failed"
 )
 
+const (
+	placeholderStageOneAfter = 15 * time.Second
+	placeholderStageTwoAfter = 45 * time.Second
+)
+
 type RouterConfig struct {
-	BotID                  string
-	AgentID                string
-	BotName                string
-	Version                string
-	ModelName              string
-	ContextWindow          int
-	CardUpdateInterval     time.Duration
-	QueueNoticeDelay       time.Duration
-	EngineOptions          engine.EngineOptions
-	AdminUsers             []string
-	DataDir                string
-	APISocket              string
-	WorkspaceLocks         *execguard.WorkspaceLocks
-	MemoryMaxItems         int
-	MemoryMaxChars         int
-	MemoryDefaultScope     string
-	DisableMemoryAutoLearn bool
+	BotID                      string
+	AgentID                    string
+	BotName                    string
+	Version                    string
+	ModelName                  string
+	ContextWindow              int
+	CardUpdateInterval         time.Duration
+	PlaceholderRefreshInterval time.Duration
+	QueueNoticeDelay           time.Duration
+	EngineOptions              engine.EngineOptions
+	AdminUsers                 []string
+	DataDir                    string
+	APISocket                  string
+	WorkspaceLocks             *execguard.WorkspaceLocks
+	MemoryMaxItems             int
+	MemoryMaxChars             int
+	MemoryDefaultScope         string
+	DisableMemoryAutoLearn     bool
+	Relay                      *RelayHub
 }
 
 type sessionRun struct {
 	sessionID       string
 	key             SessionKey
+	rootID          string
 	cancel          context.CancelFunc
 	engineSessionID string
 	notice          *queuedRunNotice
@@ -84,9 +92,10 @@ type Router struct {
 	logger     *slog.Logger
 	cfg        RouterConfig
 
-	runMu  sync.Mutex
-	runs   map[string]*sessionRun
-	runSeq atomic.Uint64
+	runMu   sync.Mutex
+	runs    map[string]*sessionRun
+	runSeq  atomic.Uint64
+	relayMu sync.Mutex
 }
 
 func NewRouter(
@@ -119,6 +128,9 @@ func NewRouter(
 	}
 	if cfg.CardUpdateInterval <= 0 {
 		cfg.CardUpdateInterval = 2 * time.Second
+	}
+	if cfg.PlaceholderRefreshInterval <= 0 {
+		cfg.PlaceholderRefreshInterval = 5 * time.Second
 	}
 	if cfg.QueueNoticeDelay <= 0 {
 		cfg.QueueNoticeDelay = 800 * time.Millisecond
@@ -165,10 +177,10 @@ func (r *Router) newRunID(sessionID string) string {
 	return fmt.Sprintf("%s:%d", sessionID, r.runSeq.Add(1))
 }
 
-func (r *Router) trackRun(runID, sessionID string, key SessionKey, cancel context.CancelFunc, notice *queuedRunNotice) {
+func (r *Router) trackRun(runID, sessionID string, key SessionKey, rootID string, cancel context.CancelFunc, notice *queuedRunNotice) {
 	r.runMu.Lock()
 	defer r.runMu.Unlock()
-	r.runs[runID] = &sessionRun{sessionID: sessionID, key: key, cancel: cancel, notice: notice}
+	r.runs[runID] = &sessionRun{sessionID: sessionID, key: key, rootID: rootID, cancel: cancel, notice: notice}
 }
 
 func (r *Router) untrackRun(runID string) {
@@ -311,6 +323,16 @@ func (r *Router) sendCardReply(msg platform.Message, card *platform.Card) (strin
 }
 
 func (r *Router) Handle(msg platform.Message) {
+	text := strings.TrimSpace(msg.Text)
+	if r.cfg.Relay != nil {
+		if r.cfg.Relay.Enabled() && msg.FromBot {
+			return
+		}
+		if r.cfg.Relay.IsMirrorText(text) {
+			return
+		}
+		r.cfg.Relay.NoteChat(r.EffectiveBotID(), msg.ChatID)
+	}
 	key := SessionKey{
 		BotID:    r.cfg.BotID,
 		Channel:  msg.Channel,
@@ -330,7 +352,6 @@ func (r *Router) Handle(msg platform.Message) {
 			r.logger.Warn("could not persist delivery anchor", "error", err)
 		}
 	}
-	text := strings.TrimSpace(msg.Text)
 
 	if msg.Origin != "schedule" {
 		switch text {
@@ -350,6 +371,48 @@ func (r *Router) Handle(msg platform.Message) {
 				return
 			}
 			r.stop(key, msg)
+			return
+		case "/relay stop":
+			if !r.canManageSessions(msg) {
+				r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can stop relay roots in group chats.")
+				return
+			}
+			if r.cfg.Relay == nil || !r.cfg.Relay.Enabled() {
+				r.sendCommandResult(msg, platform.CardInfo, "🔁 Relay Disabled", "Relay is not enabled in this configuration.")
+				return
+			}
+			root, ok := r.cfg.Relay.LatestRoot(r.EffectiveBotID(), msg.ChatID)
+			if !ok {
+				r.sendCommandResult(msg, platform.CardInfo, "🔁 No Relay Root", "There is no active relay root in this chat.")
+				return
+			}
+			if err := r.cfg.Relay.CancelRoot(root.ID); err != nil {
+				r.sendCommandResult(msg, platform.CardError, "⚠️ Relay Stop Failed", err.Error())
+				return
+			}
+			r.sendCommandResult(msg, platform.CardInfo, "🛑 Relay Stopped", "Canceled relay root "+root.ID)
+			return
+		case "/relay status":
+			if !r.canManageSessions(msg) {
+				r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can inspect relay roots in group chats.")
+				return
+			}
+			if r.cfg.Relay == nil || !r.cfg.Relay.Enabled() {
+				r.sendCommandResult(msg, platform.CardInfo, "🔁 Relay Disabled", "Relay is not enabled in this configuration.")
+				return
+			}
+			roots := r.cfg.Relay.Roots()
+			var lines []string
+			for _, root := range roots {
+				if root.ChatID != msg.ChatID || root.State == "canceled" {
+					continue
+				}
+				lines = append(lines, fmt.Sprintf("%s · %s · %d envelopes · %d runs", root.ID, root.State, root.Envelopes, root.Runs))
+			}
+			if len(lines) == 0 {
+				lines = []string{"No active relay roots in this chat."}
+			}
+			r.sendCommandResult(msg, platform.CardInfo, "🔁 Relay Status", strings.Join(lines, "\n"))
 			return
 		}
 
@@ -392,11 +455,22 @@ func (r *Router) Handle(msg platform.Message) {
 	runCtx, cancel := context.WithCancel(r.ctx)
 	runID := r.newRunID(session.ID)
 	notice := newQueuedRunNotice(msg)
-	r.trackRun(runID, session.ID, key, cancel, notice)
+	var relayRun *relayRun
+	if r.cfg.Relay != nil {
+		relayRun = r.cfg.Relay.BeginHumanRun(r.EffectiveBotID(), session.ID, runID, msg, text)
+	}
+	rootID := ""
+	if relayRun != nil {
+		rootID = relayRun.RootID
+	}
+	r.trackRun(runID, session.ID, key, rootID, cancel, notice)
 	ahead := r.queue.Do(session.ID, func() {
 		defer cancel()
 		defer r.untrackRun(runID)
-		r.execute(runCtx, key, session.ID, runID, msg, text, notice)
+		if relayRun != nil && r.cfg.Relay != nil {
+			defer r.cfg.Relay.FinishRun(relayRun)
+		}
+		_, _ = r.execute(runCtx, key, session.ID, runID, msg, text, notice, relayRun)
 	})
 	if ahead > 0 {
 		notice.setAhead(ahead)
@@ -437,16 +511,28 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	runID := r.newRunID(session.ID)
-	r.trackRun(runID, session.ID, key, cancel, nil)
+	var relayRun *relayRun
+	if r.cfg.Relay != nil {
+		relayRun = r.cfg.Relay.BeginScheduledRun(r.EffectiveBotID(), session.ID, runID, msg, text)
+	}
+	rootID := ""
+	if relayRun != nil {
+		rootID = relayRun.RootID
+	}
+	r.trackRun(runID, session.ID, key, rootID, cancel, nil)
 	done := make(chan error, 1)
 	r.queue.Do(session.ID, func() {
 		defer cancel()
 		defer r.untrackRun(runID)
+		if relayRun != nil && r.cfg.Relay != nil {
+			defer r.cfg.Relay.FinishRun(relayRun)
+		}
 		if err := runCtx.Err(); err != nil {
 			done <- err
 			return
 		}
-		done <- r.execute(runCtx, key, session.ID, runID, msg, text, nil)
+		_, err := r.execute(runCtx, key, session.ID, runID, msg, text, nil, relayRun)
+		done <- err
 	})
 	select {
 	case err := <-done:
@@ -456,24 +542,30 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 	}
 }
 
-func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string, notice *queuedRunNotice) error {
+func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string, notice *queuedRunNotice, relayRun *relayRun) (string, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
 	session, ok := r.sessions.GetSession(sessionID)
 	if !ok {
-		return fmt.Errorf("session %q not found", sessionID)
+		return "", fmt.Errorf("session %q not found", sessionID)
 	}
 	if err := r.sessions.BeginTurn(sessionID, prompt); err != nil {
 		r.logger.Warn("could not begin session turn", "error", err)
 	}
 	sessionWorkspace, err := r.workspaces.ForSession(session.ID, msg.ChatID)
 	if err != nil {
-		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ Failed to create workspace: "+err.Error())
-		return err
+		answer := "❌ Failed to create workspace: " + err.Error()
+		if relayRun == nil {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", answer)
+		}
+		return answer, err
 	}
 	workdir := sessionWorkspace.Path
 	projectRoot := sessionWorkspace.ProjectRoot
+	if relayRun != nil && relayRun.IsOrigin && r.cfg.Relay != nil {
+		r.cfg.Relay.SetOriginWorkspace(relayRun.RootID, workdir, string(sessionWorkspace.Mode))
+	}
 
 	opts := r.cfg.EngineOptions
 	opts.WorkingDir = workdir
@@ -499,18 +591,26 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	if key.ThreadID != "" {
 		opts.Env["NECTAR_THREAD_ID"] = key.ThreadID
 	}
+	if relayRun != nil && relayRun.Token != "" {
+		opts.Env["NECTAR_RELAY_TOKEN"] = relayRun.Token
+		opts.Env["NECTAR_RELAY_ROOT"] = relayRun.RootID
+		opts.Env["NECTAR_RELAY_ENVELOPE"] = relayRun.EnvelopeID
+		if relayRun.Echo != "" {
+			opts.Env["NECTAR_RELAY_ECHO"] = relayRun.Echo
+		}
+	}
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
 	outbox, err := ensureOutboundDir(workdir)
 	if err != nil {
 		answer := "❌ Failed to prepare outbound media dir: " + err.Error()
-		finishErr := r.finish(msg, "", &platform.Card{
+		finishErr := r.finishWithRelay(msg, "", &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, 0, nil, r.cfg.ContextWindow),
-		}, answer)
-		return errors.Join(err, finishErr)
+		}, answer, relayRun)
+		return answer, errors.Join(err, finishErr)
 	}
 	opts.Env["NECTAR_OUTBOX_DIR"] = outbox
 
@@ -520,15 +620,16 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 	cardID := ""
 	caps := r.platform.Capabilities()
+	quiet := relayRun != nil && relayRun.QuietProgress
 	stopTyping := func() {}
-	if typing, ok := r.platform.(platform.TypingIndicator); ok {
+	if typing, ok := r.platform.(platform.TypingIndicator); ok && !quiet {
 		if stop := typing.StartTyping(r.ctx, msg.ReplyContext); stop != nil {
 			stopTyping = stop
 		}
 	}
 	defer stopTyping()
 
-	if initialCardID != "" {
+	if initialCardID != "" && !quiet {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
@@ -542,7 +643,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			cardID = initialCardID
 		}
 	}
-	if cardID == "" && caps.Card && caps.Streaming {
+	if cardID == "" && caps.Card && caps.Streaming && !quiet {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
@@ -561,13 +662,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	attachments, cleanupAttachments, err := r.prepareAttachments(msg, workdir)
 	if err != nil {
 		answer := "❌ Failed to download attachments: " + err.Error()
-		finishErr := r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finishWithRelay(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
-		}, answer)
-		return errors.Join(err, finishErr)
+		}, answer, relayRun)
+		return answer, errors.Join(err, finishErr)
 	}
 	defer cleanupAttachments()
 	lessonPrompt := prompt
@@ -575,23 +676,36 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		lessonPrompt = defaultAttachmentPrompt(attachments)
 	}
 	prompt = buildAttachmentPrompt(prompt, attachments)
-	prompt = r.withIdentity(prompt, workdir)
+	prompt = r.withRelayFence(prompt, relayRun)
+	prompt = r.withRelayRules(prompt, relayRun)
+	promptMode := "full"
+	if relayRun != nil && relayRun.PromptMode != "" {
+		promptMode = relayRun.PromptMode
+	}
+	if promptMode != "none" {
+		prompt = r.withIdentity(prompt, workdir)
+	}
 	opts.Attachments = attachments
 
 	engineSessionID := session.EngineSessionID
 	hasSession := engineSessionID != ""
-	prompt = r.withMemory(ctx, msg, workdir, projectRoot, prompt, sessionID, hasSession)
+	if promptMode == "full" {
+		prompt = r.withMemory(ctx, msg, workdir, projectRoot, prompt, sessionID, hasSession)
+	}
+	if promptMode != "none" {
+		prompt = r.withPeers(prompt, relayRun)
+	}
 	unlockWorkspace := r.lockWorkspace(workdir, msg)
 	defer unlockWorkspace()
 	if err := ctx.Err(); err != nil {
 		answer := "❌ Run stopped: " + err.Error()
-		finishErr := r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finishWithRelay(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
-		}, answer)
-		return errors.Join(err, finishErr)
+		}, answer, relayRun)
+		return answer, errors.Join(err, finishErr)
 	}
 	var events <-chan engine.Event
 	sessionNotice := ""
@@ -600,13 +714,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				answer := "❌ Run stopped: " + ctxErr.Error()
-				finishErr := r.finish(msg, cardID, &platform.Card{
+				finishErr := r.finishWithRelay(msg, cardID, &platform.Card{
 					Status: platform.CardError,
 					Title:  cardTitleFailed,
 					Body:   answer,
 					Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
-				}, answer)
-				return errors.Join(ctxErr, finishErr)
+				}, answer, relayRun)
+				return answer, errors.Join(ctxErr, finishErr)
 			}
 			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
 			r.logger.Warn("resume failed; starting a new session", "session", engineSessionID, "error", err)
@@ -623,13 +737,13 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		if sessionNotice != "" {
 			answer = sessionNotice + "\n\n" + answer
 		}
-		finishErr := r.finish(msg, cardID, &platform.Card{
+		finishErr := r.finishWithRelay(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
-		}, answer)
-		return errors.Join(err, finishErr)
+		}, answer, relayRun)
+		return answer, errors.Join(err, finishErr)
 	}
 
 	var stream strings.Builder
@@ -646,6 +760,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	sawIntermediateText := false
 	var lastCardUpdate time.Time
 	finalizing := false
+	engineDone := false
 
 	answerText := func() string {
 		answer := strings.TrimSpace(explicitFinal)
@@ -686,7 +801,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 
 	updateFinalizingCard := func() {
-		if cardID == "" || !hasAnswer() || len(errTexts) > 0 {
+		if quiet || cardID == "" || !hasAnswer() || len(errTexts) > 0 {
 			return
 		}
 		finalizing = true
@@ -703,22 +818,27 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 
 	updateProgress := func(body string, force bool) {
-		if cardID == "" {
+		if quiet || cardID == "" {
 			return
 		}
 		if !force && time.Since(lastCardUpdate) < r.cfg.CardUpdateInterval {
 			return
 		}
+		elapsed := time.Since(startedAt)
 		activity := ""
 		if toolCount > 0 {
 			activity = fmt.Sprintf("⏳ Tool calls · %d", toolCount)
 		}
+		title := cardTitleWorking
+		if !sawIntermediateText && !sawReasoning && toolCount == 0 && elapsed < placeholderStageTwoAfter {
+			title = cardTitleThinking
+		}
 		card := &platform.Card{
 			Status:   platform.CardThinking,
-			Title:    cardTitleWorking,
+			Title:    title,
 			Activity: activity,
 			Body:     body,
-			Footer:   cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
+			Footer:   cardFooter(modelName, elapsed, nil, r.cfg.ContextWindow),
 		}
 		if err := r.platform.Update(r.ctx, cardID, platform.Reply{
 			ChatID:   msg.ChatID,
@@ -733,77 +853,96 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		}
 	}
 
-	for ev := range events {
-		switch ev.Type {
-		case engine.EventSessionStarted:
-			if ev.SessionID != "" {
-				if err := r.sessions.SetEngineSession(sessionID, ev.SessionID); err != nil {
-					r.logger.Warn("could not persist session", "error", err)
+	placeholderTicker := time.NewTicker(r.cfg.PlaceholderRefreshInterval)
+	defer placeholderTicker.Stop()
+
+eventLoop:
+	for {
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				break eventLoop
+			}
+			switch ev.Type {
+			case engine.EventSessionStarted:
+				if ev.SessionID != "" {
+					if err := r.sessions.SetEngineSession(sessionID, ev.SessionID); err != nil {
+						r.logger.Warn("could not persist session", "error", err)
+					}
+					r.setRunEngineSession(runID, ev.SessionID)
 				}
-				r.setRunEngineSession(runID, ev.SessionID)
-			}
-		case engine.EventMessage:
-			sawIntermediateText = true
-			lastAgentMessage = ev.Text
-			phase, _ := ev.Meta["phase"].(string)
-			if phase == "final_answer" {
-				explicitFinal = ev.Text
-			}
-			if phase != "commentary" {
-				finalMessage = ev.Text
-			}
-			displayBody = ev.Text
-			updateProgress(displayBody, true)
-		case engine.EventReasoning:
-			sawReasoning = true
-			if !sawIntermediateText {
-				displayBody = "Thinking through the task…"
+			case engine.EventMessage:
+				sawIntermediateText = true
+				lastAgentMessage = ev.Text
+				phase, _ := ev.Meta["phase"].(string)
+				if phase == "final_answer" {
+					explicitFinal = ev.Text
+				}
+				if phase != "commentary" {
+					finalMessage = ev.Text
+				}
+				displayBody = ev.Text
 				updateProgress(displayBody, true)
-			}
-		case engine.EventTextDelta:
-			sawIntermediateText = true
-			stream.WriteString(ev.Text)
-			lastAgentMessage = stream.String()
-			displayBody = stream.String()
-			updateProgress(displayBody, false)
-		case engine.EventToolCall:
-			r.logger.Debug("agent tool call", "chat", msg.ChatID, "command", ev.Text)
-			toolCount++
-			if !sawIntermediateText {
-				if sawReasoning {
-					displayBody = "Thinking through the task…"
-				} else {
-					displayBody = "Gathering results…"
+			case engine.EventReasoning:
+				sawReasoning = true
+				if !sawIntermediateText {
+					displayBody = stagedPlaceholderBody(
+						time.Since(startedAt), len(msg.Attachments) > 0, sawReasoning, toolCount,
+					)
+					updateProgress(displayBody, true)
+				}
+			case engine.EventTextDelta:
+				sawIntermediateText = true
+				stream.WriteString(ev.Text)
+				lastAgentMessage = stream.String()
+				displayBody = stream.String()
+				updateProgress(displayBody, false)
+			case engine.EventToolCall:
+				r.logger.Debug("agent tool call", "chat", msg.ChatID, "command", ev.Text)
+				toolCount++
+				if !sawIntermediateText {
+					displayBody = stagedPlaceholderBody(
+						time.Since(startedAt), len(msg.Attachments) > 0, sawReasoning, toolCount,
+					)
+				}
+				updateProgress(displayBody, true)
+			case engine.EventToolResult:
+				r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)
+				if status, _ := ev.Meta["status"].(string); status == "error" {
+					toolErrors = append(toolErrors, ev.Text)
+				}
+			case engine.EventError:
+				if strings.TrimSpace(ev.Text) != "" {
+					errTexts = append(errTexts, ev.Text)
+				}
+			case engine.EventDone:
+				engineDone = true
+				if parsed := parseUsage(ev.Meta); parsed != nil {
+					usage = parsed
+				}
+				if value := metaInt(ev.Meta, "context_window"); value > 0 {
+					contextWindow = value
+				}
+				updateFinalizingCard()
+			case engine.EventUsage:
+				if parsed := parseUsage(ev.Meta); parsed != nil {
+					usage = parsed
+				}
+				if value := metaInt(ev.Meta, "context_window"); value > 0 {
+					contextWindow = value
+				}
+				if finalizing {
+					updateFinalizingCard()
 				}
 			}
-			updateProgress(displayBody, true)
-		case engine.EventToolResult:
-			r.logger.Debug("agent tool result", "chat", msg.ChatID, "meta", ev.Meta)
-			if status, _ := ev.Meta["status"].(string); status == "error" {
-				toolErrors = append(toolErrors, ev.Text)
+		case <-placeholderTicker.C:
+			if cardID == "" || engineDone || finalizing || sawIntermediateText || hasAnswer() {
+				continue
 			}
-		case engine.EventError:
-			if strings.TrimSpace(ev.Text) != "" {
-				errTexts = append(errTexts, ev.Text)
-			}
-		case engine.EventDone:
-			if parsed := parseUsage(ev.Meta); parsed != nil {
-				usage = parsed
-			}
-			if value := metaInt(ev.Meta, "context_window"); value > 0 {
-				contextWindow = value
-			}
-			updateFinalizingCard()
-		case engine.EventUsage:
-			if parsed := parseUsage(ev.Meta); parsed != nil {
-				usage = parsed
-			}
-			if value := metaInt(ev.Meta, "context_window"); value > 0 {
-				contextWindow = value
-			}
-			if finalizing {
-				updateFinalizingCard()
-			}
+			displayBody = stagedPlaceholderBody(
+				time.Since(startedAt), len(msg.Attachments) > 0, sawReasoning, toolCount,
+			)
+			updateProgress(displayBody, false)
 		}
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
@@ -820,27 +959,29 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
 	var finishErr error
 	if failed {
-		finishErr = r.finish(msg, cardID, &platform.Card{
+		finishErr = r.finishWithRelay(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
 			Body:   answer,
 			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
-		}, answer)
+		}, answer, relayRun)
 	} else {
-		finishErr = r.finish(msg, cardID, &platform.Card{
+		finishErr = r.finishWithRelay(msg, cardID, &platform.Card{
 			Status: platform.CardComplete,
 			Title:  cardTitleComplete,
 			Body:   answer,
 			Footer: cardFooter(modelName, elapsed, usage, contextWindow),
-		}, answer)
+		}, answer, relayRun)
 	}
 	var mediaErr error
-	if mediaErr = r.sendOutboundMedia(msg, outboundMedia); mediaErr != nil {
-		r.logger.Error("send outbound media failed", "chat", msg.ChatID, "error", mediaErr)
-		_ = r.reply(msg, "⚠️ 附件发送失败: "+mediaErr.Error())
+	if relayRun == nil || !relayRun.SuppressFinal {
+		if mediaErr = r.sendOutboundMedia(msg, outboundMedia); mediaErr != nil {
+			r.logger.Error("send outbound media failed", "chat", msg.ChatID, "error", mediaErr)
+			_ = r.reply(msg, "⚠️ 附件发送失败: "+mediaErr.Error())
+		}
 	}
 
-	if len(errTexts) > 0 && ctx.Err() == nil {
+	if len(errTexts) > 0 && ctx.Err() == nil && relayRun == nil {
 		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), projectRoot)
 	}
 	var runErr error
@@ -849,7 +990,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	} else if failed {
 		runErr = fmt.Errorf("agent tool error: %s", execguard.Truncate(strings.Join(toolErrors, "\n"), 4<<10))
 	}
-	return errors.Join(runErr, finishErr, mediaErr)
+	return answer, errors.Join(runErr, finishErr, mediaErr)
 }
 
 func initialCardBody(hasAttachments bool) string {
@@ -857,6 +998,42 @@ func initialCardBody(hasAttachments bool) string {
 		return "Gathering your attachments…"
 	}
 	return "Hold on, warming up the hive…"
+}
+
+func stagedPlaceholderBody(elapsed time.Duration, hasAttachments, sawReasoning bool, toolCount int) string {
+	switch {
+	case elapsed >= placeholderStageTwoAfter:
+		return fmt.Sprintf(
+			"Still working — complex tasks can take a few minutes… %s",
+			formatElapsedShort(elapsed),
+		)
+	case elapsed >= placeholderStageOneAfter:
+		if toolCount > 0 {
+			return fmt.Sprintf("Still working… %s", formatElapsedShort(elapsed))
+		}
+		return fmt.Sprintf("Still thinking… %s", formatElapsedShort(elapsed))
+	}
+
+	switch {
+	case sawReasoning:
+		return "Thinking through the task…"
+	case toolCount > 0:
+		return "Gathering results…"
+	default:
+		return initialCardBody(hasAttachments)
+	}
+}
+
+func formatElapsedShort(elapsed time.Duration) string {
+	if elapsed < time.Minute {
+		return fmt.Sprintf("%ds", int(elapsed.Seconds()))
+	}
+	minutes := int(elapsed / time.Minute)
+	seconds := int((elapsed % time.Minute) / time.Second)
+	if seconds == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%dm %ds", minutes, seconds)
 }
 
 func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card, fallbackText string) error {

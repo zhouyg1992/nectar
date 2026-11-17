@@ -223,6 +223,33 @@ allowed_chats = []
 # auto creates a git worktree for each session when the workspace is a
 # committed git repository, otherwise it falls back to per_chat.
 workspace_mode = "shared"
+# Optional relay metadata used by `nectar relay bots` and prompt injection.
+# role = "coder"
+# description = "Implement features and change code"
+# capabilities = ["code", "git", "test"]
+# relay_accept_from = ["reviewer"]
+# relay_prompt = "full"   # full | minimal | none
+
+# ---------------------------------------------------------------------------
+# Bot-to-bot relay
+# ---------------------------------------------------------------------------
+# Relay is disabled by default. When enabled, bots in the same process can ask
+# one another through the local bus. The IM mirror is a visibility layer; the
+# bus remains the source of truth.
+[relay]
+enabled = false
+# full = target progress card + final answer + mirror
+# summary = mirror + final answer (default)
+# off = no target output or mirror; the sender's origin turn still runs
+echo = "summary"
+max_generation = 4
+max_envelopes_per_root = 12
+max_runs_per_root = 8
+root_ttl = "30m"
+pingpong_window = 4
+session = "per_root"
+artifact_max_bytes = 10485760
+allow_operator_send = false
 
 # ---------------------------------------------------------------------------
 # Additional bots
@@ -235,8 +262,14 @@ workspace_mode = "shared"
 # platform = "feishu"
 # engine = "claude"
 # workspace = "~/code/project"
+# # Use shared for relay demos so both bots see uncommitted changes.
 # # New bots default to auto: git worktree when possible, otherwise per_chat.
-# workspace_mode = "auto"
+# workspace_mode = "shared"
+# role = "reviewer"
+# description = "Read-only diff review and risk analysis"
+# capabilities = ["review", "security"]
+# relay_accept_from = ["coder"]
+# relay_prompt = "minimal"
 # admin_users = []
 # allowed_chats = []
 #

@@ -17,6 +17,7 @@ nectar update                         更新版本
 nectar schedule <subcommand>          管理定时任务
 nectar skills <subcommand>            管理 Agent Skill
 nectar memory <subcommand>            管理本地记忆
+nectar relay <subcommand>             管理多 Bot 接力
 nectar dashboard [--config PATH]      打开本地控制台登录链接
 nectar uninstall                      卸载 Nectar
 ```
@@ -56,6 +57,19 @@ nectar bots [-config PATH]
 ```
 
 列出 `[bot]` 和 `[bots.*]` 解析后的 Bot，包括 ID、平台、引擎、工作区、workspace mode 和数据目录。实际运行仍由 `nectar` 或后台服务统一启动。
+
+## 多 Bot 协作
+
+```bash
+nectar relay bots [--socket PATH] [--config PATH] [--bot ID]
+nectar relay send --to BOT [--session NAME] [--mode queue] [--echo full|summary|off]
+                   [--prompt-mode full|minimal|none] [--idempotency-key K] BODY
+nectar relay roots [--socket PATH]
+nectar relay show ROOT [--socket PATH]
+nectar relay cancel ROOT [--socket PATH]
+```
+
+`nectar relay send` 默认异步，返回信封 ID；目标 Bot 完成后会把最终回答回投到发起 `ask` 的 origin session。Agent 通过注入的 `NECTAR_RELAY_TOKEN` 自动完成身份绑定；本机操作员可用 `--bot`/`--socket` 直连，但发送仍需 `relay.allow_operator_send = true`。M0 暂不支持 `--wait` 和 `--mode steer`。
 
 ## Worktree
 
