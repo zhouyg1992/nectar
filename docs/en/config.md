@@ -133,6 +133,23 @@ Worktrees are reused per session. Use `git -C <repo> worktree list` to inspect t
 
 `per_chat` / `per_session` let multiple agents work in the same directory concurrently. They are a good fit for read-only, analysis, or non-overlapping tasks; use `worktree` when agents edit the same repository in parallel.
 
+## Multi-bot relay
+
+Disabled by default. When enabled, bots in the same chat can hand work to each other; see [multi-bot collaboration](multi-bot-relay.md).
+
+```toml
+[relay]
+enabled = true
+echo = "summary"                  # full | summary | off
+max_generation = 4
+max_envelopes_per_root = 12
+max_runs_per_root = 8
+root_ttl = "30m"
+session = "per_root"
+```
+
+Each bot can also set `role`, `description`, `capabilities` and `relay_accept_from`. An empty `relay_accept_from` accepts any known bot in the same chat; referencing an unknown bot refuses to start. Relay needs the multi-bot (`[bots.*]`) layout; the legacy single `[bot]` config only logs a warning when relay is enabled.
+
 ## Engines
 
 Every section below can be omitted; defaults apply.

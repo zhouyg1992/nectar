@@ -44,6 +44,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Optional local console**: a disabled-by-default dashboard for bot status, memory review, and scheduled tasks; configuration stays read-only.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 - **Run several bots at once**: give Codex, Claude, and ops bots separate identities, workspaces, sessions, and memory in one process, with optional per-session git worktrees.
+- **Bots can collaborate**: opt-in relay lets a bot hand work to a peer in the same chat and get the answer back in its own session, with budgets, idempotency, and platform-visible hand-off mirrors.
 
 ## Quick start
 
@@ -155,6 +156,7 @@ nectar update                         Update to the latest release
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
 nectar skills install|uninstall       Manage agent skills
 nectar memory add|search|list|get|approve|reject|pin|unpin|forget
+nectar relay bots|send|roots|show|cancel
 nectar dashboard                      Print the local console login URL
 nectar uninstall                      Uninstall Nectar
 ```

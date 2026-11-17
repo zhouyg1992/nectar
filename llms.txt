@@ -14,6 +14,7 @@
 - [Install and upgrade](https://github.com/zhouyg1992/nectar/blob/main/docs/en/install.md)
 - [Configuration](https://github.com/zhouyg1992/nectar/blob/main/docs/en/config.md)
 - [Commands](https://github.com/zhouyg1992/nectar/blob/main/docs/en/commands.md)
+- [Multi-bot relay](https://github.com/zhouyg1992/nectar/blob/main/docs/en/multi-bot-relay.md)
 - [Feishu setup](https://github.com/zhouyg1992/nectar/blob/main/docs/en/feishu.md)
 - [DingTalk setup](https://github.com/zhouyg1992/nectar/blob/main/docs/en/dingtalk.md)
 - [Telegram setup](https://github.com/zhouyg1992/nectar/blob/main/docs/en/telegram.md)

@@ -44,6 +44,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 - **本地控制台（可选）**：默认关闭的 Dashboard，可看 Bot 状态、审核记忆和管理定时任务，配置修改保持只读。
 - **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
 - **一个进程跑多个 Bot**：Codex、Claude、运维 Bot 各自拥有独立身份、工作区、会话和记忆，并支持每个 session 独立 git worktree。
+- **Bot 之间可以协作**：可选的多 Bot 接力让一个 Bot 把任务交给同群的另一个 Bot，答案回到自己的会话；带预算、幂等和群内移交镜像。
 
 ## 快速开始
 
@@ -155,6 +156,7 @@ nectar update                         升级到最新版本
 nectar schedule list|add|preview|pause|resume|run|cancel|delete|update
 nectar skills install|uninstall       Agent Skill 管理
 nectar memory add|search|list|get|approve|reject|pin|unpin|forget
+nectar relay bots|send|roots|show|cancel
 nectar dashboard                      打开本地控制台登录链接
 nectar uninstall                      卸载 Nectar
 ```

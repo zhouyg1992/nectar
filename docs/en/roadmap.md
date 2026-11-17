@@ -1,5 +1,10 @@
 # Roadmap
 
+## Unreleased
+
+- Multi-bot relay (M0): explicit hand-offs between bots in one process
+
+
 ## v0.10.1 complete
 
 - Codex app-server `max_output_bytes` now applies per event, so long tasks are no longer rejected for cumulative output
@@ -109,6 +114,5 @@
 - WeChat, Slack
 - Kimi
 - Jev decision service
-- Agent Teams / Multi-Bot Relay
 
 For historical changes, see [changelog.md](changelog.md).

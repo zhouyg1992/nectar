@@ -9,6 +9,7 @@
 - [Telegram setup and troubleshooting](telegram.md)
 - [Background service](service.md)
 - [Scheduled tasks](schedule.md)
+- [Multi-bot collaboration (relay)](multi-bot-relay.md)
 - [Security boundaries](security.md)
 - [Roadmap](roadmap.md)
 - [Changelog](changelog.md)

@@ -239,6 +239,11 @@ workspace_mode = "shared"
 # workspace_mode = "auto"
 # admin_users = []
 # allowed_chats = []
+# role = "reviewer"
+# description = "Read-only diff reviews and risk findings"
+# capabilities = ["review", "security"]
+# # Empty accepts any known bot in the same chat; list ids to restrict senders.
+# relay_accept_from = []
 #
 # [bots.reviewer.feishu]
 # app_id = "cli_yyy"
@@ -252,6 +257,22 @@ workspace_mode = "shared"
 #
 # [bots.ops.telegram]
 # bot_token = "123456:replace-me"
+
+# ---------------------------------------------------------------------------
+# Multi-bot relay (disabled by default)
+# ---------------------------------------------------------------------------
+# Bots in one process can hand work to each other through a local, token-bound
+# bus. The chat only shows a hand-off card; it never triggers the target.
+#
+# [relay]
+# enabled = true
+# # Target visibility: full (progress + answer), summary (answer only), off.
+# echo = "summary"
+# max_generation = 4
+# max_envelopes_per_root = 12
+# max_runs_per_root = 8
+# root_ttl = "30m"
+# session = "per_root"
 
 # ---------------------------------------------------------------------------
 # Storage

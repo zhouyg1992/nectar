@@ -57,6 +57,18 @@ nectar bots [-config PATH]
 
 列出 `[bot]` 和 `[bots.*]` 解析后的 Bot，包括 ID、平台、引擎、工作区、workspace mode 和数据目录。实际运行仍由 `nectar` 或后台服务统一启动。
 
+## 多 Bot 协作（Relay）
+
+```bash
+nectar relay bots [--json] [--bot ID] [--config PATH]
+nectar relay send --to BOT [--no-reply] [--idempotency-key K] -- "自包含的任务说明"
+nectar relay roots [--json] [--chat CHAT_ID]
+nectar relay show ROOT [--json]
+nectar relay cancel ROOT
+```
+
+`relay send` 需要 Nectar 注入的 `NECTAR_RELAY_TOKEN`，只能在 agent 运行内使用；`roots` / `show` / `cancel` 面向操作员。聊天命令 `"/relay stop"` 取消本群所有打开的 relay root（仅 `admin_users`）。详见 [多 Bot 协作（Relay）](multi-bot-relay.md)。
+
 ## Worktree
 
 ```bash

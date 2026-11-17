@@ -1,5 +1,15 @@
 # Changelog
 
+## 未发布
+
+### 新增
+
+- 多 Bot 协作（Relay）：同一进程内的 Bot 可以通过本地、令牌绑定的总线互相接力（`[relay]`），支持角色花名册、按 root 的代数/信封/运行预算、幂等和重启恢复；默认关闭
+- `nectar relay bots|send|roots|show|cancel` 以及管理员聊天命令 `"/relay stop"`
+- 接力回复回到发件方 origin session，目标 Bot 在独立的 per-root 会话中运行；relay 正文不会被当作斜杠命令解析
+- 飞书、钉钉、Telegram 的群内移交镜像；Bot 发送的消息和带标记的镜像会在写锚点与命令解析之前丢弃
+- `nectar-relay` Agent Skill，与 schedule、memory 一起安装
+
 ## v0.10.1 — 2026-11-17
 
 ### 修复

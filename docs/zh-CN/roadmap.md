@@ -1,5 +1,10 @@
 # 路线图与待实现
 
+## 未发布
+
+- 多 Bot 协作（Relay）M0：同一进程内 Bot 之间显式接力
+
+
 ## v0.10.1 已完成
 
 - Codex app-server 的 `max_output_bytes` 改为按单条事件限制，避免长任务因累计输出被误判超限
@@ -109,6 +114,5 @@
 - 微信、Slack
 - Kimi
 - Jev 决策服务
-- Agent Teams / Multi-Bot Relay
 
 历史变更见 [changelog.md](changelog.md)。
