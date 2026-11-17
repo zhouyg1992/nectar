@@ -268,6 +268,8 @@ workspace_mode = "shared"
 # enabled = true
 # # Target visibility: full (progress + answer), summary (answer only), off.
 # echo = "summary"
+# # When a group message @mentions several bots, only the first one acts.
+# first_mention_only = true
 # max_generation = 4
 # max_envelopes_per_root = 12
 # max_runs_per_root = 8

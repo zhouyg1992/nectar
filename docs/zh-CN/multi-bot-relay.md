@@ -42,7 +42,9 @@ app_id = "cli_yyy"
 app_secret = "yyy"
 ```
 
-在群里 @coder：「实现这个功能，写完让 reviewer 审查，然后你汇总」。coder 会调用：
+在群里 @coder：「实现这个功能，写完让 reviewer 审查，然后你汇总」。**只 @ 发起方**：目标 Bot 的名字用纯文本写，不要用 @ 选择器。飞书的 @ 是消息投递路由，同时 @ 两个 Bot 会让两个 Bot 都把这条人类消息当成自己的任务。
+
+coder 会调用：
 
 ```sh
 nectar relay send --to reviewer "……自包含的任务说明与 diff……"
@@ -73,6 +75,8 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 - **目标 Bot 使用独立会话。** 每个 root 在目标 Bot 侧对应一个 detached 会话（`relay:<root>`），不会顶掉人类正在使用的活跃会话；可以在 `/list` 里看到，也可以用 `/switch` 接管。
 - **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。
 - **只点名一个目标。** 没有广播；一问一答不会无限循环（reply 不再自动回投）。
+- **多 @ 只由第一个响应。** 群消息同时 @ 多个 Nectar Bot 时，只有第一个被 @ 的 Bot 处理，避免同一条人类指令被多个 Bot 重复执行、互相 review。
+- **拒绝反向互接力。** 同一群里已存在 A→B 的进行中 ask 时，B→A 的新 ask 返回 `ERR_MUTUAL_RELAY`，防止两个 Bot 交叉审查、互相等待。
 
 ## 配置
 
@@ -81,6 +85,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `enabled` | `false` | 是否开启 relay。需要至少两个 Bot 才有意义。 |
+| `first_mention_only` | `true` | 群消息同时 @ 多个已配置 Bot 时，只有第一个被 @ 的 Bot 处理；其余 Bot 等到 relay 到达再工作。设为 `false` 恢复「多 @ 全部响应」。 |
 | `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示进度卡和最终回答；`summary` 只显示最终回答；`off` 不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
 | `max_generation` | `4` | 一条链路最多几跳，超出返回 `ERR_GEN_LIMIT`。 |
 | `max_envelopes_per_root` | `12` | 每个 root 最多多少条信封（含回复）。 |
@@ -139,7 +144,7 @@ nectar relay cancel ROOT
 | 钉钉 | 群聊文本/markdown；单聊不镜像 | 回调无发送者类型，依赖不可见 marker 兜底 |
 | Telegram | 文本 | 适配器已丢弃 `is_bot` 消息；平台本身不会把 Bot 消息投给其他 Bot |
 
-镜像只写纯文本 `@name`，不产生真实 @ mention，避免平台把镜像投递给目标从而触发第二次运行。
+镜像只写纯文本 `@name`，不产生真实 @ mention，避免平台把镜像投递给目标从而触发第二次运行。「首个被 @ 的 Bot 才响应」依赖平台提供被 @ 者的名字与 bot 标记：飞书完整支持；Telegram 仅支持 `text_mention`（通常不是 Bot）；钉钉回调没有名字，该策略不生效，需要靠「只 @ 发起方」的使用习惯。
 
 未经真实凭据验证的部分：飞书 / 钉钉是否会把兄弟 Bot 的群消息推送给其他 Bot、钉钉不同机器人看到的 `openConversationId` 是否一致、钉钉群主动发送权限、零宽 marker 在各平台渲染后的存活情况。marker 只作兜底，主要防线是平台发送者类型与「镜像不含真实 @」。
 
@@ -153,6 +158,7 @@ nectar relay cancel ROOT
 | `ERR_NOT_IN_CHAT` | 目标 Bot 没有在该群出现过 | 让用户在群里 @ 它一次 |
 | `ERR_REJECTED` | 目标不接受该发件人，或请求非法（空正文、超长） | 检查 `relay_accept_from` |
 | `ERR_UNAUTHORIZED` | 缺少或过期的运行令牌 | 只能在 agent 运行内调用 `relay send` |
+| `ERR_MUTUAL_RELAY` | 同群已有反向进行中的 ask | 不要再反向接力；完成手头任务或向用户汇报 |
 | `ERR_DISABLED` | 未开启 relay | 在配置里设置 `[relay] enabled = true` |
 
 ## 安全建议

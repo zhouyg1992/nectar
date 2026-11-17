@@ -42,7 +42,9 @@ app_id = "cli_yyy"
 app_secret = "yyy"
 ```
 
-In the group, @coder: "implement this, have reviewer check it, then summarize". The coder runs:
+In the group, @coder: "implement this, have reviewer check it, then summarize". **Mention only the initiator**: write the target's name as plain text instead of picking it from the @ menu. A Feishu @ is message routing, so mentioning both bots delivers the same human instruction to both.
+
+The coder runs:
 
 ```sh
 nectar relay send --to reviewer "…self-contained brief and diff…"
@@ -73,6 +75,8 @@ user → bot A → engine A ──relay send (local API + run token)
 - **The target runs in its own session.** Each root maps to a detached session on the target (`relay:<root>`), so the human's active session is never hijacked. It shows up in `/list` and can be taken over with `/switch`.
 - **Async rule.** After `relay send`, the sender must end its turn: no polling, sleeping or waiting. The reply wakes the origin session as a new turn; a turn that never ends would queue the reply behind itself and deadlock the session.
 - **One target per message.** No broadcast, and no infinite ping-pong: replies never trigger another automatic reply.
+- **First mention wins.** When a group message mentions several Nectar bots, only the first one handles it, so one human instruction is not duplicated across bots that end up reviewing each other.
+- **Mutual relays are refused.** While A→B has an ask in flight in a chat, a B→A ask returns `ERR_MUTUAL_RELAY`, so two bots cannot cross-review and wait on each other.
 
 ## Configuration
 
@@ -81,6 +85,7 @@ user → bot A → engine A ──relay send (local API + run token)
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `enabled` | `false` | Turn relay on. Only useful with at least two bots. |
+| `first_mention_only` | `true` | When a group message mentions several configured bots, only the first one acts; the others wait for a relay. Set `false` to restore "every mentioned bot responds". |
 | `echo` | `"summary"` | Visibility of target output: `full` shows the progress card and final answer; `summary` shows only the final answer; `off` hides target output entirely (the answer still returns to the sender). The sender's own turn is always visible. |
 | `max_generation` | `4` | Maximum hops in one chain; beyond it returns `ERR_GEN_LIMIT`. |
 | `max_envelopes_per_root` | `12` | Maximum envelopes per root, replies included. |
@@ -139,7 +144,7 @@ nectar relay cancel ROOT
 | DingTalk | Group text/markdown; no direct-message mirror | Callbacks carry no sender type; relies on the invisible marker |
 | Telegram | Text | The adapter already drops `is_bot` messages, and the platform does not deliver bot messages to other bots |
 
-Mirrors use plain-text `@name` only and never a real @ mention, so the platform cannot deliver a mirror to the target and trigger a second run.
+Mirrors use plain-text `@name` only and never a real @ mention, so the platform cannot deliver a mirror to the target and trigger a second run. The first-mention rule needs mention names plus a bot flag from the platform: Feishu provides both; Telegram only exposes `text_mention` (rarely a bot); DingTalk callbacks carry no names, so there the rule does not apply and "mention only the initiator" remains a usage rule.
 
 Unverified without real credentials: whether Feishu or DingTalk deliver one bot's group messages to a sibling bot, whether DingTalk's `openConversationId` matches across robots in one group, DingTalk group proactive-send permission, and zero-width marker survival through each renderer. The marker is a fallback; the primary defence is the platform sender type plus mirror text that contains no real mention.
 
@@ -153,6 +158,7 @@ Unverified without real credentials: whether Feishu or DingTalk deliver one bot'
 | `ERR_NOT_IN_CHAT` | Target has not appeared in this chat | Have the user mention it in the group once |
 | `ERR_REJECTED` | Target refuses this sender, or the request is invalid (empty/oversized body) | Check `relay_accept_from` |
 | `ERR_UNAUTHORIZED` | Missing or expired run token | `relay send` only works inside an agent run |
+| `ERR_MUTUAL_RELAY` | The opposite direction already has an ask in flight in this chat | Do not relay back; finish your own work or report to the user |
 | `ERR_DISABLED` | Relay is off | Set `[relay] enabled = true` |
 
 ## Security advice

@@ -141,6 +141,7 @@ worktree 会按 session 复用。清理时可执行 `git -C <repo> worktree list
 [relay]
 enabled = true
 echo = "summary"                  # full | summary | off
+first_mention_only = true         # 多 @ 时只由第一个被 @ 的 Bot 响应
 max_generation = 4
 max_envelopes_per_root = 12
 max_runs_per_root = 8

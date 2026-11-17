@@ -141,6 +141,7 @@ Disabled by default. When enabled, bots in the same chat can hand work to each o
 [relay]
 enabled = true
 echo = "summary"                  # full | summary | off
+first_mention_only = true         # only the first mentioned bot responds
 max_generation = 4
 max_envelopes_per_root = 12
 max_runs_per_root = 8

@@ -7,6 +7,8 @@
 - Multi-bot relay: bots in one process can hand work to each other over a local, token-bound bus (`[relay]`), with role-based rosters, per-root generation/envelope/run budgets, idempotency and restart recovery; disabled by default
 - `nectar relay bots|send|roots|show|cancel` and the admin chat command `/relay stop`
 - Relay replies return to the sender's origin session, while the target runs in a detached per-root session; relay bodies never parse as slash commands
+- Group messages that mention several configured bots are handled only by the first mentioned bot (`relay.first_mention_only`), and an opposite-direction ask in the same chat is refused with `ERR_MUTUAL_RELAY`
+- Hand-off mirrors no longer show a visible marker; rejected sends no longer journal empty roots, and empty roots are pruned on load
 - Group hand-off mirrors on Feishu, DingTalk and Telegram; bot-authored messages and marked mirrors are dropped before anchors or command parsing
 - `nectar-relay` agent skill, installed alongside the schedule and memory skills
 
