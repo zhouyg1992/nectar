@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.1 complete
+
+- Codex app-server `max_output_bytes` now applies per event, so long tasks are no longer rejected for cumulative output
+
 ## v0.10.0 complete
 
 - Multiple bots with independent platform identities, engines, workspaces, sessions, memory, and permissions, plus per-bot service logs, schedules, and memory

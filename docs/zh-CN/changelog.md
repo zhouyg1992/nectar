@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.1 — 2026-11-17
+
+### 修复
+
+- Codex app-server 的 `max_output_bytes` 改为限制单条 JSON-RPC 事件，整个 turn 的 stdout 继续流式处理，长时间任务不会因为累计输出超过上限被错误终止；单条超大事件仍会报错并取消进程
+- 配置文档和 `config.example.toml` 明确 app-server 与 exec 两种 backend 下 `max_output_bytes` 的不同语义
+
 ## v0.10.0 — 2026-11-16
 
 ### 新增

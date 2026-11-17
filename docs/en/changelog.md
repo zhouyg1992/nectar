@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.1 — 2026-11-17
+
+### Fixed
+
+- `max_output_bytes` for the Codex app-server backend now limits each JSON-RPC event instead of a turn's cumulative stdout, so long tasks are not rejected for total output; oversized single events still fail with a precise error and cancel the process
+- Config docs and `config.example.toml` now clarify `max_output_bytes` semantics for the app-server and exec backends
+
 ## v0.10.0 — 2026-11-16
 
 ### Added
