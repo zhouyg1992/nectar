@@ -31,6 +31,8 @@ func Run(args []string, deps Deps) error {
 			return runSkills(args[1:])
 		case "memory":
 			return runMemory(args[1:])
+		case "relay":
+			return runRelay(args[1:])
 		case "dashboard":
 			return runDashboard(args[1:])
 		case "uninstall":
@@ -71,6 +73,7 @@ func printMainUsage() {
   nectar dashboard [--config PATH] [--json] [--no-browser]
   nectar skills <install|uninstall>
   nectar memory <add|search|list|get|approve|reject|pin|unpin|forget>
+  nectar relay <bots|send|roots|show|cancel>
   nectar uninstall [--purge-data] [--keep-binary] [--no-skills] [--dry-run]
   nectar service <install|uninstall|start|stop|restart|status|logs>
 `)
