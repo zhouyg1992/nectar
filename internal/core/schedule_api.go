@@ -21,6 +21,7 @@ type ScheduleAPIOptions struct {
 	SocketPath     string
 	Scheduler      *Scheduler
 	Memory         memory.Store
+	Relay          *RelayHub
 	Logger         *slog.Logger
 	DefaultChannel string
 	DefaultAgent   string
@@ -34,6 +35,7 @@ type ScheduleAPI struct {
 	socketPath     string
 	scheduler      *Scheduler
 	memory         memory.Store
+	relay          *RelayHub
 	logger         *slog.Logger
 	defaultChannel string
 	defaultAgent   string
@@ -51,6 +53,7 @@ func NewScheduleAPI(opts ScheduleAPIOptions) *ScheduleAPI {
 		socketPath:     opts.SocketPath,
 		scheduler:      opts.Scheduler,
 		memory:         opts.Memory,
+		relay:          opts.Relay,
 		logger:         logger,
 		defaultChannel: opts.DefaultChannel,
 		defaultAgent:   opts.DefaultAgent,
@@ -59,8 +62,8 @@ func NewScheduleAPI(opts ScheduleAPIOptions) *ScheduleAPI {
 }
 
 func (a *ScheduleAPI) Start(ctx context.Context) error {
-	if a.scheduler == nil && a.memory == nil {
-		return errors.New("local api: scheduler and memory are nil")
+	if a.scheduler == nil && a.memory == nil && a.relay == nil {
+		return errors.New("local api: scheduler, memory and relay are nil")
 	}
 	if strings.TrimSpace(a.socketPath) == "" {
 		return errors.New("schedule api: socket path is empty")
@@ -125,6 +128,10 @@ func (a *ScheduleAPI) Handler() http.Handler {
 	mux.HandleFunc("/schedule/", a.handleItem)
 	mux.HandleFunc("/memory", a.handleMemoryCollection)
 	mux.HandleFunc("/memory/", a.handleMemoryItem)
+	mux.HandleFunc("/relay/bots", a.handleRelayBots)
+	mux.HandleFunc("/relay/send", a.handleRelaySend)
+	mux.HandleFunc("/relay/roots", a.handleRelayRoots)
+	mux.HandleFunc("/relay/roots/", a.handleRelayRootItem)
 	return mux
 }
 

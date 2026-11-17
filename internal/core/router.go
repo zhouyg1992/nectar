@@ -81,6 +81,7 @@ type Router struct {
 	decider    decision.DecisionService
 	anchors    *AnchorStore
 	scheduler  *Scheduler
+	relay      *RelayHub
 	logger     *slog.Logger
 	cfg        RouterConfig
 
@@ -311,6 +312,18 @@ func (r *Router) sendCardReply(msg platform.Message, card *platform.Card) (strin
 }
 
 func (r *Router) Handle(msg platform.Message) {
+	// Bot-authored messages and relay mirrors are visibility aids, never
+	// triggers. Drop them before anchors and command parsing so a mirror can
+	// not overwrite the human's delivery anchor or run a slash command.
+	if msg.FromBot {
+		return
+	}
+	if r.relay != nil {
+		if r.relay.IsMirrorText(msg.Text) {
+			return
+		}
+		r.relay.NoteChat(msg.ChatID, r.EffectiveBotID())
+	}
 	key := SessionKey{
 		BotID:    r.cfg.BotID,
 		Channel:  msg.Channel,
@@ -350,6 +363,10 @@ func (r *Router) Handle(msg platform.Message) {
 				return
 			}
 			r.stop(key, msg)
+			return
+		}
+
+		if r.handleRelayCommand(msg, text) {
 			return
 		}
 
@@ -396,7 +413,7 @@ func (r *Router) Handle(msg platform.Message) {
 	ahead := r.queue.Do(session.ID, func() {
 		defer cancel()
 		defer r.untrackRun(runID)
-		r.execute(runCtx, key, session.ID, runID, msg, text, notice)
+		_, _ = r.execute(runCtx, key, session.ID, runID, msg, text, notice, nil)
 	})
 	if ahead > 0 {
 		notice.setAhead(ahead)
@@ -446,7 +463,8 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 			done <- err
 			return
 		}
-		done <- r.execute(runCtx, key, session.ID, runID, msg, text, nil)
+		_, err := r.execute(runCtx, key, session.ID, runID, msg, text, nil, nil)
+		done <- err
 	})
 	select {
 	case err := <-done:
@@ -456,13 +474,13 @@ func (r *Router) ExecuteScheduled(ctx context.Context, msg platform.Message, ses
 	}
 }
 
-func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string, notice *queuedRunNotice) error {
+func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID string, msg platform.Message, prompt string, notice *queuedRunNotice, relay *relayRunInfo) (RunResult, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return RunResult{}, err
 	}
 	session, ok := r.sessions.GetSession(sessionID)
 	if !ok {
-		return fmt.Errorf("session %q not found", sessionID)
+		return RunResult{}, fmt.Errorf("session %q not found", sessionID)
 	}
 	if err := r.sessions.BeginTurn(sessionID, prompt); err != nil {
 		r.logger.Warn("could not begin session turn", "error", err)
@@ -470,7 +488,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	sessionWorkspace, err := r.workspaces.ForSession(session.ID, msg.ChatID)
 	if err != nil {
 		r.sendCommandResult(msg, platform.CardError, "⚠️ Workspace Error", "❌ Failed to create workspace: "+err.Error())
-		return err
+		return RunResult{}, err
 	}
 	workdir := sessionWorkspace.Path
 	projectRoot := sessionWorkspace.ProjectRoot
@@ -499,6 +517,37 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	if key.ThreadID != "" {
 		opts.Env["NECTAR_THREAD_ID"] = key.ThreadID
 	}
+	// Every run gets a relay token while relay is on, so a human-driven turn can
+	// hand work to a peer. The token binds identity, chat, root and generation;
+	// the API derives the sender from it and ignores client-supplied identity.
+	quiet := relay != nil && relay.target && relay.echo != RelayEchoFull
+	silent := relay != nil && relay.target && relay.echo == RelayEchoOff
+	if r.relay != nil {
+		tokenReq := RelayTokenRequest{
+			BotID:     r.EffectiveBotID(),
+			SessionID: sessionID,
+			RunID:     runID,
+			Prompt:    prompt,
+			Channel:   key.Channel,
+			ChatID:    key.ChatID,
+			ChatType:  msg.ChatType,
+			ThreadID:  key.ThreadID,
+		}
+		if relay != nil {
+			tokenReq.RootID = relay.rootID
+			tokenReq.Gen = relay.gen
+		}
+		if token := r.relay.MintToken(tokenReq); token != "" {
+			defer r.relay.RevokeToken(token)
+			opts.Env["NECTAR_RELAY_TOKEN"] = token
+			if tokenReq.RootID != "" {
+				opts.Env["NECTAR_RELAY_ROOT"] = tokenReq.RootID
+			}
+			if relay != nil && relay.envelopeID != "" {
+				opts.Env["NECTAR_RELAY_ENVELOPE"] = relay.envelopeID
+			}
+		}
+	}
 	startedAt := time.Now()
 	modelName := r.resolvedModel()
 	outbox, err := ensureOutboundDir(workdir)
@@ -510,7 +559,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			Body:   answer,
 			Footer: cardFooter(modelName, 0, nil, r.cfg.ContextWindow),
 		}, answer)
-		return errors.Join(err, finishErr)
+		return RunResult{}, errors.Join(err, finishErr)
 	}
 	opts.Env["NECTAR_OUTBOX_DIR"] = outbox
 
@@ -521,7 +570,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	cardID := ""
 	caps := r.platform.Capabilities()
 	stopTyping := func() {}
-	if typing, ok := r.platform.(platform.TypingIndicator); ok {
+	if typing, ok := r.platform.(platform.TypingIndicator); ok && !quiet {
 		if stop := typing.StartTyping(r.ctx, msg.ReplyContext); stop != nil {
 			stopTyping = stop
 		}
@@ -542,7 +591,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			cardID = initialCardID
 		}
 	}
-	if cardID == "" && caps.Card && caps.Streaming {
+	if cardID == "" && caps.Card && caps.Streaming && !quiet {
 		initial := &platform.Card{
 			Status: platform.CardThinking,
 			Title:  cardTitleThinking,
@@ -567,7 +616,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return errors.Join(err, finishErr)
+		return RunResult{}, errors.Join(err, finishErr)
 	}
 	defer cleanupAttachments()
 	lessonPrompt := prompt
@@ -576,6 +625,9 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	}
 	prompt = buildAttachmentPrompt(prompt, attachments)
 	prompt = r.withIdentity(prompt, workdir)
+	if r.relay != nil {
+		prompt = r.withRelayContext(prompt, relay)
+	}
 	opts.Attachments = attachments
 
 	engineSessionID := session.EngineSessionID
@@ -591,7 +643,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return errors.Join(err, finishErr)
+		return RunResult{}, errors.Join(err, finishErr)
 	}
 	var events <-chan engine.Event
 	sessionNotice := ""
@@ -606,7 +658,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 					Body:   answer,
 					Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 				}, answer)
-				return errors.Join(ctxErr, finishErr)
+				return RunResult{}, errors.Join(ctxErr, finishErr)
 			}
 			sessionNotice = "⚠️ Previous session could not be resumed; started a new session."
 			r.logger.Warn("resume failed; starting a new session", "session", engineSessionID, "error", err)
@@ -629,7 +681,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			Body:   answer,
 			Footer: cardFooter(modelName, time.Since(startedAt), nil, r.cfg.ContextWindow),
 		}, answer)
-		return errors.Join(err, finishErr)
+		return RunResult{}, errors.Join(err, finishErr)
 	}
 
 	var stream strings.Builder
@@ -819,7 +871,10 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	elapsed := time.Since(startedAt)
 	failed := len(errTexts) > 0 || (len(toolErrors) > 0 && len(finalMessage) == 0 && stream.Len() == 0 && lastAgentMessage == "")
 	var finishErr error
-	if failed {
+	if silent {
+		// echo=off keeps target output out of the chat. The answer still
+		// travels back to the sender through the hub.
+	} else if failed {
 		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,
 			Title:  cardTitleFailed,
@@ -835,12 +890,14 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		}, answer)
 	}
 	var mediaErr error
-	if mediaErr = r.sendOutboundMedia(msg, outboundMedia); mediaErr != nil {
-		r.logger.Error("send outbound media failed", "chat", msg.ChatID, "error", mediaErr)
-		_ = r.reply(msg, "⚠️ 附件发送失败: "+mediaErr.Error())
+	if !silent {
+		if mediaErr = r.sendOutboundMedia(msg, outboundMedia); mediaErr != nil {
+			r.logger.Error("send outbound media failed", "chat", msg.ChatID, "error", mediaErr)
+			_ = r.reply(msg, "⚠️ 附件发送失败: "+mediaErr.Error())
+		}
 	}
 
-	if len(errTexts) > 0 && ctx.Err() == nil {
+	if len(errTexts) > 0 && ctx.Err() == nil && relay == nil {
 		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), projectRoot)
 	}
 	var runErr error
@@ -849,7 +906,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	} else if failed {
 		runErr = fmt.Errorf("agent tool error: %s", execguard.Truncate(strings.Join(toolErrors, "\n"), 4<<10))
 	}
-	return errors.Join(runErr, finishErr, mediaErr)
+	return RunResult{Answer: answer, Failed: failed || runErr != nil, SessionID: sessionID}, errors.Join(runErr, finishErr, mediaErr)
 }
 
 func initialCardBody(hasAttachments bool) string {
