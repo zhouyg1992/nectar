@@ -143,6 +143,15 @@ func (f *fakePlatform) cardSendCount() int {
 	return len(f.sentCards)
 }
 
+func (f *fakePlatform) lastSentCard() platform.Card {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.sentCards) == 0 {
+		return platform.Card{}
+	}
+	return f.sentCards[len(f.sentCards)-1]
+}
+
 func (f *fakePlatform) mediaCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -185,6 +194,20 @@ type fakeEngine struct {
 	lastOpts   engine.EngineOptions
 	fail       bool
 	resumeErr  error
+}
+
+type reactionPlatform struct {
+	*fakePlatform
+	mu        sync.Mutex
+	reactions []string
+	reaction  error
+}
+
+func (p *reactionPlatform) AddCompletionReaction(_ context.Context, messageID string, _ platform.Reply) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.reactions = append(p.reactions, messageID)
+	return p.reaction
 }
 
 type blockingEngine struct {
@@ -420,6 +443,18 @@ func waitForReplies(t *testing.T, plat *fakePlatform, want int) {
 	t.Fatalf("got %d replies, want %d", plat.replyCount(), want)
 }
 
+func waitForCards(t *testing.T, plat *fakePlatform, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if plat.cardSendCount() >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("got %d cards, want %d", plat.cardSendCount(), want)
+}
+
 func waitForMedia(t *testing.T, plat *fakePlatform, want int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -544,6 +579,7 @@ func TestRouterAboutCommand(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{}
 	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.BotName = "机器人1号"
 	router.cfg.Version = "v0.10.3"
 
 	router.Handle(platform.Message{
@@ -556,11 +592,85 @@ func TestRouterAboutCommand(t *testing.T) {
 			t.Fatalf("about reply = %q, want %q", reply, want)
 		}
 	}
+	if strings.Contains(reply, "机器人1号") {
+		t.Fatalf("about reply leaked the bot name: %q", reply)
+	}
 	if strings.Contains(reply, "Nectar vv0.10.3") {
 		t.Fatalf("about reply contains duplicated version prefix: %q", reply)
 	}
 	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
 		t.Fatalf("/about should not call the engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestRouterAboutCardUsesFixedNectarIdentity(t *testing.T) {
+	plat := &fakePlatform{cards: true}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.BotName = "机器人1号"
+	router.cfg.Version = "v0.10.3"
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/about",
+	})
+	waitForCards(t, plat, 1)
+	card := plat.lastSentCard()
+	if card.Title != "🍯 About Nectar" {
+		t.Fatalf("about card title = %q", card.Title)
+	}
+	if !strings.HasPrefix(card.Body, "Nectar v0.10.3\n") || strings.Contains(card.Body, "机器人1号") {
+		t.Fatalf("about card body = %q", card.Body)
+	}
+}
+
+func TestRouterAddsCompletionReactionOnlyForCompleteCards(t *testing.T) {
+	plat := &reactionPlatform{fakePlatform: &fakePlatform{cards: true}}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+	msg := platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1"}
+
+	if err := router.finish(msg, "card-1", &platform.Card{
+		Status: platform.CardComplete,
+		Title:  cardTitleComplete,
+		Body:   "answer",
+	}, "answer"); err != nil {
+		t.Fatal(err)
+	}
+	plat.mu.Lock()
+	if len(plat.reactions) != 1 || plat.reactions[0] != "card-1" {
+		t.Fatalf("completion reactions = %#v", plat.reactions)
+	}
+	plat.mu.Unlock()
+
+	if err := router.finish(msg, "card-2", &platform.Card{
+		Status: platform.CardError,
+		Title:  cardTitleFailed,
+		Body:   "failed",
+	}, "failed"); err != nil {
+		t.Fatal(err)
+	}
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	if len(plat.reactions) != 1 {
+		t.Fatalf("failure card added a reaction: %#v", plat.reactions)
+	}
+}
+
+func TestRouterCompletionReactionFailureIsBestEffort(t *testing.T) {
+	plat := &reactionPlatform{
+		fakePlatform: &fakePlatform{cards: true},
+		reaction:     errors.New("reaction denied"),
+	}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	if err := router.finish(
+		platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1"},
+		"card-1",
+		&platform.Card{Status: platform.CardComplete, Title: cardTitleComplete, Body: "answer"},
+		"answer",
+	); err != nil {
+		t.Fatalf("reaction failure changed finish result: %v", err)
 	}
 }
 
@@ -577,6 +687,23 @@ func TestDisplayVersion(t *testing.T) {
 	} {
 		if got := displayVersion(tt.in); got != tt.want {
 			t.Fatalf("displayVersion(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestVersionLabel(t *testing.T) {
+	for _, tt := range []struct {
+		in   string
+		want string
+	}{
+		{"", "dev"},
+		{"dev", "dev"},
+		{"v0.10.3", "v0.10.3"},
+		{"0.10.3", "v0.10.3"},
+		{" v0.10.3 ", "v0.10.3"},
+	} {
+		if got := versionLabel(tt.in); got != tt.want {
+			t.Fatalf("versionLabel(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

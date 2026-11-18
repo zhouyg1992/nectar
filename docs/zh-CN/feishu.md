@@ -20,6 +20,7 @@ Nectar 通过飞书官方 SDK 的长连接接收消息，不需要公网回调�
 - `im:message:send_as_bot`：以机器人身份发送消息
 - `im:message`：更新消息/卡片
 - `im:resource`：下载图片和文件
+- 消息表情回复（reaction）相关权限：任务成功后给卡片添加 `DONE` 表情；未开通时只影响表情，不影响任务结果
 
 ## 验证链路
 

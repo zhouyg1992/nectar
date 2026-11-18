@@ -85,6 +85,13 @@ type TypingIndicator interface {
 	StartTyping(ctx context.Context, replyContext any) (stop func())
 }
 
+// CompletionReactor is an optional platform extension for marking a
+// successfully completed reply. Implementations must treat failures as
+// best-effort so a reaction cannot change the outcome of a finished run.
+type CompletionReactor interface {
+	AddCompletionReaction(ctx context.Context, messageID string, reply Reply) error
+}
+
 // PlatformAdapter is implemented once per chat platform.
 type PlatformAdapter interface {
 	Name() string

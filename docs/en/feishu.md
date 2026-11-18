@@ -20,6 +20,7 @@ Use the permissions currently shown in the Open Platform as the source of truth.
 - `im:message:send_as_bot`: send messages as the bot
 - `im:message`: update messages and cards
 - `im:resource`: download images and files
+- Message reaction permission: add a `DONE` reaction to completed cards; without it the reaction is skipped, but the task still completes normally
 
 ## Verify the connection
 
