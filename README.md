@@ -1,8 +1,8 @@
 <h1 align="center">🍯 Nectar</h1>
 
 <p align="center">
-  <strong>Your coding agent, one message away.</strong><br>
-  Use Codex, Claude Code, Cursor Agent, OpenCode, or Pi from Feishu / Lark, DingTalk, or Telegram.
+  <strong>Run multiple coding agents in the same repository — without stepping on each other.</strong><br>
+  Use Codex, Claude Code, Cursor Agent, OpenCode, or Pi from Feishu / Lark, DingTalk, or Telegram. Per-session worktrees, reviewable memory, and steering for running tasks.
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar sends chat messages to a coding agent on your machine and streams progress and results back as live messages or cards. Sessions stay continuous, progress is visible in real time, and tasks can run on a schedule. The installer detects installed engines, writes the config, and starts the background service.
+Nectar routes chat messages to coding agents on your machine and streams progress and results back. It does more than relay messages: it manages workspaces, memory, and running tasks, so several agents can work at once without colliding.
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="Feishu, DingTalk, and Telegram messages flow through Nectar to Codex, OpenCode, Cursor Agent, Claude Code, or Pi" width="860">
@@ -36,14 +36,13 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 
 ## Why Nectar
 
-- **Chat is the interface**: talk to your agent from Feishu / Lark, DingTalk, or Telegram, in direct messages or group chats.
-- **Sessions stay alive**: session mappings persist in `~/.nectar/sessions.json`; `/list`, `/switch`, and `/rename` keep multiple sessions per chat, and the service resumes the same agent session when it is still valid after a restart.
-- **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
-- **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
-- **Memory travels with you**: bot-wide, project, or chat-scoped local memory with review, retrieval, and an agent CLI.
-- **Optional local console**: a disabled-by-default dashboard for bot status, batch memory review/reject/restore, and scheduled tasks; configuration stays read-only.
-- **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
-- **Run several bots at once**: give Codex, Claude, and ops bots separate identities, workspaces, sessions, and memory in one process, with optional per-session git worktrees.
+- **Parallel without collisions**: with `workspace_mode = "worktree"`, each session gets its own git worktree and branch; runs in the same workspace are serialized, different chats can run concurrently, and one process can host multiple isolated bots.
+- **Reviewable memory**: failed runs create `pending` candidates that are injected only after approval; supports `bot` / `project` / `chat` scopes, dashboard bulk review, `nectar memory`, and the Agent Skill.
+- **Steer a running task**: `/steer`, `/append`, `/ps`, and `/btw` add context to a running task; ordinary messages still queue; supported on Codex, Claude Code, Pi, and OpenCode.
+- **Sessions that persist**: sessions live in the local data directory; `/list`, `/switch`, `/rename`, and `/archive` manage multiple sessions, and the service resumes a valid session after restart.
+- **Chat is the interface**: Feishu / Lark, DingTalk, and Telegram, including direct messages, group chats, and Feishu thread replies.
+- **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated on the live card.
+- **Tasks, files, and install**: cron, fixed intervals, and one-shot runs; inbound images and files go to the agent, files in `.nectar/outbox/` are sent back, and the installer detects engines and starts the service.
 
 ## Quick start
 
