@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -35,12 +36,13 @@ type relayRunInfo struct {
 	// target is true for the peer's run and false for the origin bot's reply
 	// turn. Only target runs are quiet, because the origin turn is the source
 	// bot's own visible answer.
-	target     bool
-	echo       string
-	rootID     string
-	envelopeID string
-	gen        int
-	from       string
+	target         bool
+	echo           string
+	rootID         string
+	envelopeID     string
+	gen            int
+	from           string
+	suppressResult bool
 }
 
 // SetRelay attaches the process-wide relay hub. It must be called before the
@@ -78,7 +80,11 @@ func (r *Router) SendRelayMirror(ctx context.Context, envelope RelayEnvelope, ta
 	if targetName == "" {
 		targetName = envelope.To
 	}
-	body := fmt.Sprintf("%s → %s\n%s\nWaiting for the answer.", name, targetName, mirrorSummary(envelope.Body, 80))
+	waiting := "Waiting for the answer."
+	if envelope.Kind == RelayKindHandoff {
+		waiting = "Handed off; no answer expected."
+	}
+	body := fmt.Sprintf("%s → %s\n%s\n%s", name, targetName, mirrorSummary(envelope.Body, 80), waiting)
 	reply := platform.Reply{
 		ChatID:   envelope.ChatID,
 		ChatType: envelope.ChatType,
@@ -88,8 +94,15 @@ func (r *Router) SendRelayMirror(ctx context.Context, envelope RelayEnvelope, ta
 		// The marker is zero-width, so it stays invisible in the card body. It
 		// is the only inbound fallback on platforms without a sender-type flag
 		// (DingTalk); Feishu and Telegram drop mirrors by sender type anyway.
+		// Asks start in a non-final state so the status card can be updated in
+		// place; DingTalk refuses to edit finalized cards. A hand-off has no
+		// follow-up, so it is final immediately.
+		status := platform.CardInfo
+		if envelope.Kind == RelayKindAsk {
+			status = platform.CardThinking
+		}
 		reply.Card = &platform.Card{
-			Status: platform.CardInfo,
+			Status: status,
 			Title:  relayMirrorTitle,
 			Body:   body + relayMirrorMarker(),
 		}
@@ -152,12 +165,13 @@ func (r *Router) ExecuteRelay(ctx context.Context, envelope RelayEnvelope) (RunR
 		echo = RelayEchoOff
 	}
 	info := &relayRunInfo{
-		target:     !replyTurn,
-		echo:       echo,
-		rootID:     envelope.RootID,
-		envelopeID: envelope.ID,
-		gen:        envelope.Gen,
-		from:       envelope.From,
+		target:         !replyTurn,
+		echo:           echo,
+		rootID:         envelope.RootID,
+		envelopeID:     envelope.ID,
+		gen:            envelope.Gen,
+		from:           envelope.From,
+		suppressResult: echo == RelayEchoSummary && envelope.Kind == RelayKindAsk && !replyTurn && strings.TrimSpace(envelope.MirrorMessageID) != "",
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -359,5 +373,72 @@ func relayResultCard(relay *relayRunInfo, answer string, failed bool, modelName 
 		Title:  title,
 		Body:   answer,
 		Footer: footer,
+	}
+}
+
+// UpdateRelayCard replaces the hand-off mirror card in place.
+func (r *Router) UpdateRelayCard(ctx context.Context, envelope RelayEnvelope, card *platform.Card) error {
+	if strings.TrimSpace(envelope.MirrorMessageID) == "" {
+		return errors.New("relay mirror message is missing")
+	}
+	return r.platform.Update(ctx, envelope.MirrorMessageID, platform.Reply{
+		ChatID:   envelope.ChatID,
+		ChatType: envelope.ChatType,
+		ThreadID: envelope.ThreadID,
+		Card:     card,
+	})
+}
+
+// SendRelayResultCard posts a result card when updating the mirror failed.
+func (r *Router) SendRelayResultCard(ctx context.Context, envelope RelayEnvelope, card *platform.Card) error {
+	_, err := r.platform.Send(ctx, platform.Reply{
+		ChatID:   envelope.ChatID,
+		ChatType: envelope.ChatType,
+		ThreadID: envelope.ThreadID,
+		Card:     card,
+	})
+	return err
+}
+
+// relayStatusResultCard is the final state of the hand-off card.
+func relayStatusResultCard(envelope RelayEnvelope, body string, failed bool) *platform.Card {
+	title := "🔁 Relay result"
+	status := platform.CardComplete
+	if failed {
+		title = "⚠️ Relay result"
+		status = platform.CardError
+		if strings.TrimSpace(body) == "" {
+			body = "The relay target did not return an answer."
+		}
+	}
+	return &platform.Card{
+		Status: status,
+		Title:  title,
+		Body:   body,
+		Footer: "peer: " + envelope.To,
+	}
+}
+
+func relayStatusCanceledCard(envelope RelayEnvelope) *platform.Card {
+	return &platform.Card{
+		Status: platform.CardInfo,
+		Title:  "🛑 Relay canceled",
+		Body:   "This relay root was canceled before it finished.",
+		Footer: "peer: " + envelope.To,
+	}
+}
+
+func relayStatusHandoffCompleteCard(envelope RelayEnvelope) *platform.Card {
+	status := platform.CardComplete
+	body := "The target finished; its output is in its own cards."
+	if envelope.State == RelayStateFailed {
+		status = platform.CardError
+		body = "The target run failed; see its cards above."
+	}
+	return &platform.Card{
+		Status: status,
+		Title:  "🔁 Relay complete",
+		Body:   body,
+		Footer: "peer: " + envelope.To,
 	}
 }

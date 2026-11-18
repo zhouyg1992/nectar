@@ -174,8 +174,14 @@ func TestRelayAskDeliversAnswerToOriginSession(t *testing.T) {
 	if got := rig.coderPlat.lastReply(); got != "answer" {
 		t.Fatalf("reply turn answer = %q", got)
 	}
-	// The target's echo=summary answer is visible exactly once.
-	waitForReplies(t, rig.reviewPlat, 1)
+	// summary mode updates the hand-off card instead of posting a second one.
+	if replies := rig.reviewPlat.replyCount(); replies != 0 {
+		t.Fatalf("target posted %d messages in summary mode", replies)
+	}
+	updates := fakeUpdates(rig.coderPlat)
+	if len(updates) == 0 || updates[len(updates)-1].Title != "🔁 Relay result" || updates[len(updates)-1].Body != "answer" {
+		t.Fatalf("mirror card updates = %#v", updates)
+	}
 	prompt, _ := rig.reviewEng.lastRequest()
 	if !strings.Contains(prompt, "<relay-request") || !strings.Contains(prompt, "review this diff") {
 		t.Fatalf("target prompt missing relay fence: %q", prompt)
@@ -869,8 +875,10 @@ func TestRelayEndToEndThroughLocalAPI(t *testing.T) {
 		starts, resumes, _, _ := poster.counts()
 		return starts == 1 && resumes == 1
 	})
-	waitForReplies(t, reviewPlat, 1)
-	waitForReplies(t, coderPlat, 2)
+	if replies := reviewPlat.replyCount(); replies != 0 {
+		t.Fatalf("target posted %d messages in summary mode", replies)
+	}
+	waitForReplies(t, coderPlat, 3)
 
 	starts, resumes, token, postErr := poster.counts()
 	if postErr != nil {
@@ -905,6 +913,10 @@ func TestRelayEndToEndThroughLocalAPI(t *testing.T) {
 		if strings.Contains(reply, "nectar-relay") {
 			t.Fatalf("reply leaks the mirror marker: %q", reply)
 		}
+	}
+	updates := fakeUpdates(coderPlat)
+	if len(updates) == 0 || updates[len(updates)-1].Title != "🔁 Relay result" || updates[len(updates)-1].Body != "answer" {
+		t.Fatalf("mirror card updates = %#v", updates)
 	}
 }
 
@@ -1280,26 +1292,93 @@ func TestRelayDirectChatAllowedWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestRelayAnswerSurvivesEchoFailure(t *testing.T) {
+func TestRelayRunKeepsAnswerWhenEchoFails(t *testing.T) {
 	rig := newRelayRig(t, RelayHubOptions{})
-	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "start"})
-	waitForReplies(t, rig.coderPlat, 1)
-	originID := rig.coderRouter.sessions.ActiveID(relayKey("coder"))
 	rig.reviewPlat.cards = true
 	rig.reviewPlat.sendErr = errors.New("chat not found")
-	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: originID, Channel: "feishu", ChatID: "c1", ChatType: "group"})
+	envelope := RelayEnvelope{
+		ID: "env_echo_fail", RootID: "root_echo_fail", Kind: RelayKindAsk,
+		Channel: "feishu", ChatID: "c1", ChatType: "group", From: "coder", To: "reviewer", Gen: 1,
+		Body: "review it",
+	}
+	result, err := rig.reviewRouter.ExecuteRelay(context.Background(), envelope)
+	if err == nil {
+		t.Fatal("expected the echo failure to surface as an error")
+	}
+	if result.Failed || result.Answer != "answer" {
+		t.Fatalf("result = %#v, want a non-failed answer", result)
+	}
+}
+
+func fakeSentCards(plat *fakePlatform) []platform.Card {
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	return append([]platform.Card(nil), plat.sentCards...)
+}
+
+func fakeUpdates(plat *fakePlatform) []platform.Card {
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	return append([]platform.Card(nil), plat.updates...)
+}
+
+func TestRelaySummaryUpdatesCardMirrorInPlace(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.coderPlat.cards = true
+	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "start"})
+	originID := rig.coderRouter.sessions.ActiveID(relayKey("coder"))
+	token := rig.hub.MintToken(RelayTokenRequest{
+		BotID: "coder", SessionID: originID, RunID: "run-card", Channel: "feishu", ChatID: "c1", ChatType: "group",
+	})
 	envelope, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "review it"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	waitRelay(t, "answer despite echo failure", func() bool {
+	waitRelay(t, "card update", func() bool {
 		if relayEnvelopeState(rig.hub, envelope.ID) != RelayStateDone {
 			return false
 		}
 		_, resumes, _ := rig.coderEng.counts()
 		return resumes == 1
 	})
-	if got := rig.coderPlat.lastReply(); got != "answer" {
-		t.Fatalf("origin answer = %q", got)
+	mirrors := 0
+	for _, card := range fakeSentCards(rig.coderPlat) {
+		if card.Title == relayMirrorTitle {
+			mirrors++
+			if card.Status != platform.CardThinking {
+				t.Fatalf("mirror status = %s, want thinking", card.Status)
+			}
+		}
+	}
+	if mirrors != 1 {
+		t.Fatalf("mirror cards = %d", mirrors)
+	}
+	found := false
+	for _, card := range fakeUpdates(rig.coderPlat) {
+		if card.Title == "🔁 Relay result" && card.Body == "answer" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("mirror updates = %#v", fakeUpdates(rig.coderPlat))
+	}
+	if replies := rig.reviewPlat.replyCount(); replies != 0 {
+		t.Fatalf("target posted %d messages in summary mode", replies)
+	}
+}
+
+func TestRelayEchoOffSendsNoCards(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{Echo: RelayEchoOff})
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1", ChatType: "group"})
+	envelope, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "review it", NoReply: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitRelay(t, "silent handoff", func() bool { return relayEnvelopeState(rig.hub, envelope.ID) == RelayStateDone })
+	if replies := rig.coderPlat.replyCount(); replies != 0 {
+		t.Fatalf("echo=off sent %d messages on the source side", replies)
+	}
+	if cards, _ := fakeCards(rig.coderPlat); len(cards) != 0 {
+		t.Fatalf("echo=off sent %d cards on the source side", len(cards))
 	}
 }

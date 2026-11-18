@@ -879,7 +879,10 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		// echo=off keeps target output out of the chat. The answer still
 		// travels back to the sender through the hub.
 	} else if relay != nil && relay.target && relay.echo == RelayEchoSummary {
-		finishErr = r.finishRelayResult(msg, relay, answer, failed, modelName, elapsed, usage, contextWindow)
+		if !relay.suppressResult {
+			finishErr = r.finishRelayResult(msg, relay, answer, failed, modelName, elapsed, usage, contextWindow)
+		}
+		// Otherwise the hub updates the hand-off card in place.
 	} else if failed {
 		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,

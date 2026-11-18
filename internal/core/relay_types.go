@@ -98,6 +98,7 @@ type RelayEnvelope struct {
 	Gen             int       `json:"gen"`
 	Kind            string    `json:"kind"`
 	IdempotencyKey  string    `json:"idempotency_key,omitempty"`
+	MirrorMessageID string    `json:"mirror_message_id,omitempty"`
 	Body            string    `json:"body"`
 	State           string    `json:"state"`
 	Error           string    `json:"error,omitempty"`

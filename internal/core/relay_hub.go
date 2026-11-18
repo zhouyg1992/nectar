@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zhouyg1992/nectar/internal/platform"
 )
 
 const relayMaxBodyBytes = 32 << 10
@@ -495,11 +497,16 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 
 	h.persist()
 
-	if !strings.EqualFold(strings.TrimSpace(envelope.ChatType), "p2p") {
+	if !strings.EqualFold(strings.TrimSpace(envelope.ChatType), "p2p") && h.opts.Echo != RelayEchoOff {
 		sender := h.botByName(envelope.From)
 		if sender != nil && sender.router != nil {
-			if _, err := sender.router.SendRelayMirror(h.context(), *envelope, target.name); err != nil {
+			if id, err := sender.router.SendRelayMirror(h.context(), *envelope, target.name); err != nil {
 				h.logger.Warn("relay mirror failed", "envelope", envelope.ID, "error", err)
+			} else if id != "" {
+				h.mu.Lock()
+				envelope.MirrorMessageID = id
+				h.mu.Unlock()
+				h.persist()
 			}
 		}
 	}
@@ -616,8 +623,10 @@ func (h *RelayHub) deliver(envelope *RelayEnvelope) {
 	h.persist()
 
 	if canceled || envelope.Kind != RelayKindAsk {
+		h.updateRelayStatusCard(envelope, "", !answered, canceled)
 		return
 	}
+	h.updateRelayStatusCard(envelope, result.Answer, !answered, false)
 	if !answered {
 		h.sendReply(envelope, "⚠️ Relay to "+envelope.To+" failed: "+execguardSafeError(err))
 		return
@@ -965,4 +974,35 @@ func execguardSafeError(err error) string {
 		return text[:limit] + "…"
 	}
 	return text
+}
+
+// updateRelayStatusCard turns the hand-off mirror into the final status card.
+// The source bot owns that message, so it performs the update; if the platform
+// cannot edit it, the card is sent again instead.
+func (h *RelayHub) updateRelayStatusCard(envelope *RelayEnvelope, answer string, failed, canceled bool) {
+	if envelope.Kind != RelayKindAsk || envelope.MirrorMessageID == "" || h.opts.Echo == RelayEchoOff {
+		return
+	}
+	var card *platform.Card
+	switch {
+	case canceled:
+		card = relayStatusCanceledCard(*envelope)
+	case h.opts.Echo == RelayEchoSummary:
+		card = relayStatusResultCard(*envelope, answer, failed)
+	default:
+		// full mode keeps the target's own cards; close out the hand-off card
+		// so it does not stay in a running state.
+		card = relayStatusHandoffCompleteCard(*envelope)
+	}
+	sender := h.botByName(envelope.From)
+	if sender == nil || sender.router == nil {
+		return
+	}
+	ctx := h.context()
+	if err := sender.router.UpdateRelayCard(ctx, *envelope, card); err != nil {
+		h.logger.Warn("update relay status card failed; sending a new card", "envelope", envelope.ID, "error", err)
+		if sendErr := sender.router.SendRelayResultCard(ctx, *envelope, card); sendErr != nil {
+			h.logger.Warn("send relay result card failed", "envelope", envelope.ID, "error", sendErr)
+		}
+	}
 }
