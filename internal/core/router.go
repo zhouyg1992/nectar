@@ -324,7 +324,7 @@ func (r *Router) Handle(msg platform.Message) {
 		}
 		r.relay.NoteChat(msg.ChatID, r.EffectiveBotID())
 		if r.relay.FirstMentionOnly() && r.addressedToAnotherBot(msg) {
-			r.logger.Info("ignored message addressed to another relay bot", "chat", msg.ChatID, "bot", r.EffectiveBotID())
+			r.logger.Info("ignored message addressed to another relay bot", "chat", msg.ChatID)
 			return
 		}
 	}
