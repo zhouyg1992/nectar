@@ -147,6 +147,7 @@ max_generation = 4
 max_envelopes_per_root = 12
 max_runs_per_root = 8
 root_ttl = "30m"
+sender_grace = "60s"              # 发送方超时未结束则取消以释放 workspace 锁
 session = "per_root"
 ```
 

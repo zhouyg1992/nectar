@@ -30,6 +30,7 @@ type RelayHubOptions struct {
 	RootTTL             time.Duration
 	FirstMentionOnly    bool
 	AllowDirect         bool
+	SenderGrace         time.Duration
 	Logger              *slog.Logger
 }
 
@@ -73,6 +74,9 @@ func NewRelayHub(opts RelayHubOptions) (*RelayHub, error) {
 	}
 	if opts.RootTTL <= 0 {
 		opts.RootTTL = 30 * time.Minute
+	}
+	if opts.SenderGrace <= 0 {
+		opts.SenderGrace = 60 * time.Second
 	}
 	logger := opts.Logger
 	if logger == nil {
@@ -478,6 +482,7 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		RootID:          root.ID,
 		ParentID:        binding.RootID,
 		OriginSessionID: root.OriginSessionID,
+		SenderSessionID: binding.SessionID,
 		Channel:         root.Channel,
 		ChatID:          root.ChatID,
 		ChatType:        root.ChatType,
@@ -599,6 +604,12 @@ func (h *RelayHub) deliver(envelope *RelayEnvelope) {
 	h.runs[envelope.ID] = cancel
 	h.mu.Unlock()
 	h.persist()
+
+	if envelope.Kind != RelayKindReply {
+		if sender := h.botByName(envelope.From); sender != nil && sender.router != nil {
+			h.waitForSenderTurn(ctx, sender.router, envelope.SenderSessionID, envelope.ID)
+		}
+	}
 
 	result, err := target.router.ExecuteRelay(ctx, *envelope)
 	// A platform echo (progress card, result card) may fail without meaning the
@@ -1003,6 +1014,34 @@ func (h *RelayHub) updateRelayStatusCard(envelope *RelayEnvelope, answer string,
 		h.logger.Warn("update relay status card failed; sending a new card", "envelope", envelope.ID, "error", err)
 		if sendErr := sender.router.SendRelayResultCard(ctx, *envelope, card); sendErr != nil {
 			h.logger.Warn("send relay result card failed", "envelope", envelope.ID, "error", sendErr)
+		}
+	}
+}
+
+// waitForSenderTurn prevents a workspace-lock deadlock: the turn that sent the
+// relay holds its workspace lock until it ends, and the target needs the same
+// lock. If the sender does not end within SenderGrace, it is canceled so the
+// relay can proceed; a reply then wakes the origin session as a new turn.
+func (h *RelayHub) waitForSenderTurn(ctx context.Context, router *Router, sessionID, envelopeID string) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+	deadline := time.Now().Add(h.opts.SenderGrace)
+	for {
+		if !router.RunActiveForSession(sessionID) {
+			return
+		}
+		if time.Now().After(deadline) {
+			canceled := router.CancelSessionRuns(sessionID)
+			h.logger.Warn("relay sender held its turn past the grace period; canceled it to free the workspace",
+				"envelope", envelopeID, "session", sessionID, "canceled", canceled)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
 		}
 	}
 }

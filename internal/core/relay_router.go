@@ -442,3 +442,31 @@ func relayStatusHandoffCompleteCard(envelope RelayEnvelope) *platform.Card {
 		Footer: "peer: " + envelope.To,
 	}
 }
+
+// RunActiveForSession reports whether a turn for the session is still running.
+func (r *Router) RunActiveForSession(sessionID string) bool {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+	for _, run := range r.runs {
+		if run.sessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// CancelSessionRuns cancels every running turn for the session.
+func (r *Router) CancelSessionRuns(sessionID string) int {
+	r.runMu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(r.runs))
+	for _, run := range r.runs {
+		if run.sessionID == sessionID {
+			cancels = append(cancels, run.cancel)
+		}
+	}
+	r.runMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	return len(cancels)
+}

@@ -211,6 +211,7 @@ type RelayConfig struct {
 	Echo                string `toml:"echo"`
 	FirstMentionOnly    *bool  `toml:"first_mention_only"`
 	AllowDirect         *bool  `toml:"allow_direct"`
+	SenderGrace         string `toml:"sender_grace"`
 	MaxGeneration       int    `toml:"max_generation"`
 	MaxEnvelopesPerRoot int    `toml:"max_envelopes_per_root"`
 	MaxRunsPerRoot      int    `toml:"max_runs_per_root"`
@@ -288,6 +289,7 @@ func defaults() Config {
 			MaxRunsPerRoot:      8,
 			RootTTL:             "30m",
 			Session:             "per_root",
+			SenderGrace:         "60s",
 		},
 	}
 }
@@ -379,6 +381,23 @@ func (c Config) RelayEnabled() bool {
 // configured bots is handled only by the first bot mentioned. Defaults to true.
 func (c Config) RelayFirstMentionOnly() bool {
 	return c.Relay.FirstMentionOnly == nil || *c.Relay.FirstMentionOnly
+}
+
+// RelaySenderGrace bounds how long a relay target waits for the turn that sent
+// the ask to release the shared workspace lock before canceling that turn.
+func (c Config) RelaySenderGrace() (time.Duration, error) {
+	value := strings.TrimSpace(c.Relay.SenderGrace)
+	if value == "" {
+		return 60 * time.Second, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid relay.sender_grace %q: %w", value, err)
+	}
+	if d <= 0 {
+		return 0, errors.New("relay.sender_grace must be positive")
+	}
+	return d, nil
 }
 
 // RelayAllowDirect reports whether relay may start from a direct chat. It is
@@ -607,6 +626,9 @@ func normalize(cfg *Config) error {
 		cfg.Relay.RootTTL = "30m"
 	}
 	if _, err := cfg.RelayRootTTL(); err != nil {
+		return err
+	}
+	if _, err := cfg.RelaySenderGrace(); err != nil {
 		return err
 	}
 	cfg.Relay.Session = strings.ToLower(strings.TrimSpace(cfg.Relay.Session))

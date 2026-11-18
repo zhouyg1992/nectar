@@ -1404,3 +1404,97 @@ func TestRelayReplyTurnHasNoToken(t *testing.T) {
 		t.Fatalf("reply turn received a relay token: %q", token)
 	}
 }
+
+// ctxBlockingEngine keeps a turn open until its context is canceled.
+type ctxBlockingEngine struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (e *ctxBlockingEngine) Name() string { return "ctx-blocking" }
+
+func (e *ctxBlockingEngine) Start(ctx context.Context, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	return e.events(ctx), nil
+}
+
+func (e *ctxBlockingEngine) Resume(ctx context.Context, _, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	return e.events(ctx), nil
+}
+
+func (e *ctxBlockingEngine) Cancel(context.Context, string) error { return nil }
+
+func (e *ctxBlockingEngine) events(ctx context.Context) <-chan engine.Event {
+	ch := make(chan engine.Event, 1)
+	ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: "ctx-blocking"}
+	e.once.Do(func() { close(e.started) })
+	go func() {
+		<-ctx.Done()
+		close(ch)
+	}()
+	return ch
+}
+
+func TestRouterCancelSessionRuns(t *testing.T) {
+	eng := &ctxBlockingEngine{started: make(chan struct{})}
+	router, _ := newTestRouter(t, eng, &fakePlatform{})
+	router.Handle(platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "go"})
+	select {
+	case <-eng.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("turn did not start")
+	}
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}.normalized()
+	sessionID := router.sessions.ActiveID(key)
+	if sessionID == "" {
+		t.Fatal("no active session")
+	}
+	if !router.RunActiveForSession(sessionID) {
+		t.Fatal("run is not tracked")
+	}
+	if canceled := router.CancelSessionRuns(sessionID); canceled != 1 {
+		t.Fatalf("canceled = %d, want 1", canceled)
+	}
+	waitRelay(t, "sender run ends", func() bool { return !router.RunActiveForSession(sessionID) })
+}
+
+func TestRelayCancelsSenderAfterGrace(t *testing.T) {
+	hub, err := NewRelayHub(RelayHubOptions{
+		DataDir: t.TempDir(), Echo: RelayEchoSummary, SenderGrace: 150 * time.Millisecond,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub.opts.FirstMentionOnly = true
+	defer hub.Close()
+	senderEng := &ctxBlockingEngine{started: make(chan struct{})}
+	reviewEng := &fakeEngine{}
+	coderPlat := &fakePlatform{}
+	reviewPlat := &fakePlatform{}
+	coderRouter, _ := newRelayRouter(t, "coder", hub, senderEng, coderPlat)
+	reviewRouter, _ := newRelayRouter(t, "reviewer", hub, reviewEng, reviewPlat)
+	hub.Register(RelayPeer{ID: "coder", Name: "Coder"}, coderRouter)
+	hub.Register(RelayPeer{ID: "reviewer", Name: "Reviewer"}, reviewRouter)
+	hub.NoteChat("c1", "coder")
+	hub.NoteChat("c1", "reviewer")
+
+	coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "go"})
+	select {
+	case <-senderEng.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("sender turn did not start")
+	}
+	originID := coderRouter.sessions.ActiveID(relayKey("coder"))
+	token := hub.MintToken(RelayTokenRequest{
+		BotID: "coder", SessionID: originID, RunID: "run-grace", Channel: "feishu", ChatID: "c1", ChatType: "group",
+	})
+	envelope, err := hub.Send(hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "review it", NoReply: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitRelay(t, "target runs after grace", func() bool {
+		starts, _, _ := reviewEng.counts()
+		return starts == 1 && relayEnvelopeState(hub, envelope.ID) == RelayStateDone
+	})
+	waitRelay(t, "sender canceled", func() bool { return !coderRouter.RunActiveForSession(originID) })
+}

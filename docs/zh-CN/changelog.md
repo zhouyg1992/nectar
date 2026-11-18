@@ -10,6 +10,7 @@
 - relay 运行携带发起人的用户 ID，目标侧的记忆写入与管理员操作按真实发起人校验
 - 单聊默认拒绝接力并返回 `ERR_DIRECT_CHAT`；`[relay] allow_direct` 可开启，开启后目标输出静默且不显示移交卡
 - 目标的群内输出失败（例如 Bot 不在该群）时，最终回答仍会回传到 origin session，不再把整次接力判为失败
+- 目标在等共享 workspace 锁、而发送方回合迟迟不结束时，超过 `relay.sender_grace`（默认 60s）会取消发送方回合以释放锁，结果仍作为新回合回到 origin
 - origin 的 reply 回合不再签发 relay token，避免在持有 workspace 锁时再发起接力导致与目标互等
 - `summary` 模式下移交卡原地更新为 `🔁 Relay result`，不再另发一条结果消息；`full` 模式结束后把移交卡更新为完成提示；`echo = "off"` 不发移交卡
 - 提示围栏使用随机标记，正文无法提前闭合；镜像标题只按前缀识别；`FromBot` 仅在 relay 开启时丢弃；被取消的信封保持 canceled 状态

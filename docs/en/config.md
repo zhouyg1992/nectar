@@ -147,6 +147,7 @@ max_generation = 4
 max_envelopes_per_root = 12
 max_runs_per_root = 8
 root_ttl = "30m"
+sender_grace = "60s"              # cancel a sender turn that blocks the workspace lock
 session = "per_root"
 ```
 

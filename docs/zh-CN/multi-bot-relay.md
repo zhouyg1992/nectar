@@ -73,7 +73,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 - **总线为真，IM 为镜。** 触发只走本机 relay 总线，不依赖「Bot 在群里 @ 另一个 Bot 能唤醒它」。群里只发给人看的移交卡；ask 结束时这张卡会原地更新为结果卡，目标不会另发一条（`echo` 控制可见度），它们都不参与触发。
 - **回复回到 origin session。** 目标 Bot 的答案回到发起 ask 的那个会话，继续 resume 原引擎会话，保留上下文、工作区和未提交改动。
 - **目标 Bot 使用独立会话。** 每个 root 在目标 Bot 侧对应一个 detached 会话（`relay:<root>`），不会顶掉人类正在使用的活跃会话；可以在 `/list` 里看到，也可以用 `/switch` 接管。
-- **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。reply 回合**不签发** relay token：origin 回合持有 workspace 锁，若在其中再发起接力，目标会等这把锁，形成互等；需要多跳时由目标侧继续，origin 回合先结束。
+- **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。reply 回合**不签发** relay token：origin 回合持有 workspace 锁，若在其中再发起接力，目标会等这把锁，形成互等；需要多跳时由目标侧继续，origin 回合先结束。作为兜底，发送方回合在 `sender_grace`（默认 60s）后仍未结束、且目标在等锁时会被取消，锁随之释放，目标继续执行，结果仍会作为新回合回到 origin。
 - **只点名一个目标。** 没有广播；一问一答不会无限循环（reply 不再自动回投）。
 - **默认只在群聊接力。** 单聊里目标 Bot 不在会话中，执行结果无处展示，因此默认拒绝（`ERR_DIRECT_CHAT`）；需要私有编排时可设 `allow_direct = true`，此时目标输出强制静默、跳过交接卡，只把最终回答回传给发起方。
 - **多 @ 只由第一个响应。** 平台能提供被 @ 者身份时（目前是飞书），群里同时 @ 多个 Nectar Bot 只由第一个被 @ 的 Bot 处理，避免同一条人类指令被多个 Bot 重复执行、互相 review。
@@ -93,6 +93,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | `max_envelopes_per_root` | `12` | 每个 root 最多多少条信封（含回复）。 |
 | `max_runs_per_root` | `8` | 每个 root 最多触发多少次引擎运行（含 origin 回投轮）。 |
 | `root_ttl` | `"30m"` | root 存活时间，超时后不再接受新的接力。 |
+| `sender_grace` | `"60s"` | 发送方回合发起 relay 后超过该时长仍未结束、且目标在等共享 workspace 锁时，取消发送方回合以释放锁，让 relay 继续。 |
 | `session` | `"per_root"` | 目标会话模型；当前只支持 `per_root`。 |
 
 ### Bot 字段

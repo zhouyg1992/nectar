@@ -73,7 +73,7 @@ user → bot A → engine A ──relay send (local API + run token)
 - **The bus is the trigger; chat is a mirror.** Hand-offs go through the local relay bus, never through "one bot @-mentions another in the group". The group only gets a human-visible hand-off card; when an ask finishes, that card is updated in place with the result instead of a second target message (`echo` controls visibility). None of these cards can trigger anything.
 - **Replies return to the origin session.** The target's answer resumes the sending bot's original session, keeping its context, workspace and uncommitted changes.
 - **The target runs in its own session.** Each root maps to a detached session on the target (`relay:<root>`), so the human's active session is never hijacked. It shows up in `/list` and can be taken over with `/switch`.
-- **Async rule.** After `relay send`, the sender must end its turn: no polling, sleeping or waiting. The reply wakes the origin session as a new turn; a turn that never ends would queue the reply behind itself and deadlock the session. Reply turns do **not** receive a relay token: the origin turn holds the workspace lock, so a nested ask from it would wait on a target waiting for the same lock. End the turn; further hops start from the target side.
+- **Async rule.** After `relay send`, the sender must end its turn: no polling, sleeping or waiting. The reply wakes the origin session as a new turn; a turn that never ends would queue the reply behind itself and deadlock the session. Reply turns do **not** receive a relay token: the origin turn holds the workspace lock, so a nested ask from it would wait on a target waiting for the same lock. End the turn; further hops start from the target side. As a backstop, if the sender turn is still running after `sender_grace` (default 60s) while the target waits for the lock, Nectar cancels the sender turn, the lock is released, the target continues, and its result still arrives as a new turn in the origin session.
 - **One target per message.** No broadcast, and no infinite ping-pong: replies never trigger another automatic reply.
 - **Group chats only by default.** In a direct chat the target bot is not a participant, so its output could never be shown; relay refuses it with `ERR_DIRECT_CHAT`. Set `allow_direct = true` for private orchestration: target output is forced silent, the mirror is skipped, and only the final answer returns to the sender.
 - **First mention wins.** When the platform reports who was mentioned (Feishu today), a group message that mentions several Nectar bots is handled only by the first one, so one human instruction is not duplicated across bots that end up reviewing each other.
@@ -93,6 +93,7 @@ user → bot A → engine A ──relay send (local API + run token)
 | `max_envelopes_per_root` | `12` | Maximum envelopes per root, replies included. |
 | `max_runs_per_root` | `8` | Maximum engine runs per root, including the origin reply turn. |
 | `root_ttl` | `"30m"` | Root lifetime; expired roots accept no new relays. |
+| `sender_grace` | `"60s"` | If the turn that sent the relay is still running after this long while the target waits for the shared workspace lock, Nectar cancels the sender turn to release the lock and let the relay continue. |
 | `session` | `"per_root"` | Target session model; only `per_root` is supported. |
 
 ### Bot fields

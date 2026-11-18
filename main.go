@@ -136,6 +136,10 @@ func newRelayHub(cfg config.Config, logger *slog.Logger) (*core.RelayHub, error)
 	if err != nil {
 		return nil, err
 	}
+	senderGrace, err := cfg.RelaySenderGrace()
+	if err != nil {
+		return nil, err
+	}
 	hub, err := core.NewRelayHub(core.RelayHubOptions{
 		DataDir:             cfg.Storage.DataDir,
 		Echo:                cfg.Relay.Echo,
@@ -145,6 +149,7 @@ func newRelayHub(cfg config.Config, logger *slog.Logger) (*core.RelayHub, error)
 		RootTTL:             ttl,
 		FirstMentionOnly:    cfg.RelayFirstMentionOnly(),
 		AllowDirect:         cfg.RelayAllowDirect(),
+		SenderGrace:         senderGrace,
 		Logger:              logger,
 	})
 	if err != nil {

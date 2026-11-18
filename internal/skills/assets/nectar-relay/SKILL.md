@@ -60,7 +60,9 @@ If the user asks "写完让 X review，然后你汇总", say that you handed it 
 will summarize when the review arrives, then stop. Holding the turn open
 deadlocks the session queue: the reply is queued behind your current turn.
 A reply turn (NECTAR_RELAY_TOKEN absent) cannot relay again; end it with the
-result instead of starting another hop.
+result instead of starting another hop. If a turn that sent a relay keeps
+running while the target waits for the shared workspace lock, Nectar cancels
+that turn after `sender_grace` (default 60s), so always end the turn promptly.
 
 ## Writing the brief
 

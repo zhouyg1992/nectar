@@ -89,6 +89,7 @@ type RelayEnvelope struct {
 	ParentID        string    `json:"parent_id,omitempty"`
 	SessionID       string    `json:"session_id,omitempty"`
 	OriginSessionID string    `json:"origin_session_id,omitempty"`
+	SenderSessionID string    `json:"sender_session_id,omitempty"`
 	Channel         string    `json:"channel"`
 	ChatID          string    `json:"chat_id"`
 	ChatType        string    `json:"chat_type,omitempty"`

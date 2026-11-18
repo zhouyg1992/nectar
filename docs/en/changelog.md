@@ -10,6 +10,7 @@
 - Relay runs carry the originating user id, so memory and admin-gated operations inside the target run are checked against the real requester
 - Relay refuses direct chats by default with `ERR_DIRECT_CHAT`; `[relay] allow_direct` opts in and forces silent target output without a mirror
 - A target answer now reaches the origin session even when its group echo fails (for example, the bot is not in that chat) instead of reporting a failed relay
+- A relay target that waits on the shared workspace lock while the sending turn refuses to end is unblocked after `relay.sender_grace` (default 60s) by canceling the sender turn; the result still returns as a new origin turn
 - Origin reply turns no longer receive a relay token, so an agent cannot start another hop while holding the workspace lock and deadlock against the target
 - In summary mode the hand-off card is updated in place from running to `🔁 Relay result` instead of posting a second message; full mode closes the card with a completion note, and `echo = "off"` sends no hand-off card
 - The prompt fence uses a randomized tag so relay bodies cannot close it early; mirror-title detection only matches a prefix; bot-authored messages are dropped only while relay is enabled; canceled envelopes keep the canceled state

@@ -633,6 +633,9 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 	if cfg.RelayAllowDirect() {
 		t.Fatal("relay allow_direct should default to false")
 	}
+	if cfg.Relay.SenderGrace != "60s" {
+		t.Fatalf("relay sender_grace = %q", cfg.Relay.SenderGrace)
+	}
 	if ttl, err := cfg.RelayRootTTL(); err != nil || ttl != 30*time.Minute {
 		t.Fatalf("relay root ttl = %v, %v", ttl, err)
 	}
@@ -648,6 +651,7 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 		"echo":    "[relay]\nenabled = true\necho = \"loud\"\n",
 		"session": "[relay]\nenabled = true\nsession = \"active\"\n",
 		"ttl":     "[relay]\nenabled = true\nroot_ttl = \"soon\"\n",
+		"grace":   "[relay]\nenabled = true\nsender_grace = \"0s\"\n",
 	} {
 		write(body)
 		if _, err := Load(path); err == nil {
