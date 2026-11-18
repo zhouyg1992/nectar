@@ -70,7 +70,7 @@ user → bot A → engine A ──relay send (local API + run token)
                   RelayHub → bot A's origin session (new turn)
 ```
 
-- **The bus is the trigger; chat is a mirror.** Hand-offs go through the local relay bus, never through "one bot @-mentions another in the group". The group only gets human-visible hand-off and result cards (how many depends on `echo`); none of them can trigger anything.
+- **The bus is the trigger; chat is a mirror.** Hand-offs go through the local relay bus, never through "one bot @-mentions another in the group". The group only gets a human-visible hand-off card; when an ask finishes, that card is updated in place with the result instead of a second target message (`echo` controls visibility). None of these cards can trigger anything.
 - **Replies return to the origin session.** The target's answer resumes the sending bot's original session, keeping its context, workspace and uncommitted changes.
 - **The target runs in its own session.** Each root maps to a detached session on the target (`relay:<root>`), so the human's active session is never hijacked. It shows up in `/list` and can be taken over with `/switch`.
 - **Async rule.** After `relay send`, the sender must end its turn: no polling, sleeping or waiting. The reply wakes the origin session as a new turn; a turn that never ends would queue the reply behind itself and deadlock the session.
@@ -88,7 +88,7 @@ user → bot A → engine A ──relay send (local API + run token)
 | `enabled` | `false` | Turn relay on. Only useful with at least two bots. |
 | `allow_direct` | `false` | Allow starting a relay from a direct chat. Refused by default (`ERR_DIRECT_CHAT`) because the target bot is not in that DM and its output has nowhere to go. When enabled, target output is forced silent, the mirror is skipped, and only the final answer returns to the sender. |
 | `first_mention_only` | `true` | When a group message mentions several configured bots, only the first mentioned **configured Nectar bot** acts; the others wait for a relay. Set `false` to restore "every mentioned bot responds". |
-| `echo` | `"summary"` | Visibility of target output: `full` shows the progress card and final answer; `summary` shows a single result card with the final answer; `off` hides target output entirely (the answer still returns to the sender). The sender's own turn is always visible. |
+| `echo` | `"summary"` | Visibility of target output: `full` shows the target's progress and final cards and closes the hand-off card with a completion note; `summary` updates the hand-off card **in place** with the final answer instead of posting a second message; `off` sends no hand-off card and hides target output entirely (the answer still returns to the sender). The sender's own turn is always visible. |
 | `max_generation` | `4` | Maximum hops in one chain; beyond it returns `ERR_GEN_LIMIT`. |
 | `max_envelopes_per_root` | `12` | Maximum envelopes per root, replies included. |
 | `max_runs_per_root` | `8` | Maximum engine runs per root, including the origin reply turn. |

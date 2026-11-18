@@ -70,7 +70,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
                     RelayHub → Bot A 的 origin session（新回合）
 ```
 
-- **总线为真，IM 为镜。** 触发只走本机 relay 总线，不依赖「Bot 在群里 @ 另一个 Bot 能唤醒它」。群里只发给人看的移交卡和结果卡（数量由 `echo` 控制），它们都不参与触发。
+- **总线为真，IM 为镜。** 触发只走本机 relay 总线，不依赖「Bot 在群里 @ 另一个 Bot 能唤醒它」。群里只发给人看的移交卡；ask 结束时这张卡会原地更新为结果卡，目标不会另发一条（`echo` 控制可见度），它们都不参与触发。
 - **回复回到 origin session。** 目标 Bot 的答案回到发起 ask 的那个会话，继续 resume 原引擎会话，保留上下文、工作区和未提交改动。
 - **目标 Bot 使用独立会话。** 每个 root 在目标 Bot 侧对应一个 detached 会话（`relay:<root>`），不会顶掉人类正在使用的活跃会话；可以在 `/list` 里看到，也可以用 `/switch` 接管。
 - **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。
@@ -88,7 +88,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | `enabled` | `false` | 是否开启 relay。需要至少两个 Bot 才有意义。 |
 | `allow_direct` | `false` | 是否允许在单聊里发起接力。默认拒绝（`ERR_DIRECT_CHAT`），因为目标 Bot 不在这个单聊里，输出无法展示。开启后目标输出强制静默、不显示移交卡，只把最终回答回传给发起方。 |
 | `first_mention_only` | `true` | 群消息同时 @ 多个已配置 Bot 时，只有第一个被 @ 的**已配置 Nectar Bot** 处理；其余 Bot 等到 relay 到达再工作。设为 `false` 恢复「多 @ 全部响应」。 |
-| `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示进度卡和最终回答；`summary` 只显示一张结果卡（目标最终回答）；`off` 不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
+| `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示目标的进度卡和最终卡，移交卡结束后更新为完成提示；`summary` 把移交卡**原地更新**成一张结果卡（目标最终回答），不再另发目标消息；`off` 不发移交卡、不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
 | `max_generation` | `4` | 一条链路最多几跳，超出返回 `ERR_GEN_LIMIT`。 |
 | `max_envelopes_per_root` | `12` | 每个 root 最多多少条信封（含回复）。 |
 | `max_runs_per_root` | `8` | 每个 root 最多触发多少次引擎运行（含 origin 回投轮）。 |

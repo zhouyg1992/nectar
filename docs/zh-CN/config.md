@@ -140,7 +140,7 @@ worktree 会按 session 复用。清理时可执行 `git -C <repo> worktree list
 ```toml
 [relay]
 enabled = true
-echo = "summary"                  # full | summary（一张结果卡） | off
+echo = "summary"                  # full | summary（移交卡原地更新为结果） | off
 first_mention_only = true         # 多 @ 时只由第一个被 @ 的 Bot 响应
 allow_direct = false              # 单聊默认不允许接力
 max_generation = 4
