@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,6 +70,11 @@ func newRelayRig(t *testing.T, opts RelayHubOptions) *relayRig {
 
 func newRelayRouter(t *testing.T, botID string, hub *RelayHub, eng engine.EngineAdapter, plat platform.PlatformAdapter) (*Router, *comb.FileStore) {
 	t.Helper()
+	return newRelayRouterWithSocket(t, botID, hub, eng, plat, "")
+}
+
+func newRelayRouterWithSocket(t *testing.T, botID string, hub *RelayHub, eng engine.EngineAdapter, plat platform.PlatformAdapter, socket string) (*Router, *comb.FileStore) {
+	t.Helper()
 	ws, err := execguard.NewWorkspace(t.TempDir(), false)
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +95,7 @@ func newRelayRouter(t *testing.T, botID string, hub *RelayHub, eng engine.Engine
 		nil,
 		decision.Noop{},
 		logger,
-		RouterConfig{BotID: botID, AgentID: "codex", BotName: botID, MemoryDefaultScope: "chat"},
+		RouterConfig{BotID: botID, AgentID: "codex", BotName: botID, APISocket: socket, MemoryDefaultScope: "chat"},
 	)
 	router.SetRelay(hub)
 	return router, lessons
@@ -670,4 +678,193 @@ func TestRouterFirstMentionCanBeDisabled(t *testing.T) {
 	}
 	rig.reviewRouter.Handle(msg)
 	waitForReplies(t, rig.reviewPlat, 1)
+}
+
+// relayPostingEngine imitates an agent that reacts to its prompt by calling the
+// relay CLI: it reads the run token and socket from the environment and posts
+// one ask through the real local API. Everything after that (hub validation,
+// target run, reply back to the origin session) runs through production code.
+type relayPostingEngine struct {
+	mu      sync.Mutex
+	starts  int
+	resumes int
+	token   string
+	postErr error
+}
+
+func (e *relayPostingEngine) Name() string { return "poster" }
+
+func (e *relayPostingEngine) Start(_ context.Context, _ string, opts engine.EngineOptions) (<-chan engine.Event, error) {
+	e.mu.Lock()
+	e.starts++
+	e.token = opts.Env["NECTAR_RELAY_TOKEN"]
+	socket := opts.Env["NECTAR_API_SOCKET"]
+	e.mu.Unlock()
+	if socket == "" {
+		e.setErr(errors.New("NECTAR_API_SOCKET is empty"))
+	} else {
+		e.setErr(postRelayViaSocket(socket, e.token, "reviewer", "please review the diff"))
+	}
+	return relayScriptedEvents("impl-done"), nil
+}
+
+func (e *relayPostingEngine) Resume(_ context.Context, _, _ string, _ engine.EngineOptions) (<-chan engine.Event, error) {
+	e.mu.Lock()
+	e.resumes++
+	e.mu.Unlock()
+	return relayScriptedEvents("review-summary"), nil
+}
+
+func (e *relayPostingEngine) Cancel(context.Context, string) error { return nil }
+
+func (e *relayPostingEngine) setErr(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.postErr == nil {
+		e.postErr = err
+	}
+}
+
+func (e *relayPostingEngine) counts() (int, int, string, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.starts, e.resumes, e.token, e.postErr
+}
+
+func relayScriptedEvents(answer string) <-chan engine.Event {
+	ch := make(chan engine.Event, 3)
+	ch <- engine.Event{Type: engine.EventSessionStarted, SessionID: "relay-e2e"}
+	ch <- engine.Event{Type: engine.EventMessage, Text: answer}
+	ch <- engine.Event{Type: engine.EventDone}
+	close(ch)
+	return ch
+}
+
+func postRelayViaSocket(socket, token, to, body string) error {
+	payload, err := json.Marshal(map[string]string{"to": to, "body": body})
+	if err != nil {
+		return err
+	}
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "unix", socket)
+			},
+		},
+		Timeout: 10 * time.Second,
+	}
+	req, err := http.NewRequest(http.MethodPost, "http://nectar/relay/send", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("relay send status %d: %s", resp.StatusCode, data)
+	}
+	return nil
+}
+
+func TestRelayEndToEndThroughLocalAPI(t *testing.T) {
+	hub, err := NewRelayHub(RelayHubOptions{DataDir: t.TempDir(), Echo: RelayEchoSummary, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub.opts.FirstMentionOnly = true
+	defer hub.Close()
+	socketDir, err := os.MkdirTemp("/tmp", "nectar-e2e-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
+	socket := filepath.Join(socketDir, "api.sock")
+	api := NewScheduleAPI(ScheduleAPIOptions{SocketPath: socket, Relay: hub, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err := api.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer api.Close()
+
+	poster := &relayPostingEngine{}
+	coderPlat := &fakePlatform{}
+	reviewPlat := &fakePlatform{}
+	reviewEng := &fakeEngine{}
+	coderRouter, _ := newRelayRouterWithSocket(t, "coder", hub, poster, coderPlat, socket)
+	reviewRouter, _ := newRelayRouter(t, "reviewer", hub, reviewEng, reviewPlat)
+	hub.Register(RelayPeer{ID: "coder", Name: "Coder", Role: "coder"}, coderRouter)
+	hub.Register(RelayPeer{ID: "reviewer", Name: "Reviewer", Role: "reviewer"}, reviewRouter)
+	hub.NoteChat("c1", "coder")
+	hub.NoteChat("c1", "reviewer")
+
+	// The human mentions both bots; only the first one is supposed to act.
+	coderRouter.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1",
+		Text: "implement it, then have reviewer check it",
+		Mentions: []platform.Mention{
+			{Name: "Coder", IsBot: true},
+			{Name: "Reviewer", IsBot: true},
+		},
+	})
+	reviewRouter.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1",
+		Text: "implement it, then have reviewer check it",
+		Mentions: []platform.Mention{
+			{Name: "Coder", IsBot: true},
+			{Name: "Reviewer", IsBot: true},
+		},
+	})
+
+	waitRelay(t, "coder posts through the API and gets the reply turn", func() bool {
+		starts, resumes, _, _ := poster.counts()
+		return starts == 1 && resumes == 1
+	})
+	waitForReplies(t, reviewPlat, 1)
+	waitForReplies(t, coderPlat, 2)
+
+	starts, resumes, token, postErr := poster.counts()
+	if postErr != nil {
+		t.Fatalf("relay send through API failed: %v", postErr)
+	}
+	if token == "" {
+		t.Fatal("coder run had no relay token")
+	}
+	if starts != 1 || resumes != 1 {
+		t.Fatalf("coder runs: starts=%d resumes=%d", starts, resumes)
+	}
+	if starts, _, _ := reviewEng.counts(); starts != 1 {
+		t.Fatalf("reviewer engine starts = %d", starts)
+	}
+	roots := hub.Roots()
+	if len(roots) != 1 {
+		t.Fatalf("roots = %d", len(roots))
+	}
+	if roots[0].EnvelopeCount != 2 || roots[0].RunCount != 2 {
+		t.Fatalf("root counts = env %d runs %d", roots[0].EnvelopeCount, roots[0].RunCount)
+	}
+	for _, envelope := range roots[0].Envelopes {
+		if envelope.State != RelayStateDone {
+			t.Fatalf("envelope %s state = %s error=%s", envelope.ID, envelope.State, envelope.Error)
+		}
+	}
+	reviewSessions := reviewRouter.sessions.List(relayKey("reviewer"), false)
+	if len(reviewSessions) != 1 || !strings.HasPrefix(reviewSessions[0].Name, "relay:") {
+		t.Fatalf("reviewer sessions = %#v", reviewSessions)
+	}
+	for _, reply := range append(fakeReplies(coderPlat), fakeReplies(reviewPlat)...) {
+		if strings.Contains(reply, "nectar-relay") {
+			t.Fatalf("reply leaks the mirror marker: %q", reply)
+		}
+	}
+}
+
+func fakeReplies(plat *fakePlatform) []string {
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	return append([]string(nil), plat.replies...)
 }
