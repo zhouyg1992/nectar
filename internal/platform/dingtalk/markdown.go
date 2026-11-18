@@ -14,7 +14,7 @@ const (
 
 var (
 	tableSeparatorCell = regexp.MustCompile(`^:?-{3,}:?$`)
-	htmlTagPattern     = regexp.MustCompile(`</?[A-Za-z][^>]*>`)
+	htmlTagPattern     = regexp.MustCompile(`(?i)</?(?:a|b|blockquote|br|code|del|div|em|font|h[1-6]|hr|i|img|ins|li|ol|p|pre|s|span|strong|sub|sup|table|tbody|td|th|thead|tr|u|ul)(?:\s[^>]*)?/?>`)
 	markdownTitleNoise = strings.NewReplacer(
 		"**", "", "__", "", "`", "", "~~", "",
 	)
@@ -78,15 +78,24 @@ func hardBreakA2UILines(s string) string {
 	lines := strings.Split(s, "\n")
 	var out strings.Builder
 	inCodeBlock := false
+	inTable := false
 	for i, line := range lines {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			inCodeBlock = !inCodeBlock
+		}
+		if !inCodeBlock {
+			switch {
+			case !inTable && i+1 < len(lines) && isTableRow(line) && isTableSeparator(lines[i+1]):
+				inTable = true
+			case inTable && strings.TrimSpace(line) == "":
+				inTable = false
+			}
 		}
 		out.WriteString(line)
 		if i >= len(lines)-1 {
 			continue
 		}
-		if !inCodeBlock && line != "" && lines[i+1] != "" {
+		if !inCodeBlock && !inTable && line != "" && lines[i+1] != "" {
 			out.WriteString("  \n")
 		} else {
 			out.WriteByte('\n')

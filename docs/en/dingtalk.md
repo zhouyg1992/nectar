@@ -97,7 +97,7 @@ Inbound support:
 
 Images and files are downloaded to `.nectar/attachments/` under the current chat workspace and cleaned up automatically after the agent run.
 
-GFM tables inside cards are parsed into DingTalk's native `Table` component; older clients fall back to raw table text.
+GFM tables inside cards use Markdown when they have at most 8 columns and 50 rows, avoiding the native `Table` gray header and width mismatch. Wider or longer tables use DingTalk's native `Table` component; older clients fall back to raw table text.
 
 Outbound images and files are supported: the agent copies files into
 `.nectar/outbox/` under the current workspace (`NECTAR_OUTBOX_DIR`). Nectar

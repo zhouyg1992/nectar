@@ -250,6 +250,7 @@ func (a *Adapter) buildCreatePayload(rc replyContext, outTrackID, surfaceID, tit
 		"outTrackId":      outTrackID,
 		"openSpaceId":     openSpaceID(rc),
 		"protocolVersion": "1.0",
+		"config":          map[string]any{"autoLayout": true},
 		"flowStatus":      flow,
 		"a2uiMessages":    messages,
 		"a2uiAnnotations": cardAnnotations(surfaceID, blocks),
@@ -327,7 +328,25 @@ func cardComponents(theme string, blocks []cardBlock, hasActivity, hasFooter boo
 		id := fmt.Sprintf("block-%d", i)
 		children = append(children, id)
 		if block.Table != nil {
-			blockComponents = append(blockComponents, tableComponent(id, *block.Table))
+			if useMarkdownTable(block.Table) {
+				blockComponents = append(blockComponents, map[string]any{
+					"id":        id,
+					"component": "Markdown",
+					"content":   block.Table.Raw,
+				})
+			} else {
+				blockComponents = append(blockComponents, tableComponent(id, *block.Table))
+			}
+			continue
+		}
+		if text, ok := plainCardText(block.Markdown); ok {
+			blockComponents = append(blockComponents, map[string]any{
+				"id":        id,
+				"component": "Text",
+				"text":      text,
+				"textWidth": "match_parent",
+				"maxLine":   1000,
+			})
 			continue
 		}
 		blockComponents = append(blockComponents, map[string]any{
@@ -368,8 +387,10 @@ func cardComponents(theme string, blocks []cardBlock, hasActivity, hasFooter boo
 	if hasActivity {
 		root = append(root, map[string]any{
 			"id":        "activity",
-			"component": "Markdown",
-			"content":   map[string]string{"path": "/activity"},
+			"component": "Text",
+			"text":      map[string]string{"path": "/activity"},
+			"textWidth": "match_parent",
+			"maxLine":   1000,
 		})
 		if len(blocks) > 0 {
 			root = append(root, map[string]any{
@@ -398,6 +419,8 @@ func cardComponents(theme string, blocks []cardBlock, hasActivity, hasFooter boo
 		"component": "Text",
 		"variant":   "caption",
 		"text":      map[string]string{"path": "/footer"},
+		"textWidth": "match_parent",
+		"maxLine":   1000,
 	})
 	return append(root, blockComponents...)
 }

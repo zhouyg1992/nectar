@@ -114,6 +114,18 @@ func TestEscapeHTMLOutsideCode(t *testing.T) {
 	}
 }
 
+func TestCommandPlaceholdersSurviveNormalization(t *testing.T) {
+	got := normalizeA2UIMarkdown("`/switch <id|#|name>`\n`/rename <name>`\n`/steer <text>`")
+	for _, want := range []string{"<id|#|name>", "<name>", "<text>"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("placeholder %q was changed: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "&lt;") {
+		t.Fatalf("command placeholders were HTML-escaped: %q", got)
+	}
+}
+
 func TestNormalizeSessionListIsPlatformSafe(t *testing.T) {
 	body := "1:  hello  ·  ses_bca6ee20  ·  codex  ·  ctx 18.7k/996.1k (1.9%)  ·  just now  ·  active\n" +
 		"2:  Session Nov 15 16:58  ·  ses_04a8d5d7  ·  codex  ·  ctx 19.2k/996.1k (2.0%)  ·  just now\n\n" +
