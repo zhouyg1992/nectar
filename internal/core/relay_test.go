@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -958,4 +959,17 @@ func fakeCards(plat *fakePlatform) ([]platform.Card, []string) {
 	plat.mu.Lock()
 	defer plat.mu.Unlock()
 	return append([]platform.Card(nil), plat.sentCards...), append([]string(nil), plat.replies...)
+}
+
+func TestRelayAPIDisabledReturnsCode(t *testing.T) {
+	api := NewScheduleAPI(ScheduleAPIOptions{SocketPath: filepath.Join(t.TempDir(), "unused.sock")})
+	req := httptest.NewRequest(http.MethodGet, "/relay/bots", nil)
+	rec := httptest.NewRecorder()
+	api.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), ErrRelayDisabled) {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
 }

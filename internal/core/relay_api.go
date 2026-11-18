@@ -116,7 +116,7 @@ func (a *ScheduleAPI) handleRelayRootItem(w http.ResponseWriter, r *http.Request
 
 func (a *ScheduleAPI) requireRelay(w http.ResponseWriter) bool {
 	if a.relay == nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("relay is disabled"))
+		writeRelayError(w, relayError(ErrRelayDisabled, "relay is disabled"))
 		return false
 	}
 	return true
