@@ -150,7 +150,7 @@ export PATH="$HOME/.local/bin:$PATH"
 nectar update
 ```
 
-`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制、用新二进制刷新 Agent Skill，并重启已安装的后台服务。它不会修改 `~/.nectar/config.toml` 和数据。下载阶段会显示进度条；连接、TLS 或 5xx 临时故障会自动重试。
+`nectar update` 会下载最新版本、校验 `checksums.txt`、原子替换二进制、用新二进制刷新 Agent Skill，并重启已安装的后台服务。它不会修改 `~/.nectar/config.toml` 和数据。下载阶段会显示进度条；连接、TLS 或 5xx 临时故障会自动重试。重试时如果服务端支持 HTTP Range，会从已下载的字节继续，不会从头重下；不支持 Range 的镜像会自动退回全量下载。
 
 ```bash
 nectar update --check          # 只检查最新版本
@@ -162,6 +162,24 @@ nectar update --timeout 15m    # 每次下载最多等待 15 分钟
 nectar update --attempts 3     # 网络失败时最多尝试 3 次
 nectar update --no-progress    # 适合脚本，关闭进度条
 ```
+
+国内网络可以通过 GitHub 镜像前缀下载：
+
+```bash
+nectar update --mirror https://ghfast.top
+NECTAR_UPDATE_MIRROR=https://ghfast.top nectar update
+```
+
+`--mirror` 会把前缀加到 release 页面、GitHub API 和资产地址前，例如 `https://ghfast.top/https://github.com/...`。如果镜像不代理 latest 页面或 API，可以指定版本，或显式覆盖地址：
+
+```bash
+nectar update --version v0.10.2 --mirror https://ghfast.top
+nectar update --version v0.10.2 --download-base https://mirror.example/nectar/releases/download/v0.10.2
+nectar update --latest-url https://mirror.example/nectar/releases/latest
+nectar update --latest-api-url https://mirror.example/api/repos/zhouyg1992/nectar/releases/latest
+```
+
+对应的环境变量是 `NECTAR_UPDATE_MIRROR`、`NECTAR_UPDATE_DOWNLOAD_BASE`、`NECTAR_UPDATE_LATEST_URL` 和 `NECTAR_UPDATE_LATEST_API_URL`，命令行参数优先。
 
 会话映射和最近一次上下文用量保存在 `~/.nectar/sessions.json`。重启后会继续 resume 原引擎会话；旧会话失效时，Nectar 会在最终卡片提示并启动新会话。
 

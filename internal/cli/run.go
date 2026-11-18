@@ -64,7 +64,7 @@ func printMainUsage() {
 	fmt.Print(`Usage:
   nectar [-config PATH]
   nectar -version
-  nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--timeout 10m]
+  nectar update [--check] [--force] [--version vX.Y.Z] [--mirror URL] [--no-restart] [--timeout 10m]
   nectar bots [-config PATH]
   nectar worktrees <list|remove> [--config PATH] [--bot ID]
   nectar schedule <list|add|preview|pause|resume|run|delete|update>

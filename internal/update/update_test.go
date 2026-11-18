@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -226,6 +227,226 @@ func TestRunRetriesTransientDownload(t *testing.T) {
 	}
 	if archiveRequests != 2 {
 		t.Fatalf("archive requests = %d, want 2", archiveRequests)
+	}
+}
+
+func TestDownloadResumesPartialFile(t *testing.T) {
+	archive := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+	asset := "nectar.tar.gz"
+	offset := 10
+	var ranges []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ranges = append(ranges, r.Header.Get("Range"))
+		http.ServeContent(w, r, asset, time.Time{}, bytes.NewReader(archive))
+	}))
+	defer server.Close()
+
+	destination := filepath.Join(t.TempDir(), asset)
+	if err := os.WriteFile(destination+".part", archive[:offset], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updater := New(Config{Attempts: 1})
+	if err := updater.download(t.Context(), server.URL, destination, asset, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, archive) {
+		t.Fatalf("downloaded %q, want %q", got, archive)
+	}
+	if len(ranges) != 1 || ranges[0] != fmt.Sprintf("bytes=%d-", offset) {
+		t.Fatalf("range headers = %#v", ranges)
+	}
+	if _, err := os.Stat(destination + ".part"); !os.IsNotExist(err) {
+		t.Fatalf("partial file still exists: %v", err)
+	}
+}
+
+func TestDownloadRestartsWhenServerIgnoresRange(t *testing.T) {
+	archive := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+	asset := "nectar.tar.gz"
+	offset := 10
+	var ranges []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ranges = append(ranges, r.Header.Get("Range"))
+		w.Header().Set("Content-Length", strconv.Itoa(len(archive)))
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	destination := filepath.Join(t.TempDir(), asset)
+	if err := os.WriteFile(destination+".part", archive[:offset], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updater := New(Config{Attempts: 1})
+	if err := updater.download(t.Context(), server.URL, destination, asset, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, archive) {
+		t.Fatalf("downloaded %q, want %q", got, archive)
+	}
+	if len(ranges) != 1 || ranges[0] != fmt.Sprintf("bytes=%d-", offset) {
+		t.Fatalf("range headers = %#v", ranges)
+	}
+}
+
+func TestDownloadResumesAfterShortResponse(t *testing.T) {
+	archive := bytes.Repeat([]byte("nectar"), 64)
+	asset := "nectar.tar.gz"
+	offset := 100
+	var ranges []string
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		ranges = append(ranges, r.Header.Get("Range"))
+		if requests == 1 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(archive)))
+			_, _ = w.Write(archive[:offset])
+			return
+		}
+		http.ServeContent(w, r, asset, time.Time{}, bytes.NewReader(archive))
+	}))
+	defer server.Close()
+
+	destination := filepath.Join(t.TempDir(), asset)
+	updater := New(Config{Attempts: 2, RetryDelay: time.Millisecond})
+	if err := updater.download(t.Context(), server.URL, destination, asset, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, archive) {
+		t.Fatalf("downloaded %d bytes, want %d", len(got), len(archive))
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
+	}
+	if len(ranges) != 2 || ranges[0] != "" || ranges[1] != fmt.Sprintf("bytes=%d-", offset) {
+		t.Fatalf("range headers = %#v", ranges)
+	}
+}
+
+func TestMirrorURLs(t *testing.T) {
+	updater := New(Config{Repo: "owner/repo", Mirror: "https://mirror.example/"})
+	if got, want := updater.downloadBase("v1.2.3"),
+		"https://mirror.example/https://github.com/owner/repo/releases/download/v1.2.3"; got != want {
+		t.Fatalf("download base = %q, want %q", got, want)
+	}
+	if got, want := updater.mirrorURL("https://api.github.com/repos/owner/repo/releases/latest"),
+		"https://mirror.example/https://api.github.com/repos/owner/repo/releases/latest"; got != want {
+		t.Fatalf("mirrored URL = %q, want %q", got, want)
+	}
+}
+
+func TestDownloadBaseOverridesMirror(t *testing.T) {
+	updater := New(Config{
+		Repo:         "owner/repo",
+		Mirror:       "https://mirror.example",
+		DownloadBase: "https://base.example/releases/download/v1.2.3/",
+	})
+	if got, want := updater.downloadBase("v1.2.3"), "https://base.example/releases/download/v1.2.3"; got != want {
+		t.Fatalf("download base = %q, want %q", got, want)
+	}
+}
+
+func TestParseContentRange(t *testing.T) {
+	cases := []struct {
+		value string
+		start int64
+		end   int64
+		total int64
+		ok    bool
+	}{
+		{value: "bytes 10-19/100", start: 10, end: 19, total: 100, ok: true},
+		{value: "bytes 0-0/1", start: 0, end: 0, total: 1, ok: true},
+		{value: "bytes 10-19/*", start: 10, end: 19, total: -1, ok: true},
+		{value: "bytes */100"},
+		{value: "items 0-1/2"},
+	}
+	for _, tc := range cases {
+		start, end, total, ok := parseContentRange(tc.value)
+		if start != tc.start || end != tc.end || total != tc.total || ok != tc.ok {
+			t.Fatalf("parseContentRange(%q) = %d, %d, %d, %v", tc.value, start, end, total, ok)
+		}
+	}
+}
+
+func TestRunCheckLatestThroughMirror(t *testing.T) {
+	var pagePath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
+			pagePath = r.URL.Path
+			http.Redirect(w, r, "/releases/tag/v0.4.0", http.StatusFound)
+		case strings.HasSuffix(r.URL.Path, "/releases/tag/v0.4.0"):
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	updater := New(Config{
+		Repo:           "owner/repo",
+		CurrentVersion: "v0.3.0",
+		GOOS:           testGOOS,
+		GOARCH:         testGOARCH,
+		Mirror:         server.URL,
+		Attempts:       1,
+	})
+	result, err := updater.Run(t.Context(), Options{CheckOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TargetVersion != "v0.4.0" || !result.UpdateAvailable {
+		t.Fatalf("result = %#v", result)
+	}
+	if !strings.Contains(pagePath, "https://github.com/owner/repo/releases/latest") {
+		t.Fatalf("page path = %q", pagePath)
+	}
+}
+
+func TestRunFallsBackToMirroredGitHubAPI(t *testing.T) {
+	var apiPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "api.github.com"):
+			apiPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"tag_name":"v0.4.0"}`)
+		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
+			http.Error(w, "edge unavailable", http.StatusBadGateway)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	updater := New(Config{
+		Repo:           "owner/repo",
+		CurrentVersion: "v0.3.0",
+		GOOS:           testGOOS,
+		GOARCH:         testGOARCH,
+		Mirror:         server.URL,
+		Attempts:       1,
+	})
+	result, err := updater.Run(t.Context(), Options{CheckOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TargetVersion != "v0.4.0" || !result.UpdateAvailable {
+		t.Fatalf("result = %#v", result)
+	}
+	if !strings.Contains(apiPath, "https://api.github.com/repos/owner/repo/releases/latest") {
+		t.Fatalf("api path = %q", apiPath)
 	}
 }
 

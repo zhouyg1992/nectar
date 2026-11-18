@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -44,6 +45,7 @@ type Config struct {
 	DownloadTimeout time.Duration
 	Attempts        int
 	RetryDelay      time.Duration
+	Mirror          string
 	Progress        func(Progress)
 	RefreshSkills   func(binaryPath string) error
 	Logf            func(string, ...any)
@@ -98,6 +100,7 @@ func New(cfg Config) *Updater {
 	if cfg.RetryDelay <= 0 {
 		cfg.RetryDelay = defaultRetryDelay
 	}
+	cfg.Mirror = strings.TrimRight(strings.TrimSpace(cfg.Mirror), "/")
 	client := cfg.HTTPClient
 	if client == nil {
 		var transport *http.Transport
@@ -238,23 +241,23 @@ func (u *Updater) targetVersion(ctx context.Context, requested string) (string, 
 	}
 	u.logf("Checking latest release")
 
-	configuredPageURL := strings.TrimSpace(u.cfg.LatestURL)
-	pageURL := configuredPageURL
+	explicitPageURL := strings.TrimSpace(u.cfg.LatestURL)
+	pageURL := explicitPageURL
 	if pageURL == "" {
-		pageURL = "https://github.com/" + u.cfg.Repo + "/releases/latest"
+		pageURL = u.mirrorURL("https://github.com/" + u.cfg.Repo + "/releases/latest")
 	}
 	tag, pageErr := u.latestFromPage(ctx, pageURL)
 	if pageErr == nil {
 		return tag, nil
 	}
-	if configuredPageURL != "" && strings.TrimSpace(u.cfg.LatestAPIURL) == "" {
+	if explicitPageURL != "" && strings.TrimSpace(u.cfg.LatestAPIURL) == "" && u.cfg.Mirror == "" {
 		return "", fmt.Errorf("fetch latest release: %w", pageErr)
 	}
 
 	u.logf("Release page unavailable; falling back to GitHub API")
 	apiURL := strings.TrimSpace(u.cfg.LatestAPIURL)
 	if apiURL == "" {
-		apiURL = "https://api.github.com/repos/" + u.cfg.Repo + "/releases/latest"
+		apiURL = u.mirrorURL("https://api.github.com/repos/" + u.cfg.Repo + "/releases/latest")
 	}
 	tag, apiErr := u.latestFromAPI(ctx, apiURL)
 	if apiErr == nil {
@@ -267,7 +270,14 @@ func (u *Updater) downloadBase(version string) string {
 	if base := strings.TrimSpace(u.cfg.DownloadBase); base != "" {
 		return strings.TrimRight(base, "/")
 	}
-	return fmt.Sprintf("https://github.com/%s/releases/download/%s", u.cfg.Repo, version)
+	return u.mirrorURL(fmt.Sprintf("https://github.com/%s/releases/download/%s", u.cfg.Repo, version))
+}
+
+func (u *Updater) mirrorURL(raw string) string {
+	if mirror := strings.TrimRight(strings.TrimSpace(u.cfg.Mirror), "/"); mirror != "" {
+		return mirror + "/" + raw
+	}
+	return raw
 }
 
 func (u *Updater) latestFromPage(ctx context.Context, url string) (string, error) {
@@ -336,51 +346,190 @@ func (u *Updater) download(
 	asset string,
 	showProgress bool,
 ) error {
+	partPath := destination + ".part"
 	return u.retry(ctx, u.cfg.DownloadTimeout, "download "+asset, func(attemptCtx context.Context) error {
-		req, err := u.newRequest(attemptCtx, http.MethodGet, url)
+		return u.downloadAttempt(attemptCtx, url, destination, partPath, asset, showProgress)
+	})
+}
+
+func (u *Updater) downloadAttempt(
+	ctx context.Context,
+	url string,
+	destination string,
+	partPath string,
+	asset string,
+	showProgress bool,
+) error {
+	restarted := false
+	for {
+		offset, err := fileSize(partPath)
 		if err != nil {
 			return err
+		}
+		req, err := u.newRequest(ctx, http.MethodGet, url)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Accept-Encoding", "identity")
+		if offset > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 		}
 		resp, err := u.client.Do(req)
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
-		if err := responseError(url, resp); err != nil {
+
+		restart, err := u.saveDownload(url, resp, destination, partPath, offset, asset, showProgress)
+		if err == nil {
+			return nil
+		}
+		if !restart {
 			return err
 		}
-		file, err := os.Create(destination)
-		if err != nil {
-			return fmt.Errorf("create %s: %w", destination, err)
+		if restarted {
+			return err
 		}
-		var writer io.Writer = file
-		var progress *progressWriter
-		if showProgress && u.cfg.Progress != nil {
-			progress = &progressWriter{
-				target: file,
-				asset:  asset,
-				total:  resp.ContentLength,
-				update: u.cfg.Progress,
+		restarted = true
+		if err := os.Remove(partPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove partial download %s: %w", partPath, err)
+		}
+	}
+}
+
+func (u *Updater) saveDownload(
+	url string,
+	resp *http.Response,
+	destination string,
+	partPath string,
+	offset int64,
+	asset string,
+	showProgress bool,
+) (bool, error) {
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && offset > 0 {
+		return true, fmt.Errorf("server rejected resume at %d bytes for %s", offset, asset)
+	}
+	if err := responseError(url, resp); err != nil {
+		return false, err
+	}
+
+	appendData := false
+	total := resp.ContentLength
+	if offset > 0 {
+		switch resp.StatusCode {
+		case http.StatusPartialContent:
+			start, _, size, ok := parseContentRange(resp.Header.Get("Content-Range"))
+			if !ok || start != offset {
+				return true, fmt.Errorf("invalid range response for %s", asset)
 			}
-			writer = progress
-			progress.report(false)
+			appendData = true
+			total = size
+			if total < 0 {
+				total = offset + resp.ContentLength
+			}
+		case http.StatusOK:
+			offset = 0
+			total = resp.ContentLength
+		default:
+			return false, fmt.Errorf("download %s: unexpected status %s", asset, resp.Status)
 		}
-		written, copyErr := io.Copy(writer, resp.Body)
-		if progress != nil {
-			progress.done(written)
+	} else if resp.StatusCode == http.StatusPartialContent {
+		start, _, size, ok := parseContentRange(resp.Header.Get("Content-Range"))
+		if !ok || start != 0 {
+			return true, fmt.Errorf("invalid range response for %s", asset)
 		}
-		closeErr := file.Close()
-		if copyErr != nil {
-			return fmt.Errorf("download %s: %w", asset, copyErr)
+		total = size
+		if total < 0 {
+			total = resp.ContentLength
 		}
-		if closeErr != nil {
-			return fmt.Errorf("close %s: %w", destination, closeErr)
+	}
+
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if appendData {
+		flags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+	}
+	file, err := os.OpenFile(partPath, flags, 0o644)
+	if err != nil {
+		return false, fmt.Errorf("open %s: %w", partPath, err)
+	}
+
+	var writer io.Writer = file
+	var progress *progressWriter
+	if showProgress && u.cfg.Progress != nil {
+		progress = &progressWriter{
+			target:  file,
+			asset:   asset,
+			total:   total,
+			written: offset,
+			update:  u.cfg.Progress,
 		}
-		if resp.ContentLength >= 0 && written != resp.ContentLength {
-			return fmt.Errorf("download %s: received %d of %d bytes", asset, written, resp.ContentLength)
+		writer = progress
+		progress.report(false)
+	}
+	written, copyErr := io.Copy(writer, resp.Body)
+	closeErr := file.Close()
+	if copyErr != nil {
+		return false, fmt.Errorf("download %s: %w", asset, copyErr)
+	}
+	if closeErr != nil {
+		return false, fmt.Errorf("close %s: %w", partPath, closeErr)
+	}
+	if resp.ContentLength >= 0 && written != resp.ContentLength {
+		return false, fmt.Errorf("download %s: received %d of %d bytes", asset, written, resp.ContentLength)
+	}
+	if err := os.Rename(partPath, destination); err != nil {
+		return false, fmt.Errorf("move %s into place: %w", asset, err)
+	}
+	if progress != nil {
+		progress.done(offset + written)
+	}
+	return false, nil
+}
+
+func fileSize(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
 		}
-		return nil
-	})
+		return 0, fmt.Errorf("stat partial download %s: %w", path, err)
+	}
+	return info.Size(), nil
+}
+
+func parseContentRange(value string) (start, end, total int64, ok bool) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "bytes ") {
+		return 0, 0, 0, false
+	}
+	value = strings.TrimSpace(strings.TrimPrefix(value, "bytes "))
+	slash := strings.LastIndexByte(value, '/')
+	if slash < 0 {
+		return 0, 0, 0, false
+	}
+	rangePart := value[:slash]
+	totalPart := value[slash+1:]
+	dash := strings.IndexByte(rangePart, '-')
+	if dash <= 0 || dash == len(rangePart)-1 {
+		return 0, 0, 0, false
+	}
+	start, err := strconv.ParseInt(rangePart[:dash], 10, 64)
+	if err != nil || start < 0 {
+		return 0, 0, 0, false
+	}
+	end, err = strconv.ParseInt(rangePart[dash+1:], 10, 64)
+	if err != nil || end < start {
+		return 0, 0, 0, false
+	}
+	if totalPart == "*" {
+		return start, end, -1, true
+	}
+	total, err = strconv.ParseInt(totalPart, 10, 64)
+	if err != nil || total < 0 {
+		return 0, 0, 0, false
+	}
+	return start, end, total, true
 }
 
 func (u *Updater) newRequest(ctx context.Context, method, url string) (*http.Request, error) {
