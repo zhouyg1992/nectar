@@ -41,6 +41,7 @@ type fakePlatform struct {
 	downloadErr     error
 	media           []platform.Media
 	mediaErr        error
+	sendErr         error
 }
 
 func (f *fakePlatform) Name() string {
@@ -58,6 +59,9 @@ func (f *fakePlatform) Start(context.Context, func(platform.Message)) error {
 func (f *fakePlatform) Send(_ context.Context, reply platform.Reply) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return "", f.sendErr
+	}
 	f.replyTargets = append(f.replyTargets, reply.ReplyTo)
 	f.replyThreads = append(f.replyThreads, reply.ReplyInThread)
 	f.threadIDs = append(f.threadIDs, reply.ThreadID)

@@ -210,6 +210,7 @@ type RelayConfig struct {
 	Enabled             *bool  `toml:"enabled"`
 	Echo                string `toml:"echo"`
 	FirstMentionOnly    *bool  `toml:"first_mention_only"`
+	AllowDirect         *bool  `toml:"allow_direct"`
 	MaxGeneration       int    `toml:"max_generation"`
 	MaxEnvelopesPerRoot int    `toml:"max_envelopes_per_root"`
 	MaxRunsPerRoot      int    `toml:"max_runs_per_root"`
@@ -378,6 +379,12 @@ func (c Config) RelayEnabled() bool {
 // configured bots is handled only by the first bot mentioned. Defaults to true.
 func (c Config) RelayFirstMentionOnly() bool {
 	return c.Relay.FirstMentionOnly == nil || *c.Relay.FirstMentionOnly
+}
+
+// RelayAllowDirect reports whether relay may start from a direct chat. It is
+// off by default because the target bot is not in the sender's DM.
+func (c Config) RelayAllowDirect() bool {
+	return c.Relay.AllowDirect != nil && *c.Relay.AllowDirect
 }
 
 func (c Config) RelayRootTTL() (time.Duration, error) {

@@ -1242,3 +1242,64 @@ func TestRelayTargetRunCarriesOriginUser(t *testing.T) {
 		t.Fatalf("target user id = %q", opts.Env["NECTAR_USER_ID"])
 	}
 }
+
+func TestRelayRejectsDirectChatByDefault(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1", ChatType: "p2p"})
+	_, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "hi", NoReply: true})
+	if RelayErrorCode(err) != ErrRelayDirectChat {
+		t.Fatalf("direct chat error = %v", err)
+	}
+	if roots := rig.hub.Roots(); len(roots) != 0 {
+		t.Fatalf("rejected direct send left %d roots", len(roots))
+	}
+}
+
+func TestRelayDirectChatAllowedWhenEnabled(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{AllowDirect: true})
+	originID := "origin-session"
+	token := rig.hub.MintToken(RelayTokenRequest{
+		BotID: "coder", SessionID: originID, Channel: "feishu", ChatID: "c1",
+		ChatType: "p2p", OriginMessageID: "m-p2p", OriginUserID: "u1",
+	})
+	envelope, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "compute 1+1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitRelay(t, "direct relay", func() bool { return relayEnvelopeState(rig.hub, envelope.ID) == RelayStateDone })
+	if reviews := rig.reviewPlat.replyCount(); reviews != 0 {
+		t.Fatalf("target posted into the sender's DM: %d replies", reviews)
+	}
+	if cards, _ := fakeCards(rig.reviewPlat); len(cards) != 0 {
+		t.Fatalf("target posted %d cards into the sender's DM", len(cards))
+	}
+	waitForReplies(t, rig.coderPlat, 1)
+	// The mirror is skipped in direct chats.
+	if got := rig.coderPlat.replyCount(); got != 1 {
+		t.Fatalf("origin replies = %d, want only the final answer", got)
+	}
+}
+
+func TestRelayAnswerSurvivesEchoFailure(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "start"})
+	waitForReplies(t, rig.coderPlat, 1)
+	originID := rig.coderRouter.sessions.ActiveID(relayKey("coder"))
+	rig.reviewPlat.cards = true
+	rig.reviewPlat.sendErr = errors.New("chat not found")
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: originID, Channel: "feishu", ChatID: "c1", ChatType: "group"})
+	envelope, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "review it"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitRelay(t, "answer despite echo failure", func() bool {
+		if relayEnvelopeState(rig.hub, envelope.ID) != RelayStateDone {
+			return false
+		}
+		_, resumes, _ := rig.coderEng.counts()
+		return resumes == 1
+	})
+	if got := rig.coderPlat.lastReply(); got != "answer" {
+		t.Fatalf("origin answer = %q", got)
+	}
+}

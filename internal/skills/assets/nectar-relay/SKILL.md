@@ -88,6 +88,8 @@ changes. Relay again only if the result genuinely needs another hop.
 - `ERR_TARGET_UNKNOWN` — no such bot. Run `relay bots`.
 - `ERR_REJECTED` — the target refused this sender or this chat (its
   `relay_accept_from` / `allowed_chats`) or the request is invalid.
+- `ERR_DIRECT_CHAT` — relay cannot start from a direct chat. Ask the user to
+  run the task in a group, or the daemon must enable `relay.allow_direct`.
 - `ERR_MUTUAL_RELAY` — the same human message already started an ask from the
   target to you, and the target is asking you back. Do not relay back and
   forth; finish the work you already have or report to the user.

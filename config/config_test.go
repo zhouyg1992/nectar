@@ -630,6 +630,9 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 	if !cfg.RelayFirstMentionOnly() {
 		t.Fatal("relay first_mention_only should default to true")
 	}
+	if cfg.RelayAllowDirect() {
+		t.Fatal("relay allow_direct should default to false")
+	}
 	if ttl, err := cfg.RelayRootTTL(); err != nil || ttl != 30*time.Minute {
 		t.Fatalf("relay root ttl = %v, %v", ttl, err)
 	}
@@ -652,7 +655,7 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 		}
 	}
 
-	write("[relay]\nenabled = true\necho = \"off\"\nmax_generation = 2\nfirst_mention_only = false\n")
+	write("[relay]\nenabled = true\necho = \"off\"\nmax_generation = 2\nfirst_mention_only = false\nallow_direct = true\n")
 	cfg, err = Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -662,5 +665,8 @@ func TestRelayDefaultsAndValidation(t *testing.T) {
 	}
 	if cfg.RelayFirstMentionOnly() {
 		t.Fatal("relay first_mention_only = false was not honored")
+	}
+	if !cfg.RelayAllowDirect() {
+		t.Fatal("relay allow_direct = true was not honored")
 	}
 }

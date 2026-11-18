@@ -50,6 +50,7 @@ const (
 	ErrRelayRejected      = "ERR_REJECTED"
 	ErrRelayUnauthorized  = "ERR_UNAUTHORIZED"
 	ErrRelayMutual        = "ERR_MUTUAL_RELAY"
+	ErrRelayDirectChat    = "ERR_DIRECT_CHAT"
 )
 
 // RelayError carries a stable code so the API and CLI can expose it without

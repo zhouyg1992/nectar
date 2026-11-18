@@ -27,6 +27,7 @@ type RelayHubOptions struct {
 	MaxRunsPerRoot      int
 	RootTTL             time.Duration
 	FirstMentionOnly    bool
+	AllowDirect         bool
 	Logger              *slog.Logger
 }
 
@@ -394,6 +395,7 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		return nil, relayError(ErrRelayGenLimit, "relay chain reached %d hops (max %d)", gen, h.opts.MaxGeneration)
 	}
 	chatID := binding.ChatID
+	chatType := binding.ChatType
 	if binding.RootID != "" {
 		existingRoot := h.roots[binding.RootID]
 		if existingRoot == nil {
@@ -401,6 +403,13 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 			return nil, relayError(ErrRelayTargetUnknown, "unknown relay root %q", binding.RootID)
 		}
 		chatID = existingRoot.ChatID
+		chatType = existingRoot.ChatType
+	}
+	// The target bot is not a participant in the sender's direct chat, so its
+	// output could never be shown there; refusing early avoids a wasted run.
+	if strings.EqualFold(strings.TrimSpace(chatType), "p2p") && !h.opts.AllowDirect {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayDirectChat, "relay needs a group chat; mention the bot in a group instead")
 	}
 	// The target's own chat allowlist still applies to relay: a bot should not
 	// be reachable from a chat its platform adapter would refuse.
@@ -486,10 +495,12 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 
 	h.persist()
 
-	sender := h.botByName(envelope.From)
-	if sender != nil && sender.router != nil {
-		if _, err := sender.router.SendRelayMirror(h.context(), *envelope, target.name); err != nil {
-			h.logger.Warn("relay mirror failed", "envelope", envelope.ID, "error", err)
+	if !strings.EqualFold(strings.TrimSpace(envelope.ChatType), "p2p") {
+		sender := h.botByName(envelope.From)
+		if sender != nil && sender.router != nil {
+			if _, err := sender.router.SendRelayMirror(h.context(), *envelope, target.name); err != nil {
+				h.logger.Warn("relay mirror failed", "envelope", envelope.ID, "error", err)
+			}
 		}
 	}
 	copied := *envelope
@@ -583,6 +594,10 @@ func (h *RelayHub) deliver(envelope *RelayEnvelope) {
 	h.persist()
 
 	result, err := target.router.ExecuteRelay(ctx, *envelope)
+	// A platform echo (progress card, result card) may fail without meaning the
+	// agent failed, for example when the target is not in the chat. The answer
+	// still has to reach the origin session.
+	answered := err == nil || (strings.TrimSpace(result.Answer) != "" && !result.Failed)
 
 	h.mu.Lock()
 	delete(h.runs, envelope.ID)
@@ -590,11 +605,11 @@ func (h *RelayHub) deliver(envelope *RelayEnvelope) {
 	envelope.UpdatedAt = time.Now().UTC()
 	canceled := envelope.State == RelayStateCanceled
 	if !canceled {
-		if err != nil {
-			envelope.State = RelayStateFailed
-			envelope.Error = err.Error()
-		} else {
+		if answered {
 			envelope.State = RelayStateDone
+		} else {
+			envelope.State = RelayStateFailed
+			envelope.Error = execguardSafeError(err)
 		}
 	}
 	h.mu.Unlock()
@@ -603,9 +618,12 @@ func (h *RelayHub) deliver(envelope *RelayEnvelope) {
 	if canceled || envelope.Kind != RelayKindAsk {
 		return
 	}
-	if err != nil {
+	if !answered {
 		h.sendReply(envelope, "⚠️ Relay to "+envelope.To+" failed: "+execguardSafeError(err))
 		return
+	}
+	if err != nil {
+		h.logger.Warn("relay echo failed; returning the answer anyway", "envelope", envelope.ID, "error", err)
 	}
 	h.sendReply(envelope, result.Answer)
 }

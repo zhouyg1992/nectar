@@ -145,9 +145,15 @@ func (r *Router) ExecuteRelay(ctx context.Context, envelope RelayEnvelope) (RunR
 		Text:     envelope.Body,
 		Origin:   "relay",
 	}
+	echo := r.relay.Echo()
+	if strings.EqualFold(strings.TrimSpace(envelope.ChatType), "p2p") {
+		// A direct-chat root can still return the answer to the sender, but the
+		// target must not try to post into a chat it does not belong to.
+		echo = RelayEchoOff
+	}
 	info := &relayRunInfo{
 		target:     !replyTurn,
-		echo:       r.relay.Echo(),
+		echo:       echo,
 		rootID:     envelope.RootID,
 		envelopeID: envelope.ID,
 		gen:        envelope.Gen,
