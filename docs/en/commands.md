@@ -67,11 +67,11 @@ Lists the `[bot]` and `[bots.*]` entries after resolution, including ID, platfor
 ## Multi-bot relay
 
 ```bash
-nectar relay bots [--json] [--bot ID] [--config PATH]
-nectar relay send --to BOT [--no-reply] [--idempotency-key K] -- "self-contained brief"
-nectar relay roots [--json] [--chat CHAT_ID]
-nectar relay show ROOT [--json]
-nectar relay cancel ROOT
+nectar relay bots [--json] [--bot ID] [--config PATH] [--socket PATH]
+nectar relay send --to BOT [--no-reply] [--idempotency-key K] [--json] -- "self-contained brief"
+nectar relay roots [--json] [--chat CHAT_ID] [--bot ID] [--config PATH] [--socket PATH]
+nectar relay show ROOT [--json] [--bot ID] [--config PATH] [--socket PATH]
+nectar relay cancel ROOT [--bot ID] [--config PATH] [--socket PATH]
 ```
 
 `relay send` needs the `NECTAR_RELAY_TOKEN` injected into agent runs and only works there; `roots` / `show` / `cancel` are operator commands. The chat command `"/relay stop"` cancels every open relay root in the chat (admin users only). See [multi-bot collaboration](multi-bot-relay.md).

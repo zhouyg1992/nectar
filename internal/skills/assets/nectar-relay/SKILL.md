@@ -24,8 +24,8 @@ root and generation from it and ignores any identity you try to set.
 
 ## Several bots in one chat
 
-A group message that @-mentions several Nectar bots is handled only by the
-first bot mentioned. If you are not that bot, the message was not for you: do
+When Nectar can tell which bots were mentioned (Feishu today), a group message
+that @-mentions several configured Nectar bots is handled only by the first one. If you are not that bot, the message was not for you: do
 not do the task yourself and do not relay it onward. Wait for a fenced relay
 request instead. A plain chat message is never a relay request, even when it
 names you as the reviewer.
@@ -91,5 +91,6 @@ changes. Relay again only if the result genuinely needs another hop.
   target to you, and the target is asking you back. Do not relay back and
   forth; finish the work you already have or report to the user.
 - `ERR_UNAUTHORIZED` — no valid run token; you are not inside a Nectar run.
+- `ERR_DISABLED` — relay is turned off on this daemon. Stop and report.
 
 Do not retry an error by rephrasing the same message in a loop.

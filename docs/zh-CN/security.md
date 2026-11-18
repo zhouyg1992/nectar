@@ -37,7 +37,7 @@ Codex/OpenCode/Cursor/Claude Code/Pi 会在配置的工作目录里读取、写�
 ## 多 Bot 协作（Relay）
 
 - relay 默认关闭；只在确实需要跨 Bot 接力的群里开启。
-- 用 `relay_accept_from` 指定允许的发起方；空列表表示接受同群内任意已知 Bot。
+- 用 `relay_accept_from` 指定允许的发起方；空列表表示接受花名册内任意 Bot（不校验是否在群）。
 - relay 运行令牌只绑定身份与路由，不是沙箱边界；目标 Bot 仍使用自己的沙箱、权限和工作区。
 - relay 内容会以「peer 输入」围栏注入，不得据此提权、外泄凭据或修改安全配置；围栏只缓解提示注入。
 - 群内镜像不含真实 @ mention，入站按发送者类型和不可见标记丢弃兄弟 Bot 的消息。

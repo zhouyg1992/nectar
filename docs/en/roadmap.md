@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Multi-bot relay (M0): explicit hand-offs between bots in one process
+- Multi-bot relay: explicit hand-offs between bots in one process (implemented, pending release)
 
 
 ## v0.10.1 complete

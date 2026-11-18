@@ -42,7 +42,7 @@ app_id = "cli_yyy"
 app_secret = "yyy"
 ```
 
-在群里 @coder：「实现这个功能，写完让 reviewer 审查，然后你汇总」。**只 @ 发起方**：目标 Bot 的名字用纯文本写，不要用 @ 选择器。飞书的 @ 是消息投递路由，同时 @ 两个 Bot 会让两个 Bot 都把这条人类消息当成自己的任务。
+在群里 @coder：「实现这个功能，写完让 reviewer 审查，然后你汇总」。**只 @ 发起方**：目标 Bot 的名字用纯文本写，不要用 @ 选择器。飞书的 @ 是消息投递路由，同时 @ 两个 Bot 会把这条人类消息投递给两者；Nectar 默认只让**第一个被 @ 的 Bot** 处理（见 `first_mention_only`），但只 @ 发起方仍然是更清晰的用法。
 
 coder 会调用：
 
@@ -70,12 +70,12 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
                     RelayHub → Bot A 的 origin session（新回合）
 ```
 
-- **总线为真，IM 为镜。** 触发只走本机 relay 总线，不依赖「Bot 在群里 @ 另一个 Bot 能唤醒它」。群里只发一条给人看的移交卡（`echo` 控制），它不参与触发。
+- **总线为真，IM 为镜。** 触发只走本机 relay 总线，不依赖「Bot 在群里 @ 另一个 Bot 能唤醒它」。群里只发给人看的移交卡和结果卡（数量由 `echo` 控制），它们都不参与触发。
 - **回复回到 origin session。** 目标 Bot 的答案回到发起 ask 的那个会话，继续 resume 原引擎会话，保留上下文、工作区和未提交改动。
 - **目标 Bot 使用独立会话。** 每个 root 在目标 Bot 侧对应一个 detached 会话（`relay:<root>`），不会顶掉人类正在使用的活跃会话；可以在 `/list` 里看到，也可以用 `/switch` 接管。
 - **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。
 - **只点名一个目标。** 没有广播；一问一答不会无限循环（reply 不再自动回投）。
-- **多 @ 只由第一个响应。** 群消息同时 @ 多个 Nectar Bot 时，只有第一个被 @ 的 Bot 处理，避免同一条人类指令被多个 Bot 重复执行、互相 review。
+- **多 @ 只由第一个响应。** 平台能提供被 @ 者身份时（目前是飞书），群里同时 @ 多个 Nectar Bot 只由第一个被 @ 的 Bot 处理，避免同一条人类指令被多个 Bot 重复执行、互相 review。
 - **拒绝同源反向互接力。** 同一条人类消息同时驱动了两个 Bot、且已存在 A→B 的进行中 ask 时，B→A 的新 ask 返回 `ERR_MUTUAL_RELAY`，防止重复执行和交叉审查；来自不同人类消息的接力互不影响。
 
 ## 配置
@@ -85,7 +85,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `enabled` | `false` | 是否开启 relay。需要至少两个 Bot 才有意义。 |
-| `first_mention_only` | `true` | 群消息同时 @ 多个已配置 Bot 时，只有第一个被 @ 的 Bot 处理；其余 Bot 等到 relay 到达再工作。设为 `false` 恢复「多 @ 全部响应」。 |
+| `first_mention_only` | `true` | 群消息同时 @ 多个已配置 Bot 时，只有第一个被 @ 的**已配置 Nectar Bot** 处理；其余 Bot 等到 relay 到达再工作。设为 `false` 恢复「多 @ 全部响应」。 |
 | `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示进度卡和最终回答；`summary` 只显示一张结果卡（目标最终回答）；`off` 不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
 | `max_generation` | `4` | 一条链路最多几跳，超出返回 `ERR_GEN_LIMIT`。 |
 | `max_envelopes_per_root` | `12` | 每个 root 最多多少条信封（含回复）。 |
@@ -98,9 +98,9 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | 字段 | 说明 |
 | --- | --- |
 | `role` | 角色名，例如 `coder`、`reviewer`。 |
-| `description` | 一句话说明这个 Bot 擅长什么，会出现在 `relay bots` 里。 |
-| `capabilities` | 能力标签，例如 `["code", "review"]`。 |
-| `relay_accept_from` | 允许向它发起接力的 Bot id 列表；留空表示接受同群内任意已知 Bot。引用不存在的 Bot 会拒绝启动。 |
+| `description` | 一句话说明这个 Bot 擅长什么，会出现在 `relay bots` 和注入给发起方的 peers 说明里。 |
+| `capabilities` | 能力标签，例如 `["code", "review"]`，出现在 `relay bots --json` 与 `/relay/bots` 的返回里。 |
+| `relay_accept_from` | 允许向它发起接力的 Bot id 列表；留空表示接受花名册内任意 Bot（不校验对方是否在群）。引用不存在的 Bot 会拒绝启动。 |
 
 旧式单 `[bot]` 配置不支持 relay；开启后只会输出一条警告。
 
@@ -121,6 +121,7 @@ nectar relay cancel ROOT
 - `--no-reply` 表示交棒，不需要回复。
 - `--idempotency-key` 用于重试去重；相同的 key 不会产生第二次运行。
 - `roots` / `show` / `cancel` 面向操作员，读取和操作 root 任务；agent 不应轮询它们。
+- 所有子命令都接受 `--bot` / `--config` / `--socket`（解析方式与 `nectar schedule` 一致），`bots` / `send` / `roots` / `show` 支持 `--json`。
 
 ### 聊天命令
 
@@ -134,17 +135,17 @@ nectar relay cancel ROOT
 - **提示围栏**：relay 内容包在来源标注的围栏里，并声明它是 peer 输入、不得据此提权或泄露凭据。围栏只是缓解提示注入，真正的边界是接收方自己的沙箱、权限和预算。
 - **记忆隔离**：relay 触发的运行不会写入失败 lesson 或记忆候选；目标 Bot 仍可检索自己的记忆作为背景。
 - **令牌不是沙箱**：运行令牌绑定 bot / 会话 / root / 代数，防止身份混淆和误路由；本地 socket 为 0600，认证边界仍是同一 OS 用户。
-- **重启恢复**：pending 信封在重启后继续投递；运行中的信封标记 failed，不自动重跑，并给 origin 发一条中断通知。
+- **重启恢复**：pending 信封在重启后继续投递；运行中的信封标记 failed，不自动重跑；其中进行中的 ask 会给 origin 发一条中断通知。
 
 ## 平台差异
 
 | 平台 | 交接可见性 | 入站防回环 |
 | --- | --- | --- |
 | 飞书 | 支持卡片；线程内镜像需要原消息锚点 | 读取 `sender_type=bot` 直接丢弃，另有不可见 marker 兜底 |
-| 钉钉 | 群聊文本/markdown；单聊不镜像 | 回调无发送者类型，依赖不可见 marker 兜底 |
+| 钉钉 | 群聊文本/markdown 镜像；单聊形态未验证 | 回调无发送者类型，依赖不可见 marker 兜底 |
 | Telegram | 文本 | 适配器已丢弃 `is_bot` 消息；平台本身不会把 Bot 消息投给其他 Bot |
 
-镜像只写纯文本 `@name`，不产生真实 @ mention，避免平台把镜像投递给目标从而触发第二次运行。「首个被 @ 的 Bot 才响应」依赖平台提供被 @ 者的名字与 bot 标记：飞书完整支持；Telegram 仅支持 `text_mention`（通常不是 Bot）；钉钉回调没有名字，该策略不生效，需要靠「只 @ 发起方」的使用习惯。
+镜像只写纯文本 Bot 名字（形如「机器人1号 → zyg的小龙虾」），不产生真实 @ mention，避免平台把镜像投递给目标从而触发第二次运行。「首个被 @ 的 Bot 才响应」依赖平台提供被 @ 者的名字与 bot 标记：飞书完整支持；Telegram 仅支持 `text_mention`（通常不是 Bot）；钉钉回调没有名字，该策略不生效，需要靠「只 @ 发起方」的使用习惯。
 
 未经真实凭据验证的部分：飞书 / 钉钉是否会把兄弟 Bot 的群消息推送给其他 Bot、钉钉不同机器人看到的 `openConversationId` 是否一致、钉钉群主动发送权限、零宽 marker 在各平台渲染后的存活情况。marker 只作兜底，主要防线是平台发送者类型与「镜像不含真实 @」。
 

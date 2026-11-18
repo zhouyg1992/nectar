@@ -242,7 +242,7 @@ workspace_mode = "shared"
 # role = "reviewer"
 # description = "Read-only diff reviews and risk findings"
 # capabilities = ["review", "security"]
-# # Empty accepts any known bot in the same chat; list ids to restrict senders.
+# # Empty accepts any bot in the roster (membership is not checked); list ids to restrict senders.
 # relay_accept_from = []
 #
 # [bots.reviewer.feishu]
