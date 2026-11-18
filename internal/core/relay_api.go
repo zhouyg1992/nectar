@@ -33,7 +33,7 @@ func (a *ScheduleAPI) handleRelaySend(w http.ResponseWriter, r *http.Request) {
 	}
 	binding := a.relayBinding(r)
 	if binding == nil {
-		writeRelayError(w, relayError(ErrRelayUnauthorized, "missing or expired relay token; relay send only works inside a Nectar agent run"))
+		writeRelayError(w, relayError(ErrRelayUnauthorized, "missing or revoked relay token; relay send only works inside a Nectar agent run"))
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, relayMaxBodyBytes+4096)

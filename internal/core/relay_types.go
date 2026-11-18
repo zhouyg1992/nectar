@@ -112,6 +112,7 @@ type RelayRoot struct {
 	OriginSessionID string           `json:"origin_session_id"`
 	OriginRunID     string           `json:"origin_run_id,omitempty"`
 	OriginMessageID string           `json:"origin_message_id,omitempty"`
+	OriginUserID    string           `json:"origin_user_id,omitempty"`
 	Channel         string           `json:"channel"`
 	ChatID          string           `json:"chat_id"`
 	ChatType        string           `json:"chat_type,omitempty"`
@@ -132,6 +133,7 @@ type RelayPeer struct {
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 	AcceptFrom   []string `json:"accept_from,omitempty"`
+	AllowedChats []string `json:"allowed_chats,omitempty"`
 	Busy         bool     `json:"busy"`
 }
 
@@ -157,6 +159,7 @@ type RelayTokenRequest struct {
 	ChatType        string
 	ThreadID        string
 	OriginMessageID string
+	OriginUserID    string
 }
 
 type relayTokenBinding struct {
@@ -172,6 +175,7 @@ type relayBot struct {
 	description  string
 	capabilities []string
 	acceptFrom   []string
+	allowedChats []string
 	router       *Router
 }
 

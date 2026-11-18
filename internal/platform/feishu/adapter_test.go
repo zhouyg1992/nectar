@@ -369,6 +369,10 @@ func TestToPlatformMessageMarksBotSender(t *testing.T) {
 	if got := toPlatformMessage(msg); !got.FromBot {
 		t.Fatal("bot sender was not marked")
 	}
+	senderType = "app"
+	if got := toPlatformMessage(msg); !got.FromBot {
+		t.Fatal("app sender was not marked")
+	}
 	senderType = "user"
 	if got := toPlatformMessage(msg); got.FromBot {
 		t.Fatal("user sender was marked as a bot")

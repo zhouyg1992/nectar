@@ -72,6 +72,11 @@ func runBot(configPath string) error {
 	}
 	if relayHub != nil {
 		defer relayHub.Close()
+		for _, bot := range bots {
+			if len(bot.Config.Bot.AdminUsers) > 0 && len(bot.Config.Bot.RelayAcceptFrom) == 0 {
+				logger.Warn("relay target has admin users but accepts relay from any bot; set relay_accept_from", "bot", bot.ID)
+			}
+		}
 	}
 
 	runtimes := make([]*botRuntime, 0, len(bots))
@@ -229,6 +234,7 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 			Description:  cfg.Bot.Description,
 			Capabilities: cfg.Bot.Capabilities,
 			AcceptFrom:   cfg.Bot.RelayAcceptFrom,
+			AllowedChats: cfg.Bot.AllowedChats,
 		}, router)
 		router.SetRelay(relayHub)
 	}

@@ -312,14 +312,12 @@ func (r *Router) sendCardReply(msg platform.Message, card *platform.Card) (strin
 }
 
 func (r *Router) Handle(msg platform.Message) {
-	// Bot-authored messages and relay mirrors are visibility aids, never
-	// triggers. Drop them before anchors and command parsing so a mirror can
-	// not overwrite the human's delivery anchor or run a slash command.
-	if msg.FromBot {
-		return
-	}
 	if r.relay != nil {
-		if r.relay.IsMirrorText(msg.Text) {
+		// Bot-authored messages and relay mirrors are visibility aids, never
+		// triggers. Drop them before anchors and command parsing so a mirror
+		// can not overwrite the human's delivery anchor or run a slash command.
+		// With relay disabled the previous ingress behavior is unchanged.
+		if msg.FromBot || r.relay.IsMirrorText(msg.Text) {
 			return
 		}
 		r.relay.NoteChat(msg.ChatID, r.EffectiveBotID())
@@ -537,6 +535,7 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 			ChatType:        msg.ChatType,
 			ThreadID:        key.ThreadID,
 			OriginMessageID: msg.MessageID,
+			OriginUserID:    msg.UserID,
 		}
 		if relay != nil {
 			tokenReq.RootID = relay.rootID

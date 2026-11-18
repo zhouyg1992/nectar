@@ -505,9 +505,9 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 		// Relay mirrors are posted by a sibling bot. Mark them so the router
 		// drops them before they can trigger another run; the zero-width
 		// marker is only a fallback for platforms that lack this signal.
-		if raw.Event.Sender != nil && raw.Event.Sender.SenderType != nil &&
-			strings.EqualFold(strings.TrimSpace(*raw.Event.Sender.SenderType), "bot") {
-			out.FromBot = true
+		if raw.Event.Sender != nil && raw.Event.Sender.SenderType != nil {
+			kind := strings.TrimSpace(*raw.Event.Sender.SenderType)
+			out.FromBot = strings.EqualFold(kind, "bot") || strings.EqualFold(kind, "app")
 		}
 	}
 	return out
@@ -916,7 +916,8 @@ func feishuMentions(msg *channeltypes.NormalizedMessage) []platform.Mention {
 				}
 			}
 			if mention.MentionedType != nil {
-				item.IsBot = strings.EqualFold(strings.TrimSpace(*mention.MentionedType), "bot")
+				kind := strings.TrimSpace(*mention.MentionedType)
+				item.IsBot = strings.EqualFold(kind, "bot") || strings.EqualFold(kind, "app")
 			}
 			out = append(out, item)
 		}

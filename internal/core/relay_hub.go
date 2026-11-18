@@ -34,6 +34,7 @@ type RelayHubOptions struct {
 // whole process and is shared by every bot runtime.
 type RelayHub struct {
 	mu        sync.Mutex
+	persistMu sync.Mutex
 	opts      RelayHubOptions
 	logger    *slog.Logger
 	path      string
@@ -46,8 +47,13 @@ type RelayHub struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	started   bool
+	closed    bool
 	wg        sync.WaitGroup
 }
+
+// relayJournalRetention bounds how long a finished root and its envelopes stay
+// in the journal before the next Start prunes them.
+const relayJournalRetention = 24 * time.Hour
 
 // NewRelayHub loads persisted relay state. A missing state file is normal; a
 // corrupt one is an error so the caller can refuse to start relay rather than
@@ -101,6 +107,7 @@ func (h *RelayHub) Register(bot RelayPeer, router *Router) {
 		description:  bot.Description,
 		capabilities: append([]string(nil), bot.Capabilities...),
 		acceptFrom:   append([]string(nil), bot.AcceptFrom...),
+		allowedChats: append([]string(nil), bot.AllowedChats...),
 		router:       router,
 	}
 }
@@ -130,6 +137,7 @@ func (h *RelayHub) Start(ctx context.Context) {
 			envelope.UpdatedAt = time.Now().UTC()
 		}
 	}
+	h.pruneLocked()
 	h.mu.Unlock()
 
 	h.persist()
@@ -146,7 +154,11 @@ func (h *RelayHub) Start(ctx context.Context) {
 
 // Close stops delivery and waits for in-flight envelopes.
 func (h *RelayHub) Close() {
-	h.cancel()
+	h.mu.Lock()
+	h.closed = true
+	cancel := h.cancel
+	h.mu.Unlock()
+	cancel()
 	h.wg.Wait()
 }
 
@@ -160,6 +172,28 @@ func (h *RelayHub) NoteChat(chatID, botID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.noteChatLocked(chatID, botID)
+}
+
+// pruneLocked drops closed or expired roots and their envelopes so the
+// journal does not grow without bound.
+func (h *RelayHub) pruneLocked() {
+	cutoff := time.Now().UTC().Add(-relayJournalRetention)
+	for id, root := range h.roots {
+		if root.CreatedAt.After(cutoff) {
+			continue
+		}
+		delete(h.roots, id)
+		for envelopeID, envelope := range h.envelopes {
+			if envelope.RootID == id {
+				delete(h.envelopes, envelopeID)
+			}
+		}
+	}
+	for envelopeID, envelope := range h.envelopes {
+		if h.roots[envelope.RootID] == nil {
+			delete(h.envelopes, envelopeID)
+		}
+	}
 }
 
 func (h *RelayHub) noteChatLocked(chatID, botID string) {
@@ -182,9 +216,14 @@ func (h *RelayHub) MintToken(req RelayTokenRequest) string {
 	}
 	token := hex.EncodeToString(buf[:])
 	req.Prompt = truncateRelayPrompt(req.Prompt)
-	if req.OriginMessageID == "" && req.RootID != "" {
+	if req.RootID != "" {
 		if root := h.roots[req.RootID]; root != nil {
-			req.OriginMessageID = root.OriginMessageID
+			if req.OriginMessageID == "" {
+				req.OriginMessageID = root.OriginMessageID
+			}
+			if req.OriginUserID == "" {
+				req.OriginUserID = root.OriginUserID
+			}
 		}
 	}
 	h.tokens[token] = &relayTokenBinding{RelayTokenRequest: req, Token: token, CreatedAt: time.Now().UTC()}
@@ -213,6 +252,13 @@ func (h *RelayHub) TokenBinding(token string) *relayTokenBinding {
 	return &copied
 }
 
+// context returns the hub's base context under the lock; Start may replace it.
+func (h *RelayHub) context() context.Context {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.ctx
+}
+
 // Echo returns the configured echo level for relay target runs.
 func (h *RelayHub) Echo() string {
 	return h.opts.Echo
@@ -233,10 +279,28 @@ func (h *RelayHub) BotIDByName(name string) (string, bool) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for _, bot := range h.bots {
-		if relayNamesMatch(bot.name, name) || relayNamesMatch(bot.id, name) {
-			return bot.id, true
+	ids := make([]string, 0, len(h.bots))
+	for id := range h.bots {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		bot := h.bots[id]
+		if normalizeMentionName(bot.name) == want || normalizeMentionName(bot.id) == want {
+			return id, true
 		}
+	}
+	match := ""
+	matches := 0
+	for _, id := range ids {
+		bot := h.bots[id]
+		if relayNamesMatch(bot.name, name) || relayNamesMatch(bot.id, name) {
+			match = id
+			matches++
+		}
+	}
+	if matches == 1 {
+		return match, true
 	}
 	return "", false
 }
@@ -310,6 +374,15 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 	targetID := strings.TrimSpace(req.To)
 
 	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayDisabled, "relay is shutting down")
+	}
+	// A request may carry a binding snapshot taken before a concurrent send
+	// created the root; the stored token is authoritative.
+	if stored := h.tokens[binding.Token]; stored != nil && binding.RootID == "" {
+		binding.RootID = stored.RootID
+	}
 	target := h.bots[targetID]
 	if target == nil {
 		h.mu.Unlock()
@@ -320,10 +393,6 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayGenLimit, "relay chain reached %d hops (max %d)", gen, h.opts.MaxGeneration)
 	}
-	if len(target.acceptFrom) > 0 && !containsString(target.acceptFrom, binding.BotID) {
-		h.mu.Unlock()
-		return nil, relayError(ErrRelayRejected, "%s does not accept relay from %s", targetID, binding.BotID)
-	}
 	chatID := binding.ChatID
 	if binding.RootID != "" {
 		existingRoot := h.roots[binding.RootID]
@@ -332,6 +401,16 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 			return nil, relayError(ErrRelayTargetUnknown, "unknown relay root %q", binding.RootID)
 		}
 		chatID = existingRoot.ChatID
+	}
+	// The target's own chat allowlist still applies to relay: a bot should not
+	// be reachable from a chat its platform adapter would refuse.
+	if !relayChatAllowed(target.allowedChats, chatID) {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayRejected, "%s does not accept relay from this chat", targetID)
+	}
+	if len(target.acceptFrom) > 0 && !containsString(target.acceptFrom, binding.BotID) {
+		h.mu.Unlock()
+		return nil, relayError(ErrRelayRejected, "%s does not accept relay from %s", targetID, binding.BotID)
 	}
 	// Membership is best effort: a bot only shows up here after it received a
 	// message, so an empty map does not mean the target is absent. Deliver
@@ -343,12 +422,30 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayMutual, "the same message already has an ask from %s to you in this chat", targetID)
 	}
-	// Every validation that can fail runs before the root is created, so a
-	// rejected send never leaves an empty root behind.
+	rootWasBound := binding.RootID != ""
 	root, err := h.ensureRootLocked(binding)
 	if err != nil {
 		h.mu.Unlock()
 		return nil, err
+	}
+	kind := RelayKindAsk
+	if req.NoReply {
+		kind = RelayKindHandoff
+	}
+	key := strings.TrimSpace(req.IdempotencyKey)
+	if key == "" {
+		key = relayIdempotencyKey(binding.BotID, targetID, root.ID, binding.RootID, kind, body)
+	}
+	// Idempotency precedes budget checks so retrying an accepted send returns
+	// the original envelope instead of a budget error.
+	if existing := h.envelopeByKeyLocked(binding.BotID, targetID, key); existing != nil {
+		if !rootWasBound {
+			h.rollbackRootLocked(root.ID, binding)
+		}
+		copied := *existing
+		h.mu.Unlock()
+		h.persist()
+		return &copied, nil
 	}
 	if time.Since(root.CreatedAt) > h.opts.RootTTL {
 		root.State = relayRootClosed
@@ -363,19 +460,6 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 	if root.RunCount >= h.opts.MaxRunsPerRoot {
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayBudget, "relay root reached %d target runs", h.opts.MaxRunsPerRoot)
-	}
-	kind := RelayKindAsk
-	if req.NoReply {
-		kind = RelayKindHandoff
-	}
-	key := strings.TrimSpace(req.IdempotencyKey)
-	if key == "" {
-		key = relayIdempotencyKey(binding.BotID, targetID, root.ID, binding.RootID, kind, body)
-	}
-	if existing := h.envelopeByKeyLocked(binding.BotID, targetID, key); existing != nil {
-		copied := *existing
-		h.mu.Unlock()
-		return &copied, nil
 	}
 	now := time.Now().UTC()
 	envelope := &RelayEnvelope{
@@ -404,7 +488,7 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 
 	sender := h.botByName(envelope.From)
 	if sender != nil && sender.router != nil {
-		if _, err := sender.router.SendRelayMirror(h.ctx, *envelope, target.name); err != nil {
+		if _, err := sender.router.SendRelayMirror(h.context(), *envelope, target.name); err != nil {
 			h.logger.Warn("relay mirror failed", "envelope", envelope.ID, "error", err)
 		}
 	}
@@ -413,9 +497,42 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 	return &copied, nil
 }
 
+// relayChatAllowed mirrors the adapters' allowed_chats semantics: an empty
+// list accepts every chat, otherwise the chat id must match exactly.
+func relayChatAllowed(allowed []string, chatID string) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return false
+	}
+	for _, id := range allowed {
+		if strings.TrimSpace(id) == chatID {
+			return true
+		}
+	}
+	return false
+}
+
+// rollbackRootLocked removes a root that was created only for a duplicate send.
+func (h *RelayHub) rollbackRootLocked(rootID string, binding *relayTokenBinding) {
+	delete(h.roots, rootID)
+	binding.RootID = ""
+	if stored := h.tokens[binding.Token]; stored != nil && stored.RootID == rootID {
+		stored.RootID = ""
+	}
+}
+
 // dispatch delivers an envelope in the background.
 func (h *RelayHub) dispatch(envelope *RelayEnvelope) {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
 	h.wg.Add(1)
+	h.mu.Unlock()
 	go func() {
 		defer h.wg.Done()
 		h.deliver(envelope)
@@ -471,16 +588,19 @@ func (h *RelayHub) deliver(envelope *RelayEnvelope) {
 	delete(h.runs, envelope.ID)
 	cancel()
 	envelope.UpdatedAt = time.Now().UTC()
-	if err != nil {
-		envelope.State = RelayStateFailed
-		envelope.Error = err.Error()
-	} else {
-		envelope.State = RelayStateDone
+	canceled := envelope.State == RelayStateCanceled
+	if !canceled {
+		if err != nil {
+			envelope.State = RelayStateFailed
+			envelope.Error = err.Error()
+		} else {
+			envelope.State = RelayStateDone
+		}
 	}
 	h.mu.Unlock()
 	h.persist()
 
-	if envelope.Kind != RelayKindAsk {
+	if canceled || envelope.Kind != RelayKindAsk {
 		return
 	}
 	if err != nil {
@@ -545,7 +665,7 @@ func (h *RelayHub) CancelRoot(rootID string) error {
 			continue
 		}
 		switch envelope.State {
-		case RelayStatePending:
+		case RelayStatePending, RelayStateRunning:
 			envelope.State = RelayStateCanceled
 			envelope.Error = "relay root canceled"
 			envelope.UpdatedAt = time.Now().UTC()
@@ -606,7 +726,10 @@ func (h *RelayHub) RootsForChat(chatID string) []*RelayRoot {
 // the visible hand-off title, which survives platforms that strip zero-width
 // characters.
 func (h *RelayHub) IsMirrorText(text string) bool {
-	return strings.Contains(text, relayMirrorMarkerPrefix) || strings.Contains(text, relayMirrorTitle)
+	if strings.Contains(text, relayMirrorMarkerPrefix) {
+		return true
+	}
+	return strings.HasPrefix(strings.TrimSpace(text), relayMirrorTitle)
 }
 
 func (h *RelayHub) rootSnapshotLocked(root *RelayRoot) *RelayRoot {
@@ -642,6 +765,7 @@ func (h *RelayHub) ensureRootLocked(binding *relayTokenBinding) (*RelayRoot, err
 		OriginSessionID: binding.SessionID,
 		OriginRunID:     binding.RunID,
 		OriginMessageID: binding.OriginMessageID,
+		OriginUserID:    binding.OriginUserID,
 		Channel:         binding.Channel,
 		ChatID:          binding.ChatID,
 		ChatType:        binding.ChatType,
@@ -652,6 +776,9 @@ func (h *RelayHub) ensureRootLocked(binding *relayTokenBinding) (*RelayRoot, err
 	}
 	h.roots[root.ID] = root
 	binding.RootID = root.ID
+	if stored := h.tokens[binding.Token]; stored != nil {
+		stored.RootID = root.ID
+	}
 	return root, nil
 }
 
@@ -712,6 +839,8 @@ func (h *RelayHub) botByName(id string) *relayBot {
 }
 
 func (h *RelayHub) persist() {
+	h.persistMu.Lock()
+	defer h.persistMu.Unlock()
 	h.mu.Lock()
 	data, err := marshalRelayState(h.roots, h.envelopes)
 	path := h.path

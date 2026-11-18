@@ -86,7 +86,8 @@ changes. Relay again only if the result genuinely needs another hop.
 - `ERR_GEN_LIMIT` — the relay chain is too deep. Stop and report.
 - `ERR_BUDGET` — the root task is out of envelopes/runs/time. Stop and report.
 - `ERR_TARGET_UNKNOWN` — no such bot. Run `relay bots`.
-- `ERR_REJECTED` — the target refused this sender or the request is invalid.
+- `ERR_REJECTED` — the target refused this sender or this chat (its
+  `relay_accept_from` / `allowed_chats`) or the request is invalid.
 - `ERR_MUTUAL_RELAY` — the same human message already started an ask from the
   target to you, and the target is asking you back. Do not relay back and
   forth; finish the work you already have or report to the user.
