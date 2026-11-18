@@ -397,3 +397,32 @@ func TestToPlatformMessageMapsMentions(t *testing.T) {
 		t.Fatalf("user mention = %#v", got.Mentions[1])
 	}
 }
+
+func TestToPlatformMessageMapsRawBotMentions(t *testing.T) {
+	botName, botType, botID := "zyg的小龙虾🦞", "bot", "ou_bot_2"
+	humanName, humanType, humanID := "张三", "user", "ou_user_1"
+	msg := &channeltypes.NormalizedMessage{
+		MessageID: "m1",
+		ChatID:    "c1",
+		ChatType:  "group",
+		Content:   "hello",
+		RawEvent: &larkim.P2MessageReceiveV1{
+			Event: &larkim.P2MessageReceiveV1Data{
+				Message: &larkim.EventMessage{Mentions: []*larkim.MentionEvent{
+					{Name: &botName, MentionedType: &botType, Id: &larkim.UserId{OpenId: &botID}},
+					{Name: &humanName, MentionedType: &humanType, Id: &larkim.UserId{OpenId: &humanID}},
+				}},
+			},
+		},
+	}
+	got := toPlatformMessage(msg)
+	if len(got.Mentions) != 2 {
+		t.Fatalf("mentions = %#v", got.Mentions)
+	}
+	if !got.Mentions[0].IsBot || got.Mentions[0].Name != botName || got.Mentions[0].ID != botID {
+		t.Fatalf("bot mention = %#v", got.Mentions[0])
+	}
+	if got.Mentions[1].IsBot || got.Mentions[1].Name != humanName {
+		t.Fatalf("human mention = %#v", got.Mentions[1])
+	}
+}
