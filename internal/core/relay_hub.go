@@ -182,6 +182,11 @@ func (h *RelayHub) MintToken(req RelayTokenRequest) string {
 	}
 	token := hex.EncodeToString(buf[:])
 	req.Prompt = truncateRelayPrompt(req.Prompt)
+	if req.OriginMessageID == "" && req.RootID != "" {
+		if root := h.roots[req.RootID]; root != nil {
+			req.OriginMessageID = root.OriginMessageID
+		}
+	}
 	h.tokens[token] = &relayTokenBinding{RelayTokenRequest: req, Token: token, CreatedAt: time.Now().UTC()}
 	return token
 }
@@ -229,7 +234,7 @@ func (h *RelayHub) BotIDByName(name string) (string, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, bot := range h.bots {
-		if normalizeMentionName(bot.name) == want || normalizeMentionName(bot.id) == want {
+		if relayNamesMatch(bot.name, name) || relayNamesMatch(bot.id, name) {
 			return bot.id, true
 		}
 	}
@@ -238,6 +243,27 @@ func (h *RelayHub) BotIDByName(name string) (string, bool) {
 
 func normalizeMentionName(name string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(name)), ""))
+}
+
+// relayNamesMatch compares mention names with configured bot names. Platform
+// display names may carry decorations such as an emoji suffix that the config
+// does not, so a containment match is accepted for reasonably long names.
+func relayNamesMatch(configured, mentioned string) bool {
+	left, right := normalizeMentionName(configured), normalizeMentionName(mentioned)
+	if left == "" || right == "" {
+		return false
+	}
+	if left == right {
+		return true
+	}
+	short, long := left, right
+	if len([]rune(short)) > len([]rune(long)) {
+		short, long = long, short
+	}
+	if len([]rune(short)) < 3 {
+		return false
+	}
+	return strings.Contains(long, short)
 }
 
 // Peers lists the roster for a chat, including busy state.
@@ -311,9 +337,9 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		h.mu.Unlock()
 		return nil, relayError(ErrRelayNotInChat, "%s has not been seen in this chat", targetID)
 	}
-	if h.mutualRelayLocked(binding.BotID, targetID, chatID) {
+	if h.mutualRelayLocked(binding.BotID, targetID, chatID, binding.OriginMessageID) {
 		h.mu.Unlock()
-		return nil, relayError(ErrRelayMutual, "mutual relay with %s is already in progress in this chat", targetID)
+		return nil, relayError(ErrRelayMutual, "the same message already has an ask from %s to you in this chat", targetID)
 	}
 	// Every validation that can fail runs before the root is created, so a
 	// rejected send never leaves an empty root behind.
@@ -611,6 +637,7 @@ func (h *RelayHub) ensureRootLocked(binding *relayTokenBinding) (*RelayRoot, err
 		OriginBot:       binding.BotID,
 		OriginSessionID: binding.SessionID,
 		OriginRunID:     binding.RunID,
+		OriginMessageID: binding.OriginMessageID,
 		Channel:         binding.Channel,
 		ChatID:          binding.ChatID,
 		ChatType:        binding.ChatType,
@@ -636,10 +663,14 @@ func (h *RelayHub) envelopeByKeyLocked(from, to, key string) *RelayEnvelope {
 	return nil
 }
 
-// mutualRelayLocked reports an in-flight ask in the opposite direction inside
-// the same chat, which usually means two bots were both driven by one human
-// message and are now reviewing each other.
-func (h *RelayHub) mutualRelayLocked(from, to, chatID string) bool {
+// mutualRelayLocked reports an in-flight ask in the opposite direction that was
+// started by the same human message. That pattern means one message reached two
+// bots and they are now reviewing each other; asks from different messages are
+// independent work and are allowed.
+func (h *RelayHub) mutualRelayLocked(from, to, chatID, originMessageID string) bool {
+	if strings.TrimSpace(originMessageID) == "" {
+		return false
+	}
 	for _, envelope := range h.envelopes {
 		if envelope.Kind != RelayKindAsk || envelope.ChatID != chatID {
 			continue
@@ -650,10 +681,13 @@ func (h *RelayHub) mutualRelayLocked(from, to, chatID string) bool {
 		if envelope.From != to || envelope.To != from {
 			continue
 		}
-		if root := h.roots[envelope.RootID]; root != nil && root.State != relayRootOpen {
+		root := h.roots[envelope.RootID]
+		if root == nil || root.State != relayRootOpen {
 			continue
 		}
-		return true
+		if root.OriginMessageID != "" && root.OriginMessageID == originMessageID {
+			return true
+		}
 	}
 	return false
 }

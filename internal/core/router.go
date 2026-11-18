@@ -324,6 +324,7 @@ func (r *Router) Handle(msg platform.Message) {
 		}
 		r.relay.NoteChat(msg.ChatID, r.EffectiveBotID())
 		if r.relay.FirstMentionOnly() && r.addressedToAnotherBot(msg) {
+			r.logger.Info("ignored message addressed to another relay bot", "chat", msg.ChatID, "bot", r.EffectiveBotID())
 			return
 		}
 	}
@@ -527,14 +528,15 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	silent := relay != nil && relay.target && relay.echo == RelayEchoOff
 	if r.relay != nil {
 		tokenReq := RelayTokenRequest{
-			BotID:     r.EffectiveBotID(),
-			SessionID: sessionID,
-			RunID:     runID,
-			Prompt:    prompt,
-			Channel:   key.Channel,
-			ChatID:    key.ChatID,
-			ChatType:  msg.ChatType,
-			ThreadID:  key.ThreadID,
+			BotID:           r.EffectiveBotID(),
+			SessionID:       sessionID,
+			RunID:           runID,
+			Prompt:          prompt,
+			Channel:         key.Channel,
+			ChatID:          key.ChatID,
+			ChatType:        msg.ChatType,
+			ThreadID:        key.ThreadID,
+			OriginMessageID: msg.MessageID,
 		}
 		if relay != nil {
 			tokenReq.RootID = relay.rootID

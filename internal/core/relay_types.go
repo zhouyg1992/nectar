@@ -112,6 +112,7 @@ type RelayRoot struct {
 	OriginBot       string           `json:"origin_bot"`
 	OriginSessionID string           `json:"origin_session_id"`
 	OriginRunID     string           `json:"origin_run_id,omitempty"`
+	OriginMessageID string           `json:"origin_message_id,omitempty"`
 	Channel         string           `json:"channel"`
 	ChatID          string           `json:"chat_id"`
 	ChatType        string           `json:"chat_type,omitempty"`
@@ -146,16 +147,17 @@ type RelaySendRequest struct {
 
 // RelayTokenRequest is filled in by the router when a run starts.
 type RelayTokenRequest struct {
-	BotID     string
-	SessionID string
-	RunID     string
-	RootID    string
-	Gen       int
-	Prompt    string
-	Channel   string
-	ChatID    string
-	ChatType  string
-	ThreadID  string
+	BotID           string
+	SessionID       string
+	RunID           string
+	RootID          string
+	Gen             int
+	Prompt          string
+	Channel         string
+	ChatID          string
+	ChatType        string
+	ThreadID        string
+	OriginMessageID string
 }
 
 type relayTokenBinding struct {

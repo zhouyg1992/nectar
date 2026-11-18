@@ -89,9 +89,9 @@ changes. Relay again only if the result genuinely needs another hop.
 - `ERR_NOT_IN_CHAT` — the target has not been seen in this chat. Ask the user
   to mention it in the group once; relay only works inside a shared chat.
 - `ERR_REJECTED` — the target refused this sender or the request is invalid.
-- `ERR_MUTUAL_RELAY` — the target already has an ask running in your direction
-  in this chat. Do not relay back and forth; finish the work you already have
-  or report to the user.
+- `ERR_MUTUAL_RELAY` — the same human message already started an ask from the
+  target to you, and the target is asking you back. Do not relay back and
+  forth; finish the work you already have or report to the user.
 - `ERR_UNAUTHORIZED` — no valid run token; you are not inside a Nectar run.
 
 Do not retry an error by rephrasing the same message in a loop.

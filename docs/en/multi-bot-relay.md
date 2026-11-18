@@ -76,7 +76,7 @@ user → bot A → engine A ──relay send (local API + run token)
 - **Async rule.** After `relay send`, the sender must end its turn: no polling, sleeping or waiting. The reply wakes the origin session as a new turn; a turn that never ends would queue the reply behind itself and deadlock the session.
 - **One target per message.** No broadcast, and no infinite ping-pong: replies never trigger another automatic reply.
 - **First mention wins.** When a group message mentions several Nectar bots, only the first one handles it, so one human instruction is not duplicated across bots that end up reviewing each other.
-- **Mutual relays are refused.** While A→B has an ask in flight in a chat, a B→A ask returns `ERR_MUTUAL_RELAY`, so two bots cannot cross-review and wait on each other.
+- **Same-message mutual relays are refused.** When one human message reached two bots and an A→B ask is already in flight, a B→A ask returns `ERR_MUTUAL_RELAY`, so the bots cannot duplicate work and cross-review. Relays started from different human messages are independent and allowed.
 
 ## Configuration
 
@@ -158,7 +158,7 @@ Unverified without real credentials: whether Feishu or DingTalk deliver one bot'
 | `ERR_NOT_IN_CHAT` | Target has not appeared in this chat | Have the user mention it in the group once |
 | `ERR_REJECTED` | Target refuses this sender, or the request is invalid (empty/oversized body) | Check `relay_accept_from` |
 | `ERR_UNAUTHORIZED` | Missing or expired run token | `relay send` only works inside an agent run |
-| `ERR_MUTUAL_RELAY` | The opposite direction already has an ask in flight in this chat | Do not relay back; finish your own work or report to the user |
+| `ERR_MUTUAL_RELAY` | The same message already has an ask in flight in the opposite direction | Do not relay back; finish your own work or report to the user |
 | `ERR_DISABLED` | Relay is off | Set `[relay] enabled = true` |
 
 ## Security advice

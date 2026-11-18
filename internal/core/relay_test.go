@@ -601,7 +601,8 @@ func TestRelayRejectsMutualRelay(t *testing.T) {
 	roots := map[string]*RelayRoot{
 		"root_mutual": {
 			ID: "root_mutual", OriginBot: "reviewer", OriginSessionID: "s-review",
-			Channel: "feishu", ChatID: "c1", State: relayRootOpen, CreatedAt: now,
+			Channel: "feishu", ChatID: "c1", OriginMessageID: "om_same",
+			State: relayRootOpen, CreatedAt: now,
 		},
 	}
 	envelopes := map[string]*RelayEnvelope{
@@ -619,16 +620,50 @@ func TestRelayRejectsMutualRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	rig := newRelayRig(t, RelayHubOptions{DataDir: dir})
-	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1"})
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1", OriginMessageID: "om_same"})
 	if _, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "also review mine"}); RelayErrorCode(err) != ErrRelayMutual {
 		t.Fatalf("mutual relay error = %v", err)
+	}
+	// A different human message is independent work and is allowed.
+	independent := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1", OriginMessageID: "om_other"})
+	if _, err := rig.hub.Send(rig.hub.TokenBinding(independent), RelaySendRequest{To: "reviewer", Body: "unrelated task"}); err != nil {
+		t.Fatalf("independent message rejected: %v", err)
 	}
 	// A different chat is unaffected.
 	rig.hub.NoteChat("c2", "coder")
 	rig.hub.NoteChat("c2", "reviewer")
-	other := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c2"})
+	other := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c2", OriginMessageID: "om_same"})
 	if _, err := rig.hub.Send(rig.hub.TokenBinding(other), RelaySendRequest{To: "reviewer", Body: "different chat"}); err != nil {
 		t.Fatalf("different chat rejected: %v", err)
+	}
+}
+
+func TestRelayBotNameMatchingToleratesDecorations(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	if id, ok := rig.hub.BotIDByName("Coder"); !ok || id != "coder" {
+		t.Fatalf("exact match = %q, %v", id, ok)
+	}
+	if id, ok := rig.hub.BotIDByName("Reviewer 🦞"); !ok || id != "reviewer" {
+		t.Fatalf("decorated match = %q, %v", id, ok)
+	}
+	if _, ok := rig.hub.BotIDByName("张三"); ok {
+		t.Fatal("human name matched a bot")
+	}
+}
+
+func TestRouterFirstMentionWithDecoratedPeerName(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	msg := platform.Message{
+		Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "please help",
+		Mentions: []platform.Mention{
+			{Name: "Reviewer 🦞", IsBot: true},
+			{Name: "Coder", IsBot: true},
+		},
+	}
+	rig.coderRouter.Handle(msg)
+	time.Sleep(50 * time.Millisecond)
+	if starts, resumes, _ := rig.coderEng.counts(); starts+resumes != 0 {
+		t.Fatalf("coder acted on a message addressed to the decorated peer: starts=%d resumes=%d", starts, resumes)
 	}
 }
 

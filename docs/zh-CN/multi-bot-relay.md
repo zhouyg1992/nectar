@@ -76,7 +76,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 - **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。
 - **只点名一个目标。** 没有广播；一问一答不会无限循环（reply 不再自动回投）。
 - **多 @ 只由第一个响应。** 群消息同时 @ 多个 Nectar Bot 时，只有第一个被 @ 的 Bot 处理，避免同一条人类指令被多个 Bot 重复执行、互相 review。
-- **拒绝反向互接力。** 同一群里已存在 A→B 的进行中 ask 时，B→A 的新 ask 返回 `ERR_MUTUAL_RELAY`，防止两个 Bot 交叉审查、互相等待。
+- **拒绝同源反向互接力。** 同一条人类消息同时驱动了两个 Bot、且已存在 A→B 的进行中 ask 时，B→A 的新 ask 返回 `ERR_MUTUAL_RELAY`，防止重复执行和交叉审查；来自不同人类消息的接力互不影响。
 
 ## 配置
 
@@ -158,7 +158,7 @@ nectar relay cancel ROOT
 | `ERR_NOT_IN_CHAT` | 目标 Bot 没有在该群出现过 | 让用户在群里 @ 它一次 |
 | `ERR_REJECTED` | 目标不接受该发件人，或请求非法（空正文、超长） | 检查 `relay_accept_from` |
 | `ERR_UNAUTHORIZED` | 缺少或过期的运行令牌 | 只能在 agent 运行内调用 `relay send` |
-| `ERR_MUTUAL_RELAY` | 同群已有反向进行中的 ask | 不要再反向接力；完成手头任务或向用户汇报 |
+| `ERR_MUTUAL_RELAY` | 同一条消息已从反方向发起进行中的 ask | 不要再反向接力；完成手头任务或向用户汇报 |
 | `ERR_DISABLED` | 未开启 relay | 在配置里设置 `[relay] enabled = true` |
 
 ## 安全建议

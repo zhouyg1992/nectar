@@ -7,7 +7,7 @@
 - 多 Bot 协作（Relay）：同一进程内的 Bot 可以通过本地、令牌绑定的总线互相接力（`[relay]`），支持角色花名册、按 root 的代数/信封/运行预算、幂等和重启恢复；默认关闭
 - `nectar relay bots|send|roots|show|cancel` 以及管理员聊天命令 `"/relay stop"`
 - 接力回复回到发件方 origin session，目标 Bot 在独立的 per-root 会话中运行；relay 正文不会被当作斜杠命令解析
-- 群消息同时 @ 多个已配置 Bot 时只由第一个被 @ 的 Bot 响应（`relay.first_mention_only`）；同群反向进行中的 ask 会被拒绝并返回 `ERR_MUTUAL_RELAY`
+- 群消息同时 @ 多个已配置 Bot 时只由第一个被 @ 的 Bot 响应（`relay.first_mention_only`）；同一条人类消息发起的反向 ask 会被拒绝并返回 `ERR_MUTUAL_RELAY`
 - 移交镜像不再显示可见 marker；被拒绝的 send 不再留下空 root，加载时自动清理历史空 root
 - 飞书、钉钉、Telegram 的群内移交镜像；Bot 发送的消息和带标记的镜像会在写锚点与命令解析之前丢弃
 - `nectar-relay` Agent Skill，与 schedule、memory 一起安装
