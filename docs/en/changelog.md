@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- The local relay API returns the documented `ERR_DISABLED` code, so the CLI can show it instead of a bare error
+- Card hand-off mirrors keep the invisible marker in the body, and the visible mirror title is also recognized on inbound, so platforms that strip zero-width characters still drop sibling mirrors
+
 ### Added
 
 - Multi-bot relay: bots in one process can hand work to each other over a local, token-bound bus (`[relay]`), with role-based rosters, per-root generation/envelope/run budgets, idempotency and restart recovery; disabled by default

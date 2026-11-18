@@ -142,7 +142,7 @@ nectar relay cancel ROOT
 | Platform | Hand-off visibility | Inbound loop protection |
 | --- | --- | --- |
 | Feishu | Cards; thread mirrors need an origin anchor | Drops `sender_type=bot` immediately, with an invisible marker as fallback |
-| DingTalk | Group text/markdown mirror; direct-message form is unverified | Callbacks carry no sender type; relies on the invisible marker |
+| DingTalk | Group text/markdown mirror; direct-message form is unverified | Callbacks carry no sender type; relies on the invisible marker in the card body and the visible mirror title |
 | Telegram | Text | The adapter already drops `is_bot` messages, and the platform does not deliver bot messages to other bots |
 
 Mirrors use plain bot names only (for example "Coder → Reviewer") and never a real @ mention, so the platform cannot deliver a mirror to the target and trigger a second run. The first-mention rule needs mention names plus a bot flag from the platform: Feishu provides both; Telegram only exposes `text_mention` (rarely a bot); DingTalk callbacks carry no names, so there the rule does not apply and "mention only the initiator" remains a usage rule.
