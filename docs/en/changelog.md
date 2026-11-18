@@ -10,6 +10,7 @@
 - Group messages that mention several configured bots are handled only by the first mentioned bot (`relay.first_mention_only`), and an opposite-direction ask started by the same human message is refused with `ERR_MUTUAL_RELAY`
 - Hand-off mirrors no longer show a visible marker; rejected sends no longer journal empty roots, and empty roots are pruned on load
 - Relay no longer refuses a target that has not been seen in the chat yet; membership is only logged, so a single @ on the initiator is enough
+- `echo = "summary"` renders the target's final answer as one `🔁 Relay result` card (error state on failure) instead of plain text
 - Group hand-off mirrors on Feishu, DingTalk and Telegram; bot-authored messages and marked mirrors are dropped before anchors or command parsing
 - `nectar-relay` agent skill, installed alongside the schedule and memory skills
 

@@ -879,6 +879,8 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	if silent {
 		// echo=off keeps target output out of the chat. The answer still
 		// travels back to the sender through the hub.
+	} else if relay != nil && relay.target && relay.echo == RelayEchoSummary {
+		finishErr = r.finishRelayResult(msg, relay, answer, failed, modelName, elapsed, usage, contextWindow)
 	} else if failed {
 		finishErr = r.finish(msg, cardID, &platform.Card{
 			Status: platform.CardError,

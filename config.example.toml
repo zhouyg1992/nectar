@@ -266,7 +266,7 @@ workspace_mode = "shared"
 #
 # [relay]
 # enabled = true
-# # Target visibility: full (progress + answer), summary (answer only), off.
+# # Target visibility: full (progress + answer), summary (one result card), off.
 # echo = "summary"
 # # When a group message @mentions several bots, only the first one acts.
 # first_mention_only = true

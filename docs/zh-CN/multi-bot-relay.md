@@ -86,7 +86,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | --- | --- | --- |
 | `enabled` | `false` | 是否开启 relay。需要至少两个 Bot 才有意义。 |
 | `first_mention_only` | `true` | 群消息同时 @ 多个已配置 Bot 时，只有第一个被 @ 的 Bot 处理；其余 Bot 等到 relay 到达再工作。设为 `false` 恢复「多 @ 全部响应」。 |
-| `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示进度卡和最终回答；`summary` 只显示最终回答；`off` 不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
+| `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示进度卡和最终回答；`summary` 只显示一张结果卡（目标最终回答）；`off` 不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
 | `max_generation` | `4` | 一条链路最多几跳，超出返回 `ERR_GEN_LIMIT`。 |
 | `max_envelopes_per_root` | `12` | 每个 root 最多多少条信封（含回复）。 |
 | `max_runs_per_root` | `8` | 每个 root 最多触发多少次引擎运行（含 origin 回投轮）。 |

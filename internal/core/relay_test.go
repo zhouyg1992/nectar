@@ -905,3 +905,57 @@ func fakeReplies(plat *fakePlatform) []string {
 	defer plat.mu.Unlock()
 	return append([]string(nil), plat.replies...)
 }
+
+func TestRelaySummarySendsResultCard(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.reviewPlat.cards = true
+	envelope := RelayEnvelope{
+		ID: "env_card", RootID: "root_card", Kind: RelayKindAsk,
+		Channel: "feishu", ChatID: "c1", From: "coder", To: "reviewer", Gen: 1,
+		Body: "review me",
+	}
+	if _, err := rig.reviewRouter.ExecuteRelay(context.Background(), envelope); err != nil {
+		t.Fatal(err)
+	}
+	cards, replies := fakeCards(rig.reviewPlat)
+	if len(cards) != 1 {
+		t.Fatalf("cards = %#v", cards)
+	}
+	card := cards[0]
+	if card.Title != "🔁 Relay result" || card.Status != platform.CardComplete || card.Body != "answer" {
+		t.Fatalf("result card = %#v", card)
+	}
+	if !strings.Contains(card.Footer, "peer: coder") {
+		t.Fatalf("result card footer = %q", card.Footer)
+	}
+	if len(replies) != 0 {
+		t.Fatalf("summary mode also sent plain text: %#v", replies)
+	}
+}
+
+func TestRelaySummaryFailureCard(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.reviewPlat.cards = true
+	rig.reviewEng.fail = true
+	envelope := RelayEnvelope{
+		ID: "env_card_fail", RootID: "root_card_fail", Kind: RelayKindAsk,
+		Channel: "feishu", ChatID: "c1", From: "coder", To: "reviewer", Gen: 1,
+		Body: "review me",
+	}
+	if _, err := rig.reviewRouter.ExecuteRelay(context.Background(), envelope); err == nil {
+		t.Fatal("expected the relay run to fail")
+	}
+	cards, _ := fakeCards(rig.reviewPlat)
+	if len(cards) != 1 {
+		t.Fatalf("cards = %#v", cards)
+	}
+	if cards[0].Title != "⚠️ Relay result" || cards[0].Status != platform.CardError || !strings.Contains(cards[0].Body, "boom") {
+		t.Fatalf("failure card = %#v", cards[0])
+	}
+}
+
+func fakeCards(plat *fakePlatform) ([]platform.Card, []string) {
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	return append([]platform.Card(nil), plat.sentCards...), append([]string(nil), plat.replies...)
+}

@@ -140,7 +140,7 @@ Disabled by default. When enabled, bots in the same chat can hand work to each o
 ```toml
 [relay]
 enabled = true
-echo = "summary"                  # full | summary | off
+echo = "summary"                  # full | summary (one result card) | off
 first_mention_only = true         # only the first mentioned bot responds
 max_generation = 4
 max_envelopes_per_root = 12

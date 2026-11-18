@@ -86,7 +86,7 @@ user → bot A → engine A ──relay send (local API + run token)
 | --- | --- | --- |
 | `enabled` | `false` | Turn relay on. Only useful with at least two bots. |
 | `first_mention_only` | `true` | When a group message mentions several configured bots, only the first one acts; the others wait for a relay. Set `false` to restore "every mentioned bot responds". |
-| `echo` | `"summary"` | Visibility of target output: `full` shows the progress card and final answer; `summary` shows only the final answer; `off` hides target output entirely (the answer still returns to the sender). The sender's own turn is always visible. |
+| `echo` | `"summary"` | Visibility of target output: `full` shows the progress card and final answer; `summary` shows a single result card with the final answer; `off` hides target output entirely (the answer still returns to the sender). The sender's own turn is always visible. |
 | `max_generation` | `4` | Maximum hops in one chain; beyond it returns `ERR_GEN_LIMIT`. |
 | `max_envelopes_per_root` | `12` | Maximum envelopes per root, replies included. |
 | `max_runs_per_root` | `8` | Maximum engine runs per root, including the origin reply turn. |

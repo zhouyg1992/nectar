@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/zhouyg1992/nectar/internal/platform"
 )
@@ -295,4 +296,40 @@ func (r *Router) addressedToAnotherBot(msg platform.Message) bool {
 		return id != r.EffectiveBotID()
 	}
 	return false
+}
+
+// finishRelayResult posts a relay target's final answer as a single card in
+// summary mode, so a peer's output is visible without streaming a progress
+// card into the chat. Card-less platforms keep the plain-text fallback.
+func (r *Router) finishRelayResult(msg platform.Message, relay *relayRunInfo, answer string, failed bool, modelName string, elapsed time.Duration, usage *tokenUsage, contextWindow int) error {
+	card := relayResultCard(relay, answer, failed, modelName, elapsed, usage, contextWindow)
+	if r.platform.Capabilities().Card {
+		reply := replyTarget(msg)
+		reply.Card = card
+		if _, err := r.platform.Send(r.ctx, reply); err == nil {
+			return nil
+		} else {
+			r.logger.Error("send relay result card failed", "chat", msg.ChatID, "error", err)
+		}
+	}
+	return r.reply(msg, answer)
+}
+
+func relayResultCard(relay *relayRunInfo, answer string, failed bool, modelName string, elapsed time.Duration, usage *tokenUsage, contextWindow int) *platform.Card {
+	title := "🔁 Relay result"
+	status := platform.CardComplete
+	if failed {
+		title = "⚠️ Relay result"
+		status = platform.CardError
+	}
+	footer := cardFooter(modelName, elapsed, usage, contextWindow)
+	if peer := strings.TrimSpace(relay.from); peer != "" {
+		footer = "peer: " + peer + " · " + footer
+	}
+	return &platform.Card{
+		Status: status,
+		Title:  title,
+		Body:   answer,
+		Footer: footer,
+	}
 }
