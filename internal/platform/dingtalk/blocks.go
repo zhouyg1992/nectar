@@ -6,10 +6,12 @@ import (
 )
 
 const (
-	maxCardBlocks    = 40
-	maxTableRows     = 100
-	maxTableColumns  = 10
-	tableFallbackTag = "```text"
+	maxCardBlocks           = 40
+	maxTableRows            = 100
+	maxTableColumns         = 10
+	maxMarkdownTableRows    = 50
+	maxMarkdownTableColumns = 8
+	tableFallbackTag        = "```text"
 )
 
 type cardBlock struct {
@@ -62,10 +64,66 @@ func parseCardBlocks(content string) []cardBlock {
 	}
 	flushMarkdown()
 
+	blocks = splitPlainParagraphs(blocks)
 	if len(blocks) > maxCardBlocks {
 		return []cardBlock{{Markdown: content}}
 	}
 	return blocks
+}
+
+func splitPlainParagraphs(blocks []cardBlock) []cardBlock {
+	out := make([]cardBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Table != nil {
+			out = append(out, block)
+			continue
+		}
+		if _, ok := plainCardText(block.Markdown); !ok {
+			out = append(out, block)
+			continue
+		}
+		parts := strings.Split(block.Markdown, "\n\n")
+		if len(parts) == 1 {
+			out = append(out, block)
+			continue
+		}
+		for _, part := range parts {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, cardBlock{Markdown: part})
+			}
+		}
+	}
+	return out
+}
+
+// plainCardText returns the text for a block that can use the Text component.
+// Text stretches to the card width more reliably than Markdown and preserves
+// native newlines without Markdown hard-break side effects. Blocks containing
+// Markdown syntax keep the Markdown component so links, lists, emphasis, and
+// code still render correctly.
+func plainCardText(s string) (string, bool) {
+	text := strings.NewReplacer("\\\n", "\n", "  \n", "\n").Replace(s)
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", false
+	}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.ContainsAny(line, "`*_#[]|>~") ||
+			strings.Contains(line, "://") ||
+			strings.HasPrefix(line, "mailto:") {
+			return "", false
+		}
+		if strings.HasPrefix(line, "- ") ||
+			strings.HasPrefix(line, "+ ") ||
+			strings.HasPrefix(line, "1. ") {
+			return "", false
+		}
+	}
+	return text, true
 }
 
 func parseMarkdownTable(lines []string, start int) (markdownTable, int) {
@@ -126,6 +184,19 @@ func cleanTableCell(value string) string {
 	return strings.TrimSpace(value)
 }
 
+// useMarkdownTable keeps small tables on the Markdown renderer. The native
+// A2UI Table has a fixed gray header style and can render its header at a
+// different width than the body; Markdown tables keep the two aligned and
+// avoid the gray header entirely. Wide/long tables still use the native Table
+// so pagination and horizontal layout remain available.
+func useMarkdownTable(table *markdownTable) bool {
+	if table == nil {
+		return false
+	}
+	return len(table.Rows) <= maxMarkdownTableRows &&
+		len(table.Headers) <= maxMarkdownTableColumns
+}
+
 func tableComponent(id string, table markdownTable) map[string]any {
 	meta := make([]map[string]string, 0, len(table.Headers))
 	for i, header := range table.Headers {
@@ -154,6 +225,8 @@ func tableComponent(id string, table markdownTable) map[string]any {
 	return map[string]any{
 		"id":        id,
 		"component": "Table",
+		"maxWidth":  "match_parent",
+		"widthMode": "match_parent",
 		"data": map[string]any{
 			"meta": meta,
 			"data": rows,

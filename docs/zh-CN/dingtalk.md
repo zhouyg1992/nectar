@@ -98,7 +98,7 @@ dingtalk: stream connected
 
 图片和文件会下载到当前聊天工作目录下的 `.nectar/attachments/`，Agent 运行结束后自动清理。
 
-卡片内的 GFM 表格会解析为钉钉原生 `Table` 组件；旧客户端无法渲染时使用原始表格文本兜底。
+卡片内的 GFM 表格：最多 8 列、50 行的表格直接用 Markdown 渲染，避免原生 `Table` 的灰色表头和宽度错位；更宽或更长的表格使用钉钉原生 `Table` 组件，旧客户端无法渲染时使用原始表格文本兜底。
 
 出站支持图片和文件：Agent 把文件复制到当前工作区的 `.nectar/outbox/`（环境变量 `NECTAR_OUTBOX_DIR`），本轮结束后自动上传并发送，成功后删除。最多 10 个、单文件 50 MiB，钉钉适配器进一步限制单个上传文件为 20 MiB；图片按 `sampleImageMsg` 发送，其他文件按 `sampleFile` 发送。
 

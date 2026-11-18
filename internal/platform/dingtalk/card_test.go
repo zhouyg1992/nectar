@@ -64,6 +64,10 @@ func TestBuildCreatePayloadGroup(t *testing.T) {
 	if _, ok := payload["a2uiAnnotations"]; !ok {
 		t.Fatalf("missing annotations: %#v", payload)
 	}
+	config, ok := payload["config"].(map[string]any)
+	if !ok || config["autoLayout"] != true {
+		t.Fatalf("config = %#v, want autoLayout", payload["config"])
+	}
 }
 
 func TestCardFinalStatuses(t *testing.T) {
@@ -233,9 +237,9 @@ func TestBuildUpdatePayloadIncludesToolActivity(t *testing.T) {
 	var foundActivity bool
 	for _, raw := range components {
 		component := raw.(map[string]any)
-		if component["id"] == "activity" && component["component"] == "Markdown" {
-			content := component["content"].(map[string]any)
-			if content["path"] == "/activity" {
+		if component["id"] == "activity" && component["component"] == "Text" {
+			text := component["text"].(map[string]any)
+			if text["path"] == "/activity" {
 				foundActivity = true
 			}
 		}
@@ -245,7 +249,89 @@ func TestBuildUpdatePayloadIncludesToolActivity(t *testing.T) {
 	}
 }
 
-func TestBuildCreatePayloadRendersTable(t *testing.T) {
+func TestPlainStatusUsesTextComponent(t *testing.T) {
+	state := &cardState{
+		outTrackID: "track-1",
+		surfaceID:  "surface-1",
+		lastTheme:  "blue",
+	}
+	payload := buildUpdatePayload(state, "track-1-1", "working", "⏳ Tool calls · 3", "Gathering results…", "footer", "blue", "INPUTTING")
+	messages := decodeA2UI(t, payload)
+	components := messages[3]["updateComponents"].(map[string]any)["components"].([]any)
+
+	var foundActivity, foundBody bool
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		switch component["id"] {
+		case "activity":
+			if component["component"] != "Text" || component["textWidth"] != "match_parent" ||
+				component["maxLine"] != float64(1000) {
+				t.Fatalf("activity = %#v, want Text", component)
+			}
+			foundActivity = true
+		case "block-0":
+			if component["component"] != "Text" || component["text"] != "Gathering results…" ||
+				component["textWidth"] != "match_parent" || component["maxLine"] != float64(1000) {
+				t.Fatalf("body block = %#v, want Text", component)
+			}
+			foundBody = true
+		}
+	}
+	if !foundActivity || !foundBody {
+		t.Fatalf("components = %#v, want activity and body", components)
+	}
+}
+
+func TestMarkdownBodyKeepsMarkdownComponent(t *testing.T) {
+	state := &cardState{
+		outTrackID: "track-1",
+		surfaceID:  "surface-1",
+		lastTheme:  "blue",
+	}
+	payload := buildUpdatePayload(state, "track-1-1", "working", "", "**done**", "footer", "blue", "INPUTTING")
+	messages := decodeA2UI(t, payload)
+	components := messages[3]["updateComponents"].(map[string]any)["components"].([]any)
+
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["id"] == "block-0" {
+			if component["component"] != "Markdown" || component["content"] != "**done**" {
+				t.Fatalf("body block = %#v, want Markdown", component)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing body block: %#v", components)
+}
+
+func TestPlainMultilineBodyUsesTextComponent(t *testing.T) {
+	body := normalizeA2UIMarkdown("Nectar dev\nA self-hosted bridge between chat platforms and coding-agent CLIs.\n\nPlatform: dingtalk\nEngine: OpenCode\n\nI can run coding tasks.\nUse /help for commands.")
+	components := cardComponents("blue", parseCardBlocks(body), false, false)
+
+	var found []string
+	for _, component := range components {
+		switch component["id"] {
+		case "block-0", "block-1", "block-2":
+			text, _ := component["text"].(string)
+			if component["component"] != "Text" || component["maxLine"] != 1000 ||
+				strings.Contains(text, "\\\n") ||
+				strings.Contains(text, "  \n") {
+				t.Fatalf("about block %v = %#v", component["id"], component)
+			}
+			found = append(found, text)
+		}
+	}
+	if len(found) != 3 {
+		t.Fatalf("about paragraphs = %#v, want 3 Text blocks", found)
+	}
+	if !strings.Contains(found[0], "Nectar dev\nA self-hosted bridge") ||
+		!strings.Contains(found[1], "Platform: dingtalk\nEngine: OpenCode") ||
+		!strings.Contains(found[2], "I can run coding tasks.\nUse /help for commands.") {
+		t.Fatalf("about paragraphs = %#v", found)
+	}
+}
+
+func TestSmallTableRendersAsMarkdown(t *testing.T) {
 	adapter := testAdapter(t)
 	rc := replyContext{
 		conversationID: "cid-1",
@@ -254,6 +340,37 @@ func TestBuildCreatePayloadRendersTable(t *testing.T) {
 		robotCode:      "robot-test",
 	}
 	body := "| name | value |\n|---|---|\n| alpha | 1 |\n| beta | 2 |"
+	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "", body, "", "green", "FINISH")
+	messages := decodeA2UI(t, payload)
+	update := messages[2]["updateComponents"].(map[string]any)
+	components := update["components"].([]any)
+
+	var markdown map[string]any
+	for _, raw := range components {
+		component := raw.(map[string]any)
+		if component["id"] == "block-0" {
+			markdown = component
+			break
+		}
+	}
+	if markdown == nil || markdown["component"] != "Markdown" {
+		t.Fatalf("small table did not use Markdown: %#v", components)
+	}
+	content, _ := markdown["content"].(string)
+	if !strings.Contains(content, "| name | value |") {
+		t.Fatalf("markdown table content = %q", content)
+	}
+}
+
+func TestLargeTableRendersAsNativeTable(t *testing.T) {
+	adapter := testAdapter(t)
+	rc := replyContext{
+		conversationID: "cid-1",
+		senderStaffID:  "staff-1",
+		isGroup:        true,
+		robotCode:      "robot-test",
+	}
+	body := "| a | b | c | d | e | f | g | h | i |\n|---|---|---|---|---|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |"
 	payload := adapter.buildCreatePayload(rc, "track-1", "surface-1", "title", "", body, "", "green", "FINISH")
 	messages := decodeA2UI(t, payload)
 	update := messages[2]["updateComponents"].(map[string]any)
@@ -268,19 +385,10 @@ func TestBuildCreatePayloadRendersTable(t *testing.T) {
 		}
 	}
 	if table == nil {
-		t.Fatalf("no Table component: %#v", components)
+		t.Fatalf("large table did not use native Table: %#v", components)
 	}
-	data := table["data"].(map[string]any)
-	meta := data["meta"].([]any)
-	rows := data["data"].([]any)
-	if len(meta) != 2 || len(rows) != 2 {
-		t.Fatalf("table data = %#v", data)
-	}
-	if meta[0].(map[string]any)["colName"] != "name" {
-		t.Fatalf("meta = %#v", meta)
-	}
-	if rows[0].(map[string]any)["c0"] != "alpha" {
-		t.Fatalf("rows = %#v", rows)
+	if table["widthMode"] != "match_parent" || table["maxWidth"] != "match_parent" {
+		t.Fatalf("table width props = %#v", table)
 	}
 }
 
