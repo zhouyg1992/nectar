@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.3 complete
+
+- `nectar update` supports GitHub mirror prefixes and HTTP Range resume, making updates more reliable on weak networks or when GitHub is unreachable
+
 ## v0.10.2 complete
 
 - Dashboard memory review with approve/reject/restore, bulk actions, status and tag filters, scope editing, and 50-item pagination for memories and scheduled tasks

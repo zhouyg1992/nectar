@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.10.3 — 2026-11-18
+
+### Added
+
+- `nectar update` supports GitHub mirror prefixes through `--mirror`, `--download-base`, `--latest-url`, `--latest-api-url`, and the matching `NECTAR_UPDATE_*` environment variables, so networks that cannot reach GitHub directly can still check for and download updates
+
+### Changed
+
+- Update downloads now resume from the already downloaded bytes after transient failures when the server supports HTTP Range; mirrors without Range support fall back to a full download
+- README selling points now focus on parallel worktrees, reviewable memory, steering running tasks, and persistent sessions
+
 ## v0.10.2 — 2026-11-18
 
 ### Added

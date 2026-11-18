@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.10.3 — 2026-11-18
+
+### 新增
+
+- `nectar update` 支持 GitHub 镜像前缀：新增 `--mirror`、`--download-base`、`--latest-url`、`--latest-api-url` 及对应的 `NECTAR_UPDATE_*` 环境变量，无法直连 GitHub 的网络也能检查和下载更新
+
+### 变更
+
+- 更新下载在临时失败重试时，如果服务端支持 HTTP Range，会从已下载位置继续；不支持 Range 的镜像自动退回全量下载
+- README 重新整理卖点，突出并行 worktree、可审核记忆、运行中插话和会话持久化
+
 ## v0.10.2 — 2026-11-18
 
 ### 新增
