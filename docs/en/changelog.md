@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- A run's relay root is now persisted on its token, so repeated `relay send` calls from one turn share one root, budgets and default idempotency keys instead of creating a new root every time; duplicate sends no longer journal or keep an empty root
+- Relay enforces the target bot's `allowed_chats`, so a chat its adapter would refuse cannot reach it through relay; startup warns when a target has `admin_users` but an open relay allowlist
+- Mention-name matching is deterministic (exact match first, unique containment only), persistence writes are serialized, and roots older than 24 hours are pruned on startup
+- Relay runs carry the originating user id, so memory and admin-gated operations inside the target run are checked against the real requester
+- The prompt fence uses a randomized tag so relay bodies cannot close it early; mirror-title detection only matches a prefix; bot-authored messages are dropped only while relay is enabled; canceled envelopes keep the canceled state
 - The local relay API returns the documented `ERR_DISABLED` code, so the CLI can show it instead of a bare error
 - Card hand-off mirrors keep the invisible marker in the body, and the visible mirror title is also recognized on inbound, so platforms that strip zero-width characters still drop sibling mirrors
 

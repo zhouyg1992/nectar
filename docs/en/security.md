@@ -37,7 +37,9 @@ Codex/OpenCode/Cursor/Claude Code/Pi read, write, and execute commands in the co
 ## Multi-bot relay
 
 - Relay is off by default; enable it only in chats that genuinely need cross-bot hand-offs.
-- Use `relay_accept_from` to name allowed senders; an empty list accepts any bot in the roster (membership is not checked).
+- Use `relay_accept_from` to name allowed senders; an empty list accepts any bot in the roster (membership is not checked). The target `allowed_chats` also applies to relay.
+- Relay runs carry the originating user id, so permission checks inside the target run (memory writes, admin-gated commands) use the real requester.
+- The local relay API and `relay/state.json` are protected by the same OS user: processes under that user (agents included) can read root bodies and cancel roots. Do not put credentials or sensitive data in relay bodies.
 - A run token binds identity and routing; it is not a sandbox. The target keeps its own sandbox, permissions and workspace.
 - Relay content is injected inside a peer-input fence: it must not raise privileges, disclose credentials or change security settings. The fence only mitigates prompt injection.
 - Group mirrors contain no real @ mention; inbound messages from sibling bots are dropped by sender type and an invisible marker.

@@ -149,7 +149,7 @@ root_ttl = "30m"
 session = "per_root"
 ```
 
-Each bot can also set `role`, `description`, `capabilities` and `relay_accept_from`. An empty `relay_accept_from` accepts any bot in the roster (membership is not checked); referencing an unknown bot refuses to start. Relay needs the multi-bot (`[bots.*]`) layout; the legacy single `[bot]` config only logs a warning when relay is enabled.
+Each bot can also set `role`, `description`, `capabilities` and `relay_accept_from`. An empty `relay_accept_from` accepts any bot in the roster (membership is not checked); the target `allowed_chats` still applies. Referencing an unknown bot refuses to start. Relay needs the multi-bot (`[bots.*]`) layout; the legacy single `[bot]` config only logs a warning when relay is enabled.
 
 ## Engines
 

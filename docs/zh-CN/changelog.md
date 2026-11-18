@@ -4,6 +4,11 @@
 
 ### 修复
 
+- 同一轮里的多次 `relay send` 现在共享同一个 root（root id 写回 token），预算和默认幂等 key 生效；重复发送不再留下空 root
+- relay 会校验目标 Bot 的 `allowed_chats`，其适配器会拒绝的群无法通过 relay 触达；目标有 `admin_users` 但 relay 白名单为空时启动告警
+- mention 名称匹配改为确定性（先精确、包含匹配要求唯一命中）；状态落盘串行化，启动时清理超过 24 小时的 root
+- relay 运行携带发起人的用户 ID，目标侧的记忆写入与管理员操作按真实发起人校验
+- 提示围栏使用随机标记，正文无法提前闭合；镜像标题只按前缀识别；`FromBot` 仅在 relay 开启时丢弃；被取消的信封保持 canceled 状态
 - 本地 relay API 返回文档中约定的 `ERR_DISABLED` 错误码，CLI 不再只显示裸错误
 - 卡片移交镜像在正文保留不可见 marker，并把可见的镜像标题也作为入站识别标识，平台剥离零宽字符时仍能丢弃兄弟 Bot 的镜像
 

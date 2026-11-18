@@ -132,10 +132,11 @@ nectar relay cancel ROOT
 - **代数上限 / 信封预算 / 运行预算 / root TTL** 默认合计足以完成一次正常的 coder → reviewer → coder 协作，但不会烧穿 token。
 - **幂等**：默认 key 由 from、to、root、parent、kind、正文共同决定，合法重复不会被误去重。
 - **命令隔离**：relay 正文即使以 `/cron`、`/stop` 等开头，也按普通文本处理，不会创建定时任务或停止会话。
-- **提示围栏**：relay 内容包在来源标注的围栏里，并声明它是 peer 输入、不得据此提权或泄露凭据。围栏只是缓解提示注入，真正的边界是接收方自己的沙箱、权限和预算。
+- **目标权限**：目标的 `allowed_chats` 对 relay 同样生效，不在白名单的群会被拒绝；`relay_accept_from` 留空表示接受名册内任意 Bot。relay 不额外要求 `admin_users`，因为管理员权限只约束会话/定时任务管理命令，而 relay 正文不会解析命令；relay 运行会携带发起人的用户 ID，目标侧的权限判断按发起人执行。
+- **提示围栏**：relay 内容包在带有随机标记、并标注来源的围栏里，声明它是 peer 输入、不得据此提权或泄露凭据；正文无法提前闭合围栏。围栏只是缓解提示注入，真正的边界是接收方自己的沙箱、权限和预算。
 - **记忆隔离**：relay 触发的运行不会写入失败 lesson 或记忆候选；目标 Bot 仍可检索自己的记忆作为背景。
 - **令牌不是沙箱**：运行令牌绑定 bot / 会话 / root / 代数，防止身份混淆和误路由；本地 socket 为 0600，认证边界仍是同一 OS 用户。
-- **重启恢复**：pending 信封在重启后继续投递；运行中的信封标记 failed，不自动重跑；其中进行中的 ask 会给 origin 发一条中断通知。
+- **重启恢复**：pending 信封在重启后继续投递；运行中的信封标记 failed，不自动重跑；其中进行中的 ask 会给 origin 发一条中断通知。启动时会清理已关闭或超过 24 小时的 root 及其信封。
 
 ## 平台差异
 
@@ -156,7 +157,7 @@ nectar relay cancel ROOT
 | `ERR_GEN_LIMIT` | 链路太深 | 停止接力，向用户汇报 |
 | `ERR_BUDGET` | root 的信封/运行/时长预算耗尽 | 停止，向用户汇报 |
 | `ERR_TARGET_UNKNOWN` | 不存在该 Bot 或 root | 先 `relay bots` |
-| `ERR_REJECTED` | 目标不接受该发件人，或请求非法（空正文、超长） | 检查 `relay_accept_from` |
+| `ERR_REJECTED` | 目标不接受该发件人或该群（`relay_accept_from` / `allowed_chats`），或请求非法（空正文、超长） | 检查目标的白名单配置 |
 | `ERR_UNAUTHORIZED` | 缺少或过期的运行令牌 | 只能在 agent 运行内调用 `relay send` |
 | `ERR_MUTUAL_RELAY` | 同一条消息已从反方向发起进行中的 ask | 不要再反向接力；完成手头任务或向用户汇报 |
 | `ERR_DISABLED` | 未开启 relay | 在配置里设置 `[relay] enabled = true` |

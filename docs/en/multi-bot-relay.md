@@ -132,10 +132,11 @@ nectar relay cancel ROOT
 - **Generation limit, envelope budget, run budget and root TTL** together allow a normal coder → reviewer → coder exchange without burning tokens.
 - **Idempotency**: the default key hashes from, to, root, parent, kind and body, so legitimate repeats are not collapsed.
 - **Command isolation**: relay bodies that start with `/cron`, `/stop` or another slash command stay plain text; they cannot create schedules or stop sessions.
-- **Prompt fence**: relay content is wrapped with its source and a statement that it is peer input, not operator instructions. The fence only mitigates prompt injection; the real boundaries are the receiver's sandbox, permissions and budgets.
+- **Target permissions**: the target's `allowed_chats` still applies to relay, so chats outside that list are refused; an empty `relay_accept_from` accepts any bot in the roster. Relay does not additionally require `admin_users`: that list only gates session and schedule management commands, and relay bodies never parse commands. Relay runs carry the originating user id, so permission checks inside the target run use the real requester.
+- **Prompt fence**: relay content is wrapped with a randomized tag that also names its source, and the body cannot close the fence early. The fence only mitigates prompt injection; the real boundaries are the receiver's sandbox, permissions and budgets.
 - **Memory isolation**: relay-triggered runs never write failure lessons or memory candidates; the target can still read its own memory as background.
 - **Tokens are not a sandbox**: run tokens bind bot / session / root / generation to prevent identity confusion and misrouting. The local socket is 0600, so the access boundary is the same OS user.
-- **Restart recovery**: pending envelopes are delivered after a restart; running ones are marked failed (never retried automatically), and an interrupted ask sends the origin an interruption notice.
+- **Restart recovery**: pending envelopes are delivered after a restart; running ones are marked failed (never retried automatically), and an interrupted ask sends the origin an interruption notice. Startup prunes roots that are closed or older than 24 hours along with their envelopes.
 
 ## Platform differences
 
@@ -156,7 +157,7 @@ Unverified without real credentials: whether Feishu or DingTalk deliver one bot'
 | `ERR_GEN_LIMIT` | Chain too deep | Stop and report |
 | `ERR_BUDGET` | Root envelope/run/time budget exhausted | Stop and report |
 | `ERR_TARGET_UNKNOWN` | No such bot or root | Run `relay bots` |
-| `ERR_REJECTED` | Target refuses this sender, or the request is invalid (empty/oversized body) | Check `relay_accept_from` |
+| `ERR_REJECTED` | Target refuses this sender or this chat (`relay_accept_from` / `allowed_chats`), or the request is invalid (empty/oversized body) | Check the target allowlists |
 | `ERR_UNAUTHORIZED` | Missing or expired run token | `relay send` only works inside an agent run |
 | `ERR_MUTUAL_RELAY` | The same message already has an ask in flight in the opposite direction | Do not relay back; finish your own work or report to the user |
 | `ERR_DISABLED` | Relay is off | Set `[relay] enabled = true` |

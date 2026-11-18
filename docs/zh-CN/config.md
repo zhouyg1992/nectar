@@ -149,7 +149,7 @@ root_ttl = "30m"
 session = "per_root"
 ```
 
-每个 Bot 还可以配置 `role`、`description`、`capabilities` 和 `relay_accept_from`；`relay_accept_from` 留空表示接受花名册内任意 Bot（不校验是否在群），引用不存在的 Bot 会拒绝启动。relay 只在同一个进程内的多 Bot 配置（`[bots.*]`）下可用，旧式单 `[bot]` 配置开启后只会告警。
+每个 Bot 还可以配置 `role`、`description`、`capabilities` 和 `relay_accept_from`；`relay_accept_from` 留空表示接受花名册内任意 Bot（不校验是否在群），引用不存在的 Bot 会拒绝启动；目标的 `allowed_chats` 仍然生效。relay 只在同一个进程内的多 Bot 配置（`[bots.*]`）下可用，旧式单 `[bot]` 配置开启后只会告警。
 
 ## 引擎配置
 
