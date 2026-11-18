@@ -125,7 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 | Install the service without starting it | `--no-start` |
 | Start at boot without login (Linux) | `--linger` |
 
-Defaults: binary in `~/.local/bin/nectar`, config in `~/.nectar/config.toml`, service enabled and started, `nectar-schedule` skill installed. The installer writes the config with mode `0600`.
+Defaults: binary in `~/.local/bin/nectar`, config in `~/.nectar/config.toml`, service enabled and started, the `nectar-schedule`, `nectar-memory` and `nectar-relay` skills installed. The installer writes the config with mode `0600`.
 
 If the user chose a custom `--dir`, use `<dir>/nectar` instead of `~/.local/bin/nectar` in the commands below.
 

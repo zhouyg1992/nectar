@@ -335,3 +335,88 @@ func TestBotEntryInheritsLegacyEngine(t *testing.T) {
 		t.Fatalf("bots = %#v", bots)
 	}
 }
+
+func TestResolveBotsCarriesRelayRoles(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	body := `
+[bots.coder]
+name = "Coder"
+platform = "feishu"
+engine = "codex"
+role = "coder"
+description = "writes code"
+capabilities = ["code", " test "]
+relay_accept_from = [" reviewer "]
+
+[bots.coder.feishu]
+app_id = "cli_coder"
+app_secret = "{{SECRET_coder}}"
+
+[bots.reviewer]
+name = "Reviewer"
+platform = "telegram"
+engine = "claude"
+role = "reviewer"
+relay_accept_from = ["coder"]
+
+[bots.reviewer.telegram]
+bot_token = "{{SECRET_reviewer}}"
+
+[storage]
+data_dir = "` + root + `"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bots, err := cfg.ResolveBots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]ResolvedBot{}
+	for _, bot := range bots {
+		byID[bot.ID] = bot
+	}
+	coder := byID["coder"].Config.Bot
+	if coder.Role != "coder" || coder.Description != "writes code" {
+		t.Fatalf("coder role = %#v", coder)
+	}
+	if len(coder.Capabilities) != 2 || coder.Capabilities[1] != "test" {
+		t.Fatalf("coder capabilities = %#v", coder.Capabilities)
+	}
+	if len(coder.RelayAcceptFrom) != 1 || coder.RelayAcceptFrom[0] != "reviewer" {
+		t.Fatalf("coder relay allowlist = %#v", coder.RelayAcceptFrom)
+	}
+}
+
+func TestResolveBotsRejectsUnknownRelayAcceptFrom(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "config.toml")
+	body := `
+[bots.coder]
+platform = "feishu"
+engine = "codex"
+relay_accept_from = ["ghost"]
+
+[bots.coder.feishu]
+app_id = "cli_coder"
+app_secret = "{{SECRET_coder2}}"
+
+[storage]
+data_dir = "` + root + `"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cfg.ResolveBots(); err == nil || !strings.Contains(err.Error(), "unknown bot") {
+		t.Fatalf("expected unknown relay_accept_from error, got %v", err)
+	}
+}

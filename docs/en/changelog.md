@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A run's relay root is now persisted on its token, so repeated `relay send` calls from one turn share one root, budgets and default idempotency keys instead of creating a new root every time; duplicate sends no longer journal or keep an empty root
+- Relay enforces the target bot's `allowed_chats`, so a chat its adapter would refuse cannot reach it through relay; startup warns when a target has `admin_users` but an open relay allowlist
+- Mention-name matching is deterministic (exact match first, unique containment only), persistence writes are serialized, and roots older than 24 hours are pruned on startup
+- Relay runs carry the originating user id, so memory and admin-gated operations inside the target run are checked against the real requester
+- Relay refuses direct chats by default with `ERR_DIRECT_CHAT`; `[relay] allow_direct` opts in and forces silent target output without a mirror
+- A target answer now reaches the origin session even when its group echo fails (for example, the bot is not in that chat) instead of reporting a failed relay
+- A relay target that waits on the shared workspace lock while the sending turn refuses to end is unblocked after `relay.sender_grace` (default 60s) by canceling the sender turn; the result still returns as a new origin turn
+- Origin reply turns no longer receive a relay token, so an agent cannot start another hop while holding the workspace lock and deadlock against the target
+- In summary mode the hand-off card is updated in place from running to `🔁 Relay result` instead of posting a second message; full mode closes the card with a completion note, and `echo = "off"` sends no hand-off card
+- The prompt fence uses a randomized tag so relay bodies cannot close it early; mirror-title detection only matches a prefix; bot-authored messages are dropped only while relay is enabled; canceled envelopes keep the canceled state
+- The local relay API returns the documented `ERR_DISABLED` code, so the CLI can show it instead of a bare error
+- Card hand-off mirrors keep the invisible marker in the body, and the visible mirror title is also recognized on inbound, so platforms that strip zero-width characters still drop sibling mirrors
+
+### Added
+
+- Multi-bot relay: bots in one process can hand work to each other over a local, token-bound bus (`[relay]`), with role-based rosters, per-root generation/envelope/run budgets, idempotency and restart recovery; disabled by default
+- `nectar relay bots|send|roots|show|cancel` and the admin chat command `/relay stop`
+- Relay replies return to the sender's origin session, while the target runs in a detached per-root session; relay bodies never parse as slash commands
+- Group messages that mention several configured bots are handled only by the first mentioned bot (`relay.first_mention_only`), and an opposite-direction ask started by the same human message is refused with `ERR_MUTUAL_RELAY`
+- Hand-off mirrors no longer show a visible marker; rejected sends no longer journal empty roots, and empty roots are pruned on load
+- Relay no longer refuses a target that has not been seen in the chat yet; membership is only logged, so a single @ on the initiator is enough
+- `echo = "summary"` renders the target's final answer as one `🔁 Relay result` card (error state on failure) instead of plain text
+- Group hand-off mirrors on Feishu, DingTalk and Telegram; bot-authored messages and marked mirrors are dropped before anchors or command parsing
+- `nectar-relay` agent skill, installed alongside the schedule and memory skills
+
 ## v0.10.1 — 2026-11-17
 
 ### Fixed

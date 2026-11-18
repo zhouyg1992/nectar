@@ -486,6 +486,7 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 	}
 	text = stripInboundMentions(text, msg.Mentions, msg.MentionAll)
 
+	mentions := feishuMentions(msg)
 	out := platform.Message{
 		Channel:     "feishu",
 		MessageID:   msg.MessageID,
@@ -493,12 +494,21 @@ func toPlatformMessage(msg *channeltypes.NormalizedMessage) platform.Message {
 		ChatType:    msg.ChatType,
 		UserID:      msg.UserID,
 		Text:        normalizeInboundText(text, attachments),
+		Mentions:    mentions,
 		Attachments: attachments,
 		ReplyTo:     msg.MessageID,
 	}
-	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok &&
-		raw.Event != nil && raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
-		out.ThreadID = *raw.Event.Message.ThreadId
+	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok && raw.Event != nil {
+		if raw.Event.Message != nil && raw.Event.Message.ThreadId != nil {
+			out.ThreadID = *raw.Event.Message.ThreadId
+		}
+		// Relay mirrors are posted by a sibling bot. Mark them so the router
+		// drops them before they can trigger another run; the zero-width
+		// marker is only a fallback for platforms that lack this signal.
+		if raw.Event.Sender != nil && raw.Event.Sender.SenderType != nil {
+			kind := strings.TrimSpace(*raw.Event.Sender.SenderType)
+			out.FromBot = strings.EqualFold(kind, "bot") || strings.EqualFold(kind, "app")
+		}
 	}
 	return out
 }
@@ -881,3 +891,45 @@ func parseLogLevel(value string) larkcore.LogLevel {
 }
 
 var _ platform.PlatformAdapter = (*Adapter)(nil)
+
+// feishuMentions prefers the raw event's mention list because it reports
+// mentioned_type ("user" or "bot") for every mention. The channel layer only
+// marks IsBot on the mention that refers to this bot itself, so sibling bots
+// would look like humans and multi-bot routing could not tell them apart.
+func feishuMentions(msg *channeltypes.NormalizedMessage) []platform.Mention {
+	if raw, ok := msg.RawEvent.(*larkim.P2MessageReceiveV1); ok &&
+		raw.Event != nil && raw.Event.Message != nil && len(raw.Event.Message.Mentions) > 0 {
+		out := make([]platform.Mention, 0, len(raw.Event.Message.Mentions))
+		for _, mention := range raw.Event.Message.Mentions {
+			if mention == nil {
+				continue
+			}
+			item := platform.Mention{}
+			if mention.Name != nil {
+				item.Name = *mention.Name
+			}
+			if mention.Id != nil {
+				if mention.Id.OpenId != nil {
+					item.ID = *mention.Id.OpenId
+				} else if mention.Id.UserId != nil {
+					item.ID = *mention.Id.UserId
+				}
+			}
+			if mention.MentionedType != nil {
+				kind := strings.TrimSpace(*mention.MentionedType)
+				item.IsBot = strings.EqualFold(kind, "bot") || strings.EqualFold(kind, "app")
+			}
+			out = append(out, item)
+		}
+		return out
+	}
+	out := make([]platform.Mention, 0, len(msg.Mentions))
+	for _, mention := range msg.Mentions {
+		id := mention.OpenID
+		if id == "" {
+			id = mention.UserID
+		}
+		out = append(out, platform.Mention{Name: mention.Name, ID: id, IsBot: mention.IsBot})
+	}
+	return out
+}

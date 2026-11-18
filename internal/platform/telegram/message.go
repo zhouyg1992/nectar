@@ -148,6 +148,7 @@ func (a *Adapter) parseMessage(raw *tgMessage) (platform.Message, string, error)
 	if text == "" && len(attachments) == 0 {
 		return platform.Message{}, "", errors.New("unsupported telegram message type")
 	}
+	mentions := telegramMentions(raw)
 	for i := range attachments {
 		attachments[i].MessageID = strconv.FormatInt(raw.MessageID, 10)
 	}
@@ -166,6 +167,7 @@ func (a *Adapter) parseMessage(raw *tgMessage) (platform.Message, string, error)
 		ChatType:    chatType,
 		UserID:      strconv.FormatInt(raw.From.ID, 10),
 		Text:        text,
+		Mentions:    mentions,
 		Attachments: attachments,
 		ReplyTo:     messageID,
 		ThreadID:    threadID,
@@ -373,4 +375,29 @@ func extensionFromMime(mimeType string) string {
 	default:
 		return ""
 	}
+}
+
+// telegramMentions captures display-name mentions. Plain @username mentions are
+// skipped because a bot username cannot be mapped back to a configured bot
+// name; text_mention entities carry the name Telegram renders.
+func telegramMentions(raw *tgMessage) []platform.Mention {
+	if raw == nil {
+		return nil
+	}
+	out := make([]platform.Mention, 0, len(raw.Entities))
+	for _, entity := range raw.Entities {
+		if entity.Type != "text_mention" || entity.User == nil {
+			continue
+		}
+		name := strings.TrimSpace(entity.User.FirstName + " " + entity.User.LastName)
+		if name == "" {
+			name = entity.User.Username
+		}
+		out = append(out, platform.Mention{
+			Name:  name,
+			ID:    strconv.FormatInt(entity.User.ID, 10),
+			IsBot: entity.User.IsBot,
+		})
+	}
+	return out
 }

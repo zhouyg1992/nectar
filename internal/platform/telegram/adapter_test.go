@@ -789,3 +789,20 @@ func TestMediaGroupCoalesces(t *testing.T) {
 		t.Fatal("timed out waiting for coalesced media group")
 	}
 }
+
+func TestParseMessageDropsBotSender(t *testing.T) {
+	adapter, err := New(Config{BotToken: "123:test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = adapter.parseMessage(&tgMessage{
+		MessageID: 12,
+		From:      &tgUser{ID: 42, IsBot: true},
+		Chat:      tgChat{ID: -1001, Type: "group"},
+		Date:      time.Now().Unix(),
+		Text:      "🔁 Relay handoff from another bot",
+	})
+	if err == nil {
+		t.Fatal("bot-authored message was accepted")
+	}
+}

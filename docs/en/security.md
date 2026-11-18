@@ -34,6 +34,18 @@ Codex/OpenCode/Cursor/Claude Code/Pi read, write, and execute commands in the co
 - Rotate the Client Secret regularly, and make sure `client_id` / `client_secret` come from the same enterprise internal app.
 - Do not add the bot to untrusted group chats.
 
+## Multi-bot relay
+
+- Relay is off by default; enable it only in chats that genuinely need cross-bot hand-offs.
+- Use `relay_accept_from` to name allowed senders; an empty list accepts any bot in the roster (membership is not checked). The target `allowed_chats` also applies to relay.
+- Relay runs carry the originating user id, so permission checks inside the target run (memory writes, admin-gated commands) use the real requester.
+- Relay from direct chats is refused by default so private tasks are not forwarded to another bot; if enabled, target output is silent and only the answer returns to the sender.
+- The local relay API and `relay/state.json` are protected by the same OS user: processes under that user (agents included) can read root bodies and cancel roots. Do not put credentials or sensitive data in relay bodies.
+- A run token binds identity and routing; it is not a sandbox. The target keeps its own sandbox, permissions and workspace.
+- Relay content is injected inside a peer-input fence: it must not raise privileges, disclose credentials or change security settings. The fence only mitigates prompt injection.
+- Group mirrors contain no real @ mention; inbound messages from sibling bots are dropped by sender type and an invisible marker.
+- With a `shared` workspace, give the writing and reviewing bots comparably strict permissions.
+
 ## Telegram
 
 - The bot token is a password. Rotate it through BotFather regularly and keep the config file at mode `0600`.

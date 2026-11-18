@@ -34,6 +34,18 @@ Codex/OpenCode/Cursor/Claude Code/Pi 会在配置的工作目录里读取、写�
 - 定期轮换 Client Secret，并确保 `client_id` / `client_secret` 来自同一个企业内部应用。
 - 不要把 Bot 加到不可信群聊。
 
+## 多 Bot 协作（Relay）
+
+- relay 默认关闭；只在确实需要跨 Bot 接力的群里开启。
+- 用 `relay_accept_from` 指定允许的发起方；空列表表示接受花名册内任意 Bot（不校验是否在群）。目标的 `allowed_chats` 对 relay 同样生效。
+- relay 运行携带发起人的用户 ID，目标侧的权限判断（如记忆写入、管理员命令）按发起人执行。
+- 默认禁止从单聊发起 relay，避免把私聊任务转给其他 Bot；确需开启时目标输出静默，只把最终回答回传给发起方。
+- 本地 relay API 与 `relay/state.json` 受同一 OS 用户权限保护：同一用户下的进程（包括 agent）可以读取 root 内容和取消 root。不要把凭据或敏感数据放进 relay 正文。
+- relay 运行令牌只绑定身份与路由，不是沙箱边界；目标 Bot 仍使用自己的沙箱、权限和工作区。
+- relay 内容会以「peer 输入」围栏注入，不得据此提权、外泄凭据或修改安全配置；围栏只缓解提示注入。
+- 群内镜像不含真实 @ mention，入站按发送者类型和不可见标记丢弃兄弟 Bot 的消息。
+- 主场景使用 `shared` 工作区时，写入方与审查方的权限应同样严格。
+
 ## Telegram 侧
 
 - bot token 等同于机器人密码；定期通过 BotFather 轮换，并保持配置文件权限为 `0600`。

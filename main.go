@@ -66,11 +66,24 @@ func runBot(configPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	relayHub, err := newRelayHub(cfg, logger)
+	if err != nil {
+		return err
+	}
+	if relayHub != nil {
+		defer relayHub.Close()
+		for _, bot := range bots {
+			if len(bot.Config.Bot.AdminUsers) > 0 && len(bot.Config.Bot.RelayAcceptFrom) == 0 {
+				logger.Warn("relay target has admin users but accepts relay from any bot; set relay_accept_from", "bot", bot.ID)
+			}
+		}
+	}
+
 	runtimes := make([]*botRuntime, 0, len(bots))
 	workspaceLocks := execguard.NewWorkspaceLocks()
 	var setupErrs []error
 	for _, bot := range bots {
-		runtime, err := newBotRuntime(ctx, bot, logger, workspaceLocks)
+		runtime, err := newBotRuntime(ctx, bot, logger, workspaceLocks, relayHub)
 		if err != nil {
 			logger.Error("bot failed to initialize", "bot", bot.ID, "error", err)
 			setupErrs = append(setupErrs, fmt.Errorf("bot %q: %w", bot.ID, err))
@@ -83,6 +96,12 @@ func runBot(configPath string) error {
 	}
 	if len(setupErrs) > 0 {
 		logger.Warn("starting remaining bots after initialization failures", "failed", len(setupErrs), "running", len(runtimes))
+	}
+	if relayHub != nil {
+		if len(runtimes) < 2 {
+			logger.Warn("relay is enabled but fewer than two bots are running; peers cannot answer")
+		}
+		relayHub.Start(ctx)
 	}
 	dashboardServer, err := startDashboard(ctx, cfg, configPath, dashboardBots(runtimes), logger)
 	if err != nil {
@@ -109,7 +128,38 @@ type botRuntime struct {
 	memories     memory.Store
 }
 
-func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog.Logger, workspaceLocks *execguard.WorkspaceLocks) (*botRuntime, error) {
+func newRelayHub(cfg config.Config, logger *slog.Logger) (*core.RelayHub, error) {
+	if !cfg.RelayEnabled() {
+		return nil, nil
+	}
+	ttl, err := cfg.RelayRootTTL()
+	if err != nil {
+		return nil, err
+	}
+	senderGrace, err := cfg.RelaySenderGrace()
+	if err != nil {
+		return nil, err
+	}
+	hub, err := core.NewRelayHub(core.RelayHubOptions{
+		DataDir:             cfg.Storage.DataDir,
+		Echo:                cfg.Relay.Echo,
+		MaxGeneration:       cfg.Relay.MaxGeneration,
+		MaxEnvelopesPerRoot: cfg.Relay.MaxEnvelopesPerRoot,
+		MaxRunsPerRoot:      cfg.Relay.MaxRunsPerRoot,
+		RootTTL:             ttl,
+		FirstMentionOnly:    cfg.RelayFirstMentionOnly(),
+		AllowDirect:         cfg.RelayAllowDirect(),
+		SenderGrace:         senderGrace,
+		Logger:              logger,
+	})
+	if err != nil {
+		logger.Warn("relay did not start", "error", err)
+		return nil, nil
+	}
+	return hub, nil
+}
+
+func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog.Logger, workspaceLocks *execguard.WorkspaceLocks, relayHub *core.RelayHub) (*botRuntime, error) {
 	cfg := bot.Config
 	logger := rootLogger.With("bot", bot.ID)
 
@@ -182,6 +232,18 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 
 	var scheduler *core.Scheduler
 	var scheduleAPI *core.ScheduleAPI
+	if relayHub != nil {
+		relayHub.Register(core.RelayPeer{
+			ID:           bot.ID,
+			Name:         bot.Name,
+			Role:         cfg.Bot.Role,
+			Description:  cfg.Bot.Description,
+			Capabilities: cfg.Bot.Capabilities,
+			AcceptFrom:   cfg.Bot.RelayAcceptFrom,
+			AllowedChats: cfg.Bot.AllowedChats,
+		}, router)
+		router.SetRelay(relayHub)
+	}
 	if cfg.ScheduleEnabled() {
 		grace, err := cfg.ScheduleGrace()
 		if err != nil {
@@ -213,11 +275,12 @@ func newBotRuntime(ctx context.Context, bot config.ResolvedBot, rootLogger *slog
 	} else {
 		router.SetScheduling(anchors, nil)
 	}
-	if scheduler != nil || memories != nil {
+	if scheduler != nil || memories != nil || relayHub != nil {
 		scheduleAPI = core.NewScheduleAPI(core.ScheduleAPIOptions{
 			SocketPath:     filepath.Join(cfg.Storage.DataDir, "run", "api.sock"),
 			Scheduler:      scheduler,
 			Memory:         memories,
+			Relay:          relayHub,
 			Logger:         logger,
 			DefaultChannel: platformName,
 			DefaultAgent:   cfg.Bot.Engine,
@@ -424,6 +487,9 @@ func runLegacyBot(configPath string) error {
 
 	logger := newLogger(platformLogLevel(cfg))
 	slog.SetDefault(logger)
+	if cfg.RelayEnabled() {
+		logger.Warn("relay is enabled but this config uses the legacy single [bot] section; add [bots.<id>] entries to run multiple bots")
+	}
 
 	setup, err := setupEngine(cfg)
 	if err != nil {

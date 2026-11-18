@@ -375,6 +375,47 @@ func (s *SessionStore) Create(key SessionKey, name string) (Session, error) {
 	return *session, nil
 }
 
+// CreateDetached makes a session in the lane without making it active, so
+// relay work does not hijack the conversation a human is currently in. The
+// session still appears in List and can be taken over with /switch.
+func (s *SessionStore) CreateDetached(key SessionKey, name string) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, err := s.newSessionLocked(key, name)
+	if err != nil {
+		return Session{}, err
+	}
+	if err := s.persistLocked(); err != nil {
+		delete(s.sessions, session.ID)
+		return Session{}, err
+	}
+	return *session, nil
+}
+
+// FindByName returns the most recently used non-archived session in the lane
+// whose name matches exactly.
+func (s *SessionStore) FindByName(key SessionKey, name string) (Session, bool) {
+	name = cleanSessionName(name)
+	if name == "" {
+		return Session{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var best *Session
+	for _, session := range s.sessions {
+		if session.Name != name || session.Status == SessionStatusArchived || !session.matchesKey(key) {
+			continue
+		}
+		if best == nil || session.LastUsedAt.After(best.LastUsedAt) {
+			best = session
+		}
+	}
+	if best == nil {
+		return Session{}, false
+	}
+	return *best, true
+}
+
 // EnsureActive returns the active session, creating one when the lane is empty.
 func (s *SessionStore) EnsureActive(key SessionKey, name string) (Session, error) {
 	s.mu.Lock()
@@ -691,6 +732,17 @@ func (s *SessionStore) ensureActiveLocked(key SessionKey, name string) (*Session
 }
 
 func (s *SessionStore) createLocked(key SessionKey, name string) (*Session, error) {
+	session, err := s.newSessionLocked(key, name)
+	if err != nil {
+		return nil, err
+	}
+	s.active[key] = session.ID
+	return session, nil
+}
+
+// newSessionLocked registers a session without touching the active map, so
+// relay sessions can exist beside the human's active session.
+func (s *SessionStore) newSessionLocked(key SessionKey, name string) (*Session, error) {
 	id, err := newSessionID()
 	if err != nil {
 		return nil, err
@@ -710,7 +762,6 @@ func (s *SessionStore) createLocked(key SessionKey, name string) (*Session, erro
 		LastUsedAt: now,
 	}
 	s.sessions[id] = session
-	s.active[key] = id
 	return session, nil
 }
 

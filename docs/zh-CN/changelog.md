@@ -1,5 +1,34 @@
 # Changelog
 
+## 未发布
+
+### 修复
+
+- 同一轮里的多次 `relay send` 现在共享同一个 root（root id 写回 token），预算和默认幂等 key 生效；重复发送不再留下空 root
+- relay 会校验目标 Bot 的 `allowed_chats`，其适配器会拒绝的群无法通过 relay 触达；目标有 `admin_users` 但 relay 白名单为空时启动告警
+- mention 名称匹配改为确定性（先精确、包含匹配要求唯一命中）；状态落盘串行化，启动时清理超过 24 小时的 root
+- relay 运行携带发起人的用户 ID，目标侧的记忆写入与管理员操作按真实发起人校验
+- 单聊默认拒绝接力并返回 `ERR_DIRECT_CHAT`；`[relay] allow_direct` 可开启，开启后目标输出静默且不显示移交卡
+- 目标的群内输出失败（例如 Bot 不在该群）时，最终回答仍会回传到 origin session，不再把整次接力判为失败
+- 目标在等共享 workspace 锁、而发送方回合迟迟不结束时，超过 `relay.sender_grace`（默认 60s）会取消发送方回合以释放锁，结果仍作为新回合回到 origin
+- origin 的 reply 回合不再签发 relay token，避免在持有 workspace 锁时再发起接力导致与目标互等
+- `summary` 模式下移交卡原地更新为 `🔁 Relay result`，不再另发一条结果消息；`full` 模式结束后把移交卡更新为完成提示；`echo = "off"` 不发移交卡
+- 提示围栏使用随机标记，正文无法提前闭合；镜像标题只按前缀识别；`FromBot` 仅在 relay 开启时丢弃；被取消的信封保持 canceled 状态
+- 本地 relay API 返回文档中约定的 `ERR_DISABLED` 错误码，CLI 不再只显示裸错误
+- 卡片移交镜像在正文保留不可见 marker，并把可见的镜像标题也作为入站识别标识，平台剥离零宽字符时仍能丢弃兄弟 Bot 的镜像
+
+### 新增
+
+- 多 Bot 协作（Relay）：同一进程内的 Bot 可以通过本地、令牌绑定的总线互相接力（`[relay]`），支持角色花名册、按 root 的代数/信封/运行预算、幂等和重启恢复；默认关闭
+- `nectar relay bots|send|roots|show|cancel` 以及管理员聊天命令 `"/relay stop"`
+- 接力回复回到发件方 origin session，目标 Bot 在独立的 per-root 会话中运行；relay 正文不会被当作斜杠命令解析
+- 群消息同时 @ 多个已配置 Bot 时只由第一个被 @ 的 Bot 响应（`relay.first_mention_only`）；同一条人类消息发起的反向 ask 会被拒绝并返回 `ERR_MUTUAL_RELAY`
+- 移交镜像不再显示可见 marker；被拒绝的 send 不再留下空 root，加载时自动清理历史空 root
+- 目标 Bot 不要求先在群里出现过；成员信息只写日志、不再拦截，因此只需 @ 发起方即可
+- `echo = "summary"` 下目标的最终回答改为一张 `🔁 Relay result` 结果卡（失败时为错误态），不再输出纯文本
+- 飞书、钉钉、Telegram 的群内移交镜像；Bot 发送的消息和带标记的镜像会在写锚点与命令解析之前丢弃
+- `nectar-relay` Agent Skill，与 schedule、memory 一起安装
+
 ## v0.10.1 — 2026-11-17
 
 ### 修复

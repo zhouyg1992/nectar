@@ -458,3 +458,72 @@ func TestSessionStoreSanitizesExplicitName(t *testing.T) {
 		t.Fatalf("explicit session name still contains markup: %q", session.Name)
 	}
 }
+
+func TestSessionStoreDetachedSessionKeepsActive(t *testing.T) {
+	store := NewSessionStore()
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+
+	active, err := store.EnsureActive(key, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	detached, err := store.CreateDetached(key, "relay:abcd1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detached.ID == active.ID {
+		t.Fatal("CreateDetached reused the active session")
+	}
+	if got := store.ActiveID(key); got != active.ID {
+		t.Fatalf("ActiveID() = %q, want %q", got, active.ID)
+	}
+	if listed := store.List(key, false); len(listed) != 2 {
+		t.Fatalf("List() returned %d sessions, want 2", len(listed))
+	}
+	found, ok := store.FindByName(key, "relay:abcd1234")
+	if !ok || found.ID != detached.ID {
+		t.Fatalf("FindByName() = %q, %v; want %q", found.ID, ok, detached.ID)
+	}
+	if _, ok := store.FindByName(key, "missing"); ok {
+		t.Fatal("FindByName returned a session for a missing name")
+	}
+	other := SessionKey{Channel: "feishu", ChatID: "c2", AgentID: "codex"}
+	if _, ok := store.FindByName(other, "relay:abcd1234"); ok {
+		t.Fatal("FindByName matched a session from another chat")
+	}
+	if err := store.Archive(key, detached.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.FindByName(key, "relay:abcd1234"); ok {
+		t.Fatal("FindByName returned an archived session")
+	}
+}
+
+func TestPersistentSessionStorePersistsDetachedSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	key := SessionKey{Channel: "feishu", ChatID: "c1", AgentID: "codex"}
+
+	store, err := NewPersistentSessionStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := store.EnsureActive(key, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	detached, err := store.CreateDetached(key, "relay:beef1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewPersistentSessionStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.ActiveID(key); got != active.ID {
+		t.Fatalf("ActiveID() after reload = %q, want %q", got, active.ID)
+	}
+	found, ok := reloaded.FindByName(key, "relay:beef1234")
+	if !ok || found.ID != detached.ID {
+		t.Fatalf("FindByName() after reload = %q, %v; want %q", found.ID, ok, detached.ID)
+	}
+}

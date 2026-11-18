@@ -133,6 +133,26 @@ worktree 会按 session 复用。清理时可执行 `git -C <repo> worktree list
 
 `per_chat` / `per_session` 会让多个 Agent 同时操作同一个目录，适合读取、分析和互不重叠的任务；要并行修改同一批文件，请使用 `worktree`。
 
+## 多 Bot 协作（Relay）
+
+默认关闭。开启后，同群的 Bot 可以点名接力，详见 [多 Bot 协作（Relay）](multi-bot-relay.md)。
+
+```toml
+[relay]
+enabled = true
+echo = "summary"                  # full | summary（移交卡原地更新为结果） | off
+first_mention_only = true         # 多 @ 时只由第一个被 @ 的 Bot 响应
+allow_direct = false              # 单聊默认不允许接力
+max_generation = 4
+max_envelopes_per_root = 12
+max_runs_per_root = 8
+root_ttl = "30m"
+sender_grace = "60s"              # 发送方超时未结束则取消以释放 workspace 锁
+session = "per_root"
+```
+
+每个 Bot 还可以配置 `role`、`description`、`capabilities` 和 `relay_accept_from`；`relay_accept_from` 留空表示接受花名册内任意 Bot（不校验是否在群），引用不存在的 Bot 会拒绝启动；目标的 `allowed_chats` 仍然生效。relay 只在同一个进程内的多 Bot 配置（`[bots.*]`）下可用，旧式单 `[bot]` 配置开启后只会告警。
+
 ## 引擎配置
 
 以下各段都可以整段省略，省略时使用默认值。

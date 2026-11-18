@@ -1,6 +1,6 @@
 # Nectar
 
-> Nectar is a Go bridge that connects Feishu / Lark, DingTalk, and Telegram to local coding-agent CLIs (Codex, Claude Code, Cursor Agent, OpenCode, or Pi). It runs multiple independent bots in one process, keeps sessions continuous, streams progress, and supports scheduled tasks.
+> Nectar is a Go bridge that connects Feishu / Lark, DingTalk, and Telegram to local coding-agent CLIs (Codex, Claude Code, Cursor Agent, OpenCode, or Pi). It runs multiple independent bots in one process, keeps sessions continuous, streams progress, supports scheduled tasks, and (opt-in) hands work between bots through a local relay bus.
 
 ## Agent installation
 
@@ -14,6 +14,7 @@
 - [Install and upgrade](https://github.com/zhouyg1992/nectar/blob/main/docs/en/install.md)
 - [Configuration](https://github.com/zhouyg1992/nectar/blob/main/docs/en/config.md)
 - [Commands](https://github.com/zhouyg1992/nectar/blob/main/docs/en/commands.md)
+- [Multi-bot relay](https://github.com/zhouyg1992/nectar/blob/main/docs/en/multi-bot-relay.md)
 - [Feishu setup](https://github.com/zhouyg1992/nectar/blob/main/docs/en/feishu.md)
 - [DingTalk setup](https://github.com/zhouyg1992/nectar/blob/main/docs/en/dingtalk.md)
 - [Telegram setup](https://github.com/zhouyg1992/nectar/blob/main/docs/en/telegram.md)

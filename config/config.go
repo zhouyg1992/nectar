@@ -27,6 +27,7 @@ type Config struct {
 	Memory    MemoryConfig        `toml:"memory"`
 	Schedule  ScheduleConfig      `toml:"schedule"`
 	Dashboard DashboardConfig     `toml:"dashboard"`
+	Relay     RelayConfig         `toml:"relay"`
 }
 
 type FeishuConfig struct {
@@ -124,29 +125,37 @@ type PiConfig struct {
 }
 
 type BotConfig struct {
-	Name          string   `toml:"name"`
-	Engine        string   `toml:"engine"`
-	Platform      string   `toml:"platform"`
-	AdminUsers    []string `toml:"admin_users"`
-	AllowedChats  []string `toml:"allowed_chats"`
-	WorkspaceMode string   `toml:"workspace_mode"`
+	Name            string   `toml:"name"`
+	Engine          string   `toml:"engine"`
+	Platform        string   `toml:"platform"`
+	AdminUsers      []string `toml:"admin_users"`
+	AllowedChats    []string `toml:"allowed_chats"`
+	WorkspaceMode   string   `toml:"workspace_mode"`
+	Role            string   `toml:"role"`
+	Description     string   `toml:"description"`
+	Capabilities    []string `toml:"capabilities"`
+	RelayAcceptFrom []string `toml:"relay_accept_from"`
 }
 
 // BotEntry describes an additional bot in the same Nectar process. Each entry
 // has its own platform identity, engine, workspace, session store, and memory.
 type BotEntry struct {
-	Name          string          `toml:"name"`
-	Platform      string          `toml:"platform"`
-	Engine        string          `toml:"engine"`
-	Workspace     string          `toml:"workspace"`
-	Model         string          `toml:"model"`
-	DataDir       string          `toml:"data_dir"`
-	AdminUsers    []string        `toml:"admin_users"`
-	AllowedChats  []string        `toml:"allowed_chats"`
-	WorkspaceMode string          `toml:"workspace_mode"`
-	Feishu        *FeishuConfig   `toml:"feishu"`
-	DingTalk      *DingTalkConfig `toml:"dingtalk"`
-	Telegram      *TelegramConfig `toml:"telegram"`
+	Name            string          `toml:"name"`
+	Platform        string          `toml:"platform"`
+	Engine          string          `toml:"engine"`
+	Workspace       string          `toml:"workspace"`
+	Model           string          `toml:"model"`
+	DataDir         string          `toml:"data_dir"`
+	AdminUsers      []string        `toml:"admin_users"`
+	AllowedChats    []string        `toml:"allowed_chats"`
+	WorkspaceMode   string          `toml:"workspace_mode"`
+	Role            string          `toml:"role"`
+	Description     string          `toml:"description"`
+	Capabilities    []string        `toml:"capabilities"`
+	RelayAcceptFrom []string        `toml:"relay_accept_from"`
+	Feishu          *FeishuConfig   `toml:"feishu"`
+	DingTalk        *DingTalkConfig `toml:"dingtalk"`
+	Telegram        *TelegramConfig `toml:"telegram"`
 }
 
 type StorageConfig struct {
@@ -180,6 +189,34 @@ type DashboardConfig struct {
 	TokenFile   string `toml:"token_file"`
 	AllowRemote bool   `toml:"allow_remote"`
 	ReadOnly    bool   `toml:"read_only"`
+}
+
+// Relay echo levels control how much of a relay target run is shown in the
+// chat. The origin bot's own turn is always visible.
+const (
+	RelayEchoFull    = "full"
+	RelayEchoSummary = "summary"
+	RelayEchoOff     = "off"
+
+	// DefaultRelayEcho keeps one handoff card plus the target's final answer
+	// without streaming target progress into the group.
+	DefaultRelayEcho = RelayEchoSummary
+)
+
+// RelayConfig controls multi-bot collaboration over the local relay hub.
+// Relay is disabled by default: bots never trigger each other through the chat
+// platform, only through the hub's authenticated local API.
+type RelayConfig struct {
+	Enabled             *bool  `toml:"enabled"`
+	Echo                string `toml:"echo"`
+	FirstMentionOnly    *bool  `toml:"first_mention_only"`
+	AllowDirect         *bool  `toml:"allow_direct"`
+	SenderGrace         string `toml:"sender_grace"`
+	MaxGeneration       int    `toml:"max_generation"`
+	MaxEnvelopesPerRoot int    `toml:"max_envelopes_per_root"`
+	MaxRunsPerRoot      int    `toml:"max_runs_per_root"`
+	RootTTL             string `toml:"root_ttl"`
+	Session             string `toml:"session"`
 }
 
 func defaults() Config {
@@ -244,6 +281,15 @@ func defaults() Config {
 		},
 		Dashboard: DashboardConfig{
 			Listen: "127.0.0.1:8787",
+		},
+		Relay: RelayConfig{
+			Echo:                DefaultRelayEcho,
+			MaxGeneration:       4,
+			MaxEnvelopesPerRoot: 12,
+			MaxRunsPerRoot:      8,
+			RootTTL:             "30m",
+			Session:             "per_root",
+			SenderGrace:         "60s",
 		},
 	}
 }
@@ -324,6 +370,55 @@ func (c Config) MemoryAutoLearnFailures() bool {
 
 func (c Config) DashboardEnabled() bool {
 	return c.Dashboard.Enabled != nil && *c.Dashboard.Enabled
+}
+
+// RelayEnabled reports whether multi-bot relay is turned on. Relay is opt-in.
+func (c Config) RelayEnabled() bool {
+	return c.Relay.Enabled != nil && *c.Relay.Enabled
+}
+
+// RelayFirstMentionOnly reports whether a group message that mentions several
+// configured bots is handled only by the first bot mentioned. Defaults to true.
+func (c Config) RelayFirstMentionOnly() bool {
+	return c.Relay.FirstMentionOnly == nil || *c.Relay.FirstMentionOnly
+}
+
+// RelaySenderGrace bounds how long a relay target waits for the turn that sent
+// the ask to release the shared workspace lock before canceling that turn.
+func (c Config) RelaySenderGrace() (time.Duration, error) {
+	value := strings.TrimSpace(c.Relay.SenderGrace)
+	if value == "" {
+		return 60 * time.Second, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid relay.sender_grace %q: %w", value, err)
+	}
+	if d <= 0 {
+		return 0, errors.New("relay.sender_grace must be positive")
+	}
+	return d, nil
+}
+
+// RelayAllowDirect reports whether relay may start from a direct chat. It is
+// off by default because the target bot is not in the sender's DM.
+func (c Config) RelayAllowDirect() bool {
+	return c.Relay.AllowDirect != nil && *c.Relay.AllowDirect
+}
+
+func (c Config) RelayRootTTL() (time.Duration, error) {
+	value := strings.TrimSpace(c.Relay.RootTTL)
+	if value == "" {
+		return 30 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid relay.root_ttl %q: %w", value, err)
+	}
+	if d <= 0 {
+		return 0, errors.New("relay.root_ttl must be positive")
+	}
+	return d, nil
 }
 
 func (c Config) DashboardTokenPath() string {
@@ -507,6 +602,43 @@ func normalize(cfg *Config) error {
 	}
 	if !cfg.Dashboard.AllowRemote && !isLoopbackHost(host) {
 		return fmt.Errorf("dashboard.listen %q is not loopback; set dashboard.allow_remote = true to allow it", cfg.Dashboard.Listen)
+	}
+	cfg.Relay.Echo = strings.ToLower(strings.TrimSpace(cfg.Relay.Echo))
+	if cfg.Relay.Echo == "" {
+		cfg.Relay.Echo = DefaultRelayEcho
+	}
+	switch cfg.Relay.Echo {
+	case RelayEchoFull, RelayEchoSummary, RelayEchoOff:
+	default:
+		return fmt.Errorf("unsupported relay.echo %q (supported: full, summary, off)", cfg.Relay.Echo)
+	}
+	if cfg.Relay.MaxGeneration <= 0 {
+		cfg.Relay.MaxGeneration = 4
+	}
+	if cfg.Relay.MaxEnvelopesPerRoot <= 0 {
+		cfg.Relay.MaxEnvelopesPerRoot = 12
+	}
+	if cfg.Relay.MaxRunsPerRoot <= 0 {
+		cfg.Relay.MaxRunsPerRoot = 8
+	}
+	cfg.Relay.RootTTL = strings.TrimSpace(cfg.Relay.RootTTL)
+	if cfg.Relay.RootTTL == "" {
+		cfg.Relay.RootTTL = "30m"
+	}
+	if _, err := cfg.RelayRootTTL(); err != nil {
+		return err
+	}
+	if _, err := cfg.RelaySenderGrace(); err != nil {
+		return err
+	}
+	cfg.Relay.Session = strings.ToLower(strings.TrimSpace(cfg.Relay.Session))
+	if cfg.Relay.Session == "" {
+		cfg.Relay.Session = "per_root"
+	}
+	switch cfg.Relay.Session {
+	case "per_root":
+	default:
+		return fmt.Errorf("unsupported relay.session %q (supported: per_root)", cfg.Relay.Session)
 	}
 	switch cfg.Memory.DefaultScope {
 	case "bot", "chat", "project":

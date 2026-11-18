@@ -28,7 +28,7 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 		filepath.Join(home, ".agents", "skills"),
 	}
 	for _, root := range roots {
-		for _, name := range []string{ScheduleSkillName, MemorySkillName} {
+		for _, name := range []string{ScheduleSkillName, MemorySkillName, RelaySkillName} {
 			data, err := os.ReadFile(filepath.Join(root, name, "SKILL.md"))
 			if err != nil {
 				t.Fatalf("%s/%s: %v", root, name, err)
@@ -49,6 +49,9 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 	}
 	if strings.Count(string(data), memoryBlockBegin) != 1 {
 		t.Fatalf("memory AGENTS block count = %d", strings.Count(string(data), memoryBlockBegin))
+	}
+	if strings.Count(string(data), relayBlockBegin) != 1 {
+		t.Fatalf("relay AGENTS block count = %d", strings.Count(string(data), relayBlockBegin))
 	}
 	if !strings.Contains(string(data), "${NECTAR_CLI:-nectar}") {
 		t.Fatal("AGENTS hint does not use NECTAR_CLI")
@@ -75,6 +78,9 @@ func TestInstallSkillAndWorkspaceHint(t *testing.T) {
 	}
 	if strings.Count(string(data), memoryBlockBegin) != 1 {
 		t.Fatalf("memory AGENTS block duplicated: %d", strings.Count(string(data), memoryBlockBegin))
+	}
+	if strings.Count(string(data), relayBlockBegin) != 1 {
+		t.Fatalf("relay AGENTS block duplicated: %d", strings.Count(string(data), relayBlockBegin))
 	}
 }
 

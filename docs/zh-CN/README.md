@@ -9,6 +9,7 @@
 - [Telegram 配置与排查](telegram.md)
 - [后台服务](service.md)
 - [定时任务](schedule.md)
+- [多 Bot 协作（Relay）](multi-bot-relay.md)
 - [安全边界](security.md)
 - [路线图与待实现](roadmap.md)
 - [Changelog](changelog.md)
