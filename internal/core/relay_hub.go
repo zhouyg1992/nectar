@@ -333,9 +333,11 @@ func (h *RelayHub) Send(binding *relayTokenBinding, req RelaySendRequest) (*Rela
 		}
 		chatID = existingRoot.ChatID
 	}
+	// Membership is best effort: a bot only shows up here after it received a
+	// message, so an empty map does not mean the target is absent. Deliver
+	// anyway and let a failed platform send surface the real problem.
 	if !h.chatHasLocked(chatID, targetID) {
-		h.mu.Unlock()
-		return nil, relayError(ErrRelayNotInChat, "%s has not been seen in this chat", targetID)
+		h.logger.Warn("relay target has not been seen in this chat yet", "target", targetID, "chat", chatID)
 	}
 	if h.mutualRelayLocked(binding.BotID, targetID, chatID, binding.OriginMessageID) {
 		h.mu.Unlock()

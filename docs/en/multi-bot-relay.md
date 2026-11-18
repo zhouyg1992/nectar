@@ -52,7 +52,7 @@ nectar relay send --to reviewer "…self-contained brief and diff…"
 
 and ends its turn. When the reviewer finishes, its final answer arrives in the coder's **original session as a new turn**, and the coder summarizes for the user.
 
-Both bots must already have appeared in the chat (@-mentioned or have posted) before relay can reach them; otherwise you get `ERR_NOT_IN_CHAT`.
+The target only needs to be in the same chat; you do **not** have to @-mention it first. Relay delivers by the configured roster. Nectar cannot reliably know whether a bot is in the group, so it does not pre-check; if the target really is elsewhere, posting its output fails and shows up in the log.
 
 Use `workspace_mode = "shared"` on both sides for `coder -> reviewer -> coder`: the reviewer then sees the coder's uncommitted changes. With `auto` / `worktree`, each session has its own worktree and the target cannot see uncommitted work, so the relay body must carry the diff or draft.
 
@@ -155,7 +155,6 @@ Unverified without real credentials: whether Feishu or DingTalk deliver one bot'
 | `ERR_GEN_LIMIT` | Chain too deep | Stop and report |
 | `ERR_BUDGET` | Root envelope/run/time budget exhausted | Stop and report |
 | `ERR_TARGET_UNKNOWN` | No such bot or root | Run `relay bots` |
-| `ERR_NOT_IN_CHAT` | Target has not appeared in this chat | Have the user mention it in the group once |
 | `ERR_REJECTED` | Target refuses this sender, or the request is invalid (empty/oversized body) | Check `relay_accept_from` |
 | `ERR_UNAUTHORIZED` | Missing or expired run token | `relay send` only works inside an agent run |
 | `ERR_MUTUAL_RELAY` | The same message already has an ask in flight in the opposite direction | Do not relay back; finish your own work or report to the user |

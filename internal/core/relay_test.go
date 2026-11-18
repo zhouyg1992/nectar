@@ -256,9 +256,10 @@ func TestRelayRejectsBadTargets(t *testing.T) {
 		t.Fatalf("known target rejected: %v", err)
 	}
 
+	// An unseen target is delivered anyway; membership is best effort.
 	otherChat := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s2", Channel: "feishu", ChatID: "c2"})
-	if _, err := rig.hub.Send(rig.hub.TokenBinding(otherChat), RelaySendRequest{To: "reviewer", Body: "hi"}); RelayErrorCode(err) != ErrRelayNotInChat {
-		t.Fatalf("not-in-chat error = %v", err)
+	if _, err := rig.hub.Send(rig.hub.TokenBinding(otherChat), RelaySendRequest{To: "reviewer", Body: "hi"}); err != nil {
+		t.Fatalf("unseen target rejected: %v", err)
 	}
 
 	strict := newRelayRig(t, RelayHubOptions{})
@@ -554,9 +555,10 @@ func TestRelayMirrorMarkerIsInvisible(t *testing.T) {
 
 func TestRelayRejectedSendLeavesNoRoot(t *testing.T) {
 	rig := newRelayRig(t, RelayHubOptions{})
-	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c9"})
+	rig.hub.Register(RelayPeer{ID: "reviewer", Name: "Reviewer", AcceptFrom: []string{"lead"}}, rig.reviewRouter)
+	token := rig.hub.MintToken(RelayTokenRequest{BotID: "coder", SessionID: "s1", Channel: "feishu", ChatID: "c1"})
 	_, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "hi"})
-	if RelayErrorCode(err) != ErrRelayNotInChat {
+	if RelayErrorCode(err) != ErrRelayRejected {
 		t.Fatalf("error = %v", err)
 	}
 	if roots := rig.hub.Roots(); len(roots) != 0 {

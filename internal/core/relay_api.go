@@ -139,7 +139,7 @@ func writeRelayError(w http.ResponseWriter, err error) {
 			status = http.StatusUnauthorized
 		case ErrRelayTargetUnknown:
 			status = http.StatusNotFound
-		case ErrRelayRejected, ErrRelayNotInChat:
+		case ErrRelayRejected:
 			status = http.StatusForbidden
 		case ErrRelayMutual:
 			status = http.StatusConflict

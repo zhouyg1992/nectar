@@ -52,7 +52,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 
 然后结束当前回合。reviewer 完成后，它的最终回答会作为**新回合**回到 coder 原来的会话；coder 再向用户汇总。
 
-两个 Bot 必须已经在该群里出现过（被 @ 或发过消息），relay 才能发给它；否则返回 `ERR_NOT_IN_CHAT`。
+目标 Bot 需要和发起方在同一个群里，但你**不需要先 @ 它**：relay 直接按配置的花名册投递。Nectar 无法可靠判断某个 Bot 是否在群内，所以不做预检；如果目标确实不在群里，它的输出发送会失败并在日志里体现。
 
 `coder -> reviewer -> coder` 这类协作推荐双方 `workspace_mode = "shared"`：reviewer 能直接看到 coder 未提交的改动。使用 `auto` / `worktree` 时，每个会话有独立 worktree，目标 Bot 看不到未提交的改动，relay 正文里必须自带 diff 或草稿。
 
@@ -155,7 +155,6 @@ nectar relay cancel ROOT
 | `ERR_GEN_LIMIT` | 链路太深 | 停止接力，向用户汇报 |
 | `ERR_BUDGET` | root 的信封/运行/时长预算耗尽 | 停止，向用户汇报 |
 | `ERR_TARGET_UNKNOWN` | 不存在该 Bot 或 root | 先 `relay bots` |
-| `ERR_NOT_IN_CHAT` | 目标 Bot 没有在该群出现过 | 让用户在群里 @ 它一次 |
 | `ERR_REJECTED` | 目标不接受该发件人，或请求非法（空正文、超长） | 检查 `relay_accept_from` |
 | `ERR_UNAUTHORIZED` | 缺少或过期的运行令牌 | 只能在 agent 运行内调用 `relay send` |
 | `ERR_MUTUAL_RELAY` | 同一条消息已从反方向发起进行中的 ask | 不要再反向接力；完成手头任务或向用户汇报 |

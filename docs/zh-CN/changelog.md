@@ -9,6 +9,7 @@
 - 接力回复回到发件方 origin session，目标 Bot 在独立的 per-root 会话中运行；relay 正文不会被当作斜杠命令解析
 - 群消息同时 @ 多个已配置 Bot 时只由第一个被 @ 的 Bot 响应（`relay.first_mention_only`）；同一条人类消息发起的反向 ask 会被拒绝并返回 `ERR_MUTUAL_RELAY`
 - 移交镜像不再显示可见 marker；被拒绝的 send 不再留下空 root，加载时自动清理历史空 root
+- 目标 Bot 不要求先在群里出现过；成员信息只写日志、不再拦截，因此只需 @ 发起方即可
 - 飞书、钉钉、Telegram 的群内移交镜像；Bot 发送的消息和带标记的镜像会在写锚点与命令解析之前丢弃
 - `nectar-relay` Agent Skill，与 schedule、memory 一起安装
 

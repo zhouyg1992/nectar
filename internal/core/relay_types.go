@@ -47,7 +47,6 @@ const (
 	ErrRelayGenLimit      = "ERR_GEN_LIMIT"
 	ErrRelayBudget        = "ERR_BUDGET"
 	ErrRelayTargetUnknown = "ERR_TARGET_UNKNOWN"
-	ErrRelayNotInChat     = "ERR_NOT_IN_CHAT"
 	ErrRelayRejected      = "ERR_REJECTED"
 	ErrRelayUnauthorized  = "ERR_UNAUTHORIZED"
 	ErrRelayMutual        = "ERR_MUTUAL_RELAY"
