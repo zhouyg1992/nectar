@@ -602,9 +602,11 @@ func (h *RelayHub) RootsForChat(chatID string) []*RelayRoot {
 	return roots
 }
 
-// IsMirrorText reports whether inbound text carries a relay mirror marker.
+// IsMirrorText reports whether inbound text carries a relay mirror marker or
+// the visible hand-off title, which survives platforms that strip zero-width
+// characters.
 func (h *RelayHub) IsMirrorText(text string) bool {
-	return strings.Contains(text, relayMirrorMarkerPrefix)
+	return strings.Contains(text, relayMirrorMarkerPrefix) || strings.Contains(text, relayMirrorTitle)
 }
 
 func (h *RelayHub) rootSnapshotLocked(root *RelayRoot) *RelayRoot {

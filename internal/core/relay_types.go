@@ -189,6 +189,10 @@ const relayStateVersion = 1
 // see plumbing in the chat.
 const relayMirrorMarkerPrefix = "\u2063\u200b\u2063"
 
+// relayMirrorTitle is the visible hand-off card title. It doubles as an inbound
+// fallback for platforms that strip zero-width characters.
+const relayMirrorTitle = "🔁 Relay handoff"
+
 func relayMirrorMarker() string {
 	return relayMirrorMarkerPrefix
 }

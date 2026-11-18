@@ -73,15 +73,16 @@ func (r *Router) SendRelayMirror(ctx context.Context, envelope RelayEnvelope, ta
 		ThreadID: envelope.ThreadID,
 	}
 	if r.platform.Capabilities().Card {
-		// Feishu-style platforms drop mirrors by sender type, so the card does
-		// not need a marker and must not show one.
+		// The marker is zero-width, so it stays invisible in the card body. It
+		// is the only inbound fallback on platforms without a sender-type flag
+		// (DingTalk); Feishu and Telegram drop mirrors by sender type anyway.
 		reply.Card = &platform.Card{
 			Status: platform.CardInfo,
-			Title:  "🔁 Relay handoff",
-			Body:   body,
+			Title:  relayMirrorTitle,
+			Body:   body + relayMirrorMarker(),
 		}
 	} else {
-		reply.Text = "🔁 Relay handoff\n" + body + "\n" + relayMirrorMarker()
+		reply.Text = relayMirrorTitle + "\n" + body + "\n" + relayMirrorMarker()
 	}
 	return r.platform.Send(ctx, reply)
 }

@@ -545,6 +545,12 @@ func TestRelayMirrorMarkerIsInvisible(t *testing.T) {
 	if !rig.hub.IsMirrorText("handoff " + marker) {
 		t.Fatal("invisible marker was not recognized")
 	}
+	if !rig.hub.IsMirrorText(relayMirrorTitle + "\nCoder → Reviewer") {
+		t.Fatal("visible mirror title was not recognized")
+	}
+	if rig.hub.IsMirrorText("normal chat message") {
+		t.Fatal("normal text was treated as a mirror")
+	}
 	envelope := RelayEnvelope{ID: "env_mirror", ChatID: "c1", Body: "review this diff"}
 	if _, err := rig.coderRouter.SendRelayMirror(context.Background(), envelope, "Reviewer"); err != nil {
 		t.Fatal(err)
@@ -971,5 +977,24 @@ func TestRelayAPIDisabledReturnsCode(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), ErrRelayDisabled) {
 		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
+func TestRelayMirrorCardKeepsInvisibleMarker(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.coderPlat.cards = true
+	envelope := RelayEnvelope{ID: "env_card_mirror", ChatID: "c1", Body: "review this diff"}
+	if _, err := rig.coderRouter.SendRelayMirror(context.Background(), envelope, "Reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	cards, _ := fakeCards(rig.coderPlat)
+	if len(cards) != 1 {
+		t.Fatalf("cards = %#v", cards)
+	}
+	if !strings.Contains(cards[0].Body, relayMirrorMarker()) {
+		t.Fatal("card mirror lost the inbound marker")
+	}
+	if strings.Contains(cards[0].Body, "nectar-relay") {
+		t.Fatalf("marker is visible: %q", cards[0].Body)
 	}
 }
