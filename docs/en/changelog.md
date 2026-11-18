@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.10.2 — 2026-11-18
+
+### Added
+
+- Dashboard memory review now supports approving, rejecting, and restoring candidate memories, multi-select bulk review, and status/tag filters
+- Memory editing can change the `bot` / `project` / `chat` scope; bot-wide changes still require an admin user
+- The dashboard can search candidate and archived memories instead of returning active memories only
+- Memory and scheduled-task lists are paginated at 50 items per page
+
+### Changed
+
+- `PATCH /memory/<id>` accepts `scope` and `scope_id`, letting the dashboard and remote CLI change a memory's scope
+- Bulk review completes in a single request, reducing round trips from the console
+
 ## v0.10.1 — 2026-11-17
 
 ### Fixed

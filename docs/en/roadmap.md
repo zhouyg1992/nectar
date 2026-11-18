@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.2 complete
+
+- Dashboard memory review with approve/reject/restore, bulk actions, status and tag filters, scope editing, and 50-item pagination for memories and scheduled tasks
+
 ## v0.10.1 complete
 
 - Codex app-server `max_output_bytes` now applies per event, so long tasks are no longer rejected for cumulative output
