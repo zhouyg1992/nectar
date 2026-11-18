@@ -20,6 +20,10 @@ func runUpdate(args []string, version string) error {
 	checkOnly := fs.Bool("check", false, "check for a newer release without installing it")
 	force := fs.Bool("force", false, "reinstall even when already on the target version")
 	targetVersion := fs.String("version", "", "release version to install, for example v1.2.3")
+	mirror := fs.String("mirror", "", "GitHub mirror prefix for release metadata and assets")
+	downloadBase := fs.String("download-base", "", "release asset base URL")
+	latestURL := fs.String("latest-url", "", "latest release page URL")
+	latestAPIURL := fs.String("latest-api-url", "", "latest release API URL")
 	noRestart := fs.Bool("no-restart", false, "update the binary without restarting the service")
 	noSkills := fs.Bool("no-skills", false, "update the binary without refreshing the agent skill")
 	configPath := fs.String("config", "", "path to config.toml for service restart detection")
@@ -40,9 +44,16 @@ func runUpdate(args []string, version string) error {
 		return errors.New("--attempts must be positive")
 	}
 
+	mirrorValue, downloadBaseValue, latestURLValue, latestAPIURLValue := resolveUpdateSource(
+		*mirror, *downloadBase, *latestURL, *latestAPIURL,
+	)
 	cfg := update.Config{
 		CurrentVersion:  version,
 		ExecutablePath:  *binaryPath,
+		Mirror:          mirrorValue,
+		DownloadBase:    downloadBaseValue,
+		LatestURL:       latestURLValue,
+		LatestAPIURL:    latestAPIURLValue,
 		DownloadTimeout: *downloadTimeout,
 		Attempts:        *attempts,
 		Logf: func(format string, args ...any) {
@@ -118,12 +129,21 @@ func runUpdate(args []string, version string) error {
 func printUpdateUsage() {
 	fmt.Print(`Usage:
   nectar update [--check] [--force] [--version vX.Y.Z] [--no-restart] [--no-skills]
+                [--mirror URL] [--download-base URL] [--latest-url URL] [--latest-api-url URL]
                 [--config PATH] [--binary PATH] [--timeout 10m] [--attempts 2] [--no-progress]
 
 Options:
   --check          check for a newer release without installing it
   --force          reinstall even when already on the target version
   --version TAG    install a specific release (default: latest)
+  --mirror URL     GitHub mirror prefix for release metadata and assets
+                   (env NECTAR_UPDATE_MIRROR)
+  --download-base URL
+                   release asset base URL, including the version directory
+                   (env NECTAR_UPDATE_DOWNLOAD_BASE)
+  --latest-url URL latest release page URL (env NECTAR_UPDATE_LATEST_URL)
+  --latest-api-url URL
+                   latest release API URL (env NECTAR_UPDATE_LATEST_API_URL)
   --no-restart     update the binary without restarting the service
   --no-skills      update the binary without refreshing the agent skill
   --config PATH    config path used to detect the installed service
@@ -131,7 +151,17 @@ Options:
   --timeout DUR    timeout for each download attempt (default: 10m)
   --attempts N     maximum metadata and download attempts (default: 2)
   --no-progress    disable the download progress bar
+
+Downloads resume automatically after transient failures when the server supports
+HTTP range requests.
 `)
+}
+
+func resolveUpdateSource(mirror, downloadBase, latestURL, latestAPIURL string) (string, string, string, string) {
+	return firstNonEmpty(mirror, os.Getenv("NECTAR_UPDATE_MIRROR")),
+		firstNonEmpty(downloadBase, os.Getenv("NECTAR_UPDATE_DOWNLOAD_BASE")),
+		firstNonEmpty(latestURL, os.Getenv("NECTAR_UPDATE_LATEST_URL")),
+		firstNonEmpty(latestAPIURL, os.Getenv("NECTAR_UPDATE_LATEST_API_URL"))
 }
 
 type updateProgressPrinter struct {

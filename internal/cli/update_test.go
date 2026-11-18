@@ -31,3 +31,24 @@ func TestUpdateProgressPrinterNonInteractive(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveUpdateSource(t *testing.T) {
+	t.Setenv("NECTAR_UPDATE_MIRROR", "https://env-mirror")
+	t.Setenv("NECTAR_UPDATE_DOWNLOAD_BASE", "https://env-base")
+	t.Setenv("NECTAR_UPDATE_LATEST_URL", "https://env-latest")
+	t.Setenv("NECTAR_UPDATE_LATEST_API_URL", "https://env-api")
+
+	mirror, base, latest, api := resolveUpdateSource("", "", "", "")
+	if mirror != "https://env-mirror" || base != "https://env-base" ||
+		latest != "https://env-latest" || api != "https://env-api" {
+		t.Fatalf("resolved env = %q, %q, %q, %q", mirror, base, latest, api)
+	}
+
+	mirror, base, latest, api = resolveUpdateSource(
+		"https://flag-mirror", "https://flag-base", "https://flag-latest", "https://flag-api",
+	)
+	if mirror != "https://flag-mirror" || base != "https://flag-base" ||
+		latest != "https://flag-latest" || api != "https://flag-api" {
+		t.Fatalf("resolved flags = %q, %q, %q, %q", mirror, base, latest, api)
+	}
+}

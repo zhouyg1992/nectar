@@ -150,7 +150,7 @@ export PATH="$HOME/.local/bin:$PATH"
 nectar update
 ```
 
-`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, refreshes agent skills with the new binary, and restarts the installed background service. It leaves `~/.nectar/config.toml` and data untouched. Asset downloads show a progress bar, and transient connection, TLS, or 5xx failures are retried automatically.
+`nectar update` downloads the latest release, verifies `checksums.txt`, atomically replaces the binary, refreshes agent skills with the new binary, and restarts the installed background service. It leaves `~/.nectar/config.toml` and data untouched. Asset downloads show a progress bar, and transient connection, TLS, or 5xx failures are retried automatically. When the server supports HTTP Range, retries resume from the bytes already downloaded instead of starting over; mirrors without Range support fall back to a full download.
 
 ```bash
 nectar update --check          # check without installing
@@ -162,6 +162,24 @@ nectar update --timeout 15m    # wait up to 15 minutes per download attempt
 nectar update --attempts 3     # try up to 3 times on transient failures
 nectar update --no-progress    # suitable for scripts; hide the progress bar
 ```
+
+GitHub mirror prefixes are supported for networks that cannot reach GitHub directly:
+
+```bash
+nectar update --mirror https://ghfast.top
+NECTAR_UPDATE_MIRROR=https://ghfast.top nectar update
+```
+
+`--mirror` prefixes the release page, GitHub API, and asset URLs, for example `https://ghfast.top/https://github.com/...`. If the mirror does not proxy the latest page or API, pin a version or override the URLs explicitly:
+
+```bash
+nectar update --version v0.10.2 --mirror https://ghfast.top
+nectar update --version v0.10.2 --download-base https://mirror.example/nectar/releases/download/v0.10.2
+nectar update --latest-url https://mirror.example/nectar/releases/latest
+nectar update --latest-api-url https://mirror.example/api/repos/zhouyg1992/nectar/releases/latest
+```
+
+The matching environment variables are `NECTAR_UPDATE_MIRROR`, `NECTAR_UPDATE_DOWNLOAD_BASE`, `NECTAR_UPDATE_LATEST_URL`, and `NECTAR_UPDATE_LATEST_API_URL`; command-line flags take precedence.
 
 Session mappings and last context usage are stored in `~/.nectar/sessions.json`. After a restart, Nectar resumes the same engine session; if that session is no longer valid, it reports the failure and starts a new one.
 
