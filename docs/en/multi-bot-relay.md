@@ -75,6 +75,7 @@ user → bot A → engine A ──relay send (local API + run token)
 - **The target runs in its own session.** Each root maps to a detached session on the target (`relay:<root>`), so the human's active session is never hijacked. It shows up in `/list` and can be taken over with `/switch`.
 - **Async rule.** After `relay send`, the sender must end its turn: no polling, sleeping or waiting. The reply wakes the origin session as a new turn; a turn that never ends would queue the reply behind itself and deadlock the session.
 - **One target per message.** No broadcast, and no infinite ping-pong: replies never trigger another automatic reply.
+- **Group chats only by default.** In a direct chat the target bot is not a participant, so its output could never be shown; relay refuses it with `ERR_DIRECT_CHAT`. Set `allow_direct = true` for private orchestration: target output is forced silent, the mirror is skipped, and only the final answer returns to the sender.
 - **First mention wins.** When the platform reports who was mentioned (Feishu today), a group message that mentions several Nectar bots is handled only by the first one, so one human instruction is not duplicated across bots that end up reviewing each other.
 - **Same-message mutual relays are refused.** When one human message reached two bots and an A→B ask is already in flight, a B→A ask returns `ERR_MUTUAL_RELAY`, so the bots cannot duplicate work and cross-review. Relays started from different human messages are independent and allowed.
 
@@ -85,6 +86,7 @@ user → bot A → engine A ──relay send (local API + run token)
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `enabled` | `false` | Turn relay on. Only useful with at least two bots. |
+| `allow_direct` | `false` | Allow starting a relay from a direct chat. Refused by default (`ERR_DIRECT_CHAT`) because the target bot is not in that DM and its output has nowhere to go. When enabled, target output is forced silent, the mirror is skipped, and only the final answer returns to the sender. |
 | `first_mention_only` | `true` | When a group message mentions several configured bots, only the first mentioned **configured Nectar bot** acts; the others wait for a relay. Set `false` to restore "every mentioned bot responds". |
 | `echo` | `"summary"` | Visibility of target output: `full` shows the progress card and final answer; `summary` shows a single result card with the final answer; `off` hides target output entirely (the answer still returns to the sender). The sender's own turn is always visible. |
 | `max_generation` | `4` | Maximum hops in one chain; beyond it returns `ERR_GEN_LIMIT`. |
@@ -160,6 +162,7 @@ Unverified without real credentials: whether Feishu or DingTalk deliver one bot'
 | `ERR_REJECTED` | Target refuses this sender or this chat (`relay_accept_from` / `allowed_chats`), or the request is invalid (empty/oversized body) | Check the target allowlists |
 | `ERR_UNAUTHORIZED` | Missing or expired run token | `relay send` only works inside an agent run |
 | `ERR_MUTUAL_RELAY` | The same message already has an ask in flight in the opposite direction | Do not relay back; finish your own work or report to the user |
+| `ERR_DIRECT_CHAT` | Relay started from a direct chat (refused by default) | Use a group chat, or enable `allow_direct` |
 | `ERR_DISABLED` | Relay is off | Set `[relay] enabled = true` |
 
 ## Security advice

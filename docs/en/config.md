@@ -142,6 +142,7 @@ Disabled by default. When enabled, bots in the same chat can hand work to each o
 enabled = true
 echo = "summary"                  # full | summary (one result card) | off
 first_mention_only = true         # only the first mentioned bot responds
+allow_direct = false              # relay from direct chats is refused
 max_generation = 4
 max_envelopes_per_root = 12
 max_runs_per_root = 8

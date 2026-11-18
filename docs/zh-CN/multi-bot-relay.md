@@ -75,6 +75,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 - **目标 Bot 使用独立会话。** 每个 root 在目标 Bot 侧对应一个 detached 会话（`relay:<root>`），不会顶掉人类正在使用的活跃会话；可以在 `/list` 里看到，也可以用 `/switch` 接管。
 - **异步硬规则。** 发件 Bot 发完 `relay send` 必须结束当前回合，不能轮询、sleep 或等待目标。reply 会作为新回合唤醒 origin session；如果发件回合一直不结束，reply 会排在它后面，形成队列自死锁。
 - **只点名一个目标。** 没有广播；一问一答不会无限循环（reply 不再自动回投）。
+- **默认只在群聊接力。** 单聊里目标 Bot 不在会话中，执行结果无处展示，因此默认拒绝（`ERR_DIRECT_CHAT`）；需要私有编排时可设 `allow_direct = true`，此时目标输出强制静默、跳过交接卡，只把最终回答回传给发起方。
 - **多 @ 只由第一个响应。** 平台能提供被 @ 者身份时（目前是飞书），群里同时 @ 多个 Nectar Bot 只由第一个被 @ 的 Bot 处理，避免同一条人类指令被多个 Bot 重复执行、互相 review。
 - **拒绝同源反向互接力。** 同一条人类消息同时驱动了两个 Bot、且已存在 A→B 的进行中 ask 时，B→A 的新 ask 返回 `ERR_MUTUAL_RELAY`，防止重复执行和交叉审查；来自不同人类消息的接力互不影响。
 
@@ -85,6 +86,7 @@ nectar relay send --to reviewer "……自包含的任务说明与 diff……"
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `enabled` | `false` | 是否开启 relay。需要至少两个 Bot 才有意义。 |
+| `allow_direct` | `false` | 是否允许在单聊里发起接力。默认拒绝（`ERR_DIRECT_CHAT`），因为目标 Bot 不在这个单聊里，输出无法展示。开启后目标输出强制静默、不显示移交卡，只把最终回答回传给发起方。 |
 | `first_mention_only` | `true` | 群消息同时 @ 多个已配置 Bot 时，只有第一个被 @ 的**已配置 Nectar Bot** 处理；其余 Bot 等到 relay 到达再工作。设为 `false` 恢复「多 @ 全部响应」。 |
 | `echo` | `"summary"` | 目标 Bot 的输出可见度：`full` 显示进度卡和最终回答；`summary` 只显示一张结果卡（目标最终回答）；`off` 不显示目标输出（答案仍回到发件方）。发件方自己的回合始终正常显示。 |
 | `max_generation` | `4` | 一条链路最多几跳，超出返回 `ERR_GEN_LIMIT`。 |
@@ -160,6 +162,7 @@ nectar relay cancel ROOT
 | `ERR_REJECTED` | 目标不接受该发件人或该群（`relay_accept_from` / `allowed_chats`），或请求非法（空正文、超长） | 检查目标的白名单配置 |
 | `ERR_UNAUTHORIZED` | 缺少或过期的运行令牌 | 只能在 agent 运行内调用 `relay send` |
 | `ERR_MUTUAL_RELAY` | 同一条消息已从反方向发起进行中的 ask | 不要再反向接力；完成手头任务或向用户汇报 |
+| `ERR_DIRECT_CHAT` | 在单聊中发起接力（默认禁止） | 到群里发起；或开启 `allow_direct` |
 | `ERR_DISABLED` | 未开启 relay | 在配置里设置 `[relay] enabled = true` |
 
 ## 安全建议

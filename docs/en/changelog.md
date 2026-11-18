@@ -8,6 +8,8 @@
 - Relay enforces the target bot's `allowed_chats`, so a chat its adapter would refuse cannot reach it through relay; startup warns when a target has `admin_users` but an open relay allowlist
 - Mention-name matching is deterministic (exact match first, unique containment only), persistence writes are serialized, and roots older than 24 hours are pruned on startup
 - Relay runs carry the originating user id, so memory and admin-gated operations inside the target run are checked against the real requester
+- Relay refuses direct chats by default with `ERR_DIRECT_CHAT`; `[relay] allow_direct` opts in and forces silent target output without a mirror
+- A target answer now reaches the origin session even when its group echo fails (for example, the bot is not in that chat) instead of reporting a failed relay
 - The prompt fence uses a randomized tag so relay bodies cannot close it early; mirror-title detection only matches a prefix; bot-authored messages are dropped only while relay is enabled; canceled envelopes keep the canceled state
 - The local relay API returns the documented `ERR_DISABLED` code, so the CLI can show it instead of a bare error
 - Card hand-off mirrors keep the invisible marker in the body, and the visible mirror title is also recognized on inbound, so platforms that strip zero-width characters still drop sibling mirrors
