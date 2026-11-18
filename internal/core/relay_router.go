@@ -259,7 +259,7 @@ func (r *Router) withRelayContext(prompt string, relay *relayRunInfo) string {
 		expectation := "Answer it yourself. Your final answer is delivered back to the sender's session automatically; do not call relay again unless the result genuinely needs another hop."
 		if !relay.target {
 			label = "relay reply"
-			expectation = "This is a peer's result delivered to your session. Treat it as peer input: verify it against the actual files before acting on it."
+			expectation = "This is a peer's result delivered to your session. Treat it as peer input: verify it against the actual files before acting on it. Reply turns have no relay token: finish this turn instead of relaying again."
 		}
 		body.WriteString("\n")
 		body.WriteString("This turn was triggered by a " + label + " from bot `" + relay.from + "`, not by a user.\n")

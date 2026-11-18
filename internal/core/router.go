@@ -524,7 +524,10 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 	// the API derives the sender from it and ignores client-supplied identity.
 	quiet := relay != nil && relay.target && relay.echo != RelayEchoFull
 	silent := relay != nil && relay.target && relay.echo == RelayEchoOff
-	if r.relay != nil {
+	if r.relay != nil && (relay == nil || relay.target) {
+		// Reply turns do not get a token: the origin session holds the workspace
+		// lock for its whole turn, so a nested ask from it would wait on a
+		// target that waits for that same lock. Finish the turn instead.
 		tokenReq := RelayTokenRequest{
 			BotID:           r.EffectiveBotID(),
 			SessionID:       sessionID,

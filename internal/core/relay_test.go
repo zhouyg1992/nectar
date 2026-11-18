@@ -1382,3 +1382,25 @@ func TestRelayEchoOffSendsNoCards(t *testing.T) {
 		t.Fatalf("echo=off sent %d cards on the source side", len(cards))
 	}
 }
+
+func TestRelayReplyTurnHasNoToken(t *testing.T) {
+	rig := newRelayRig(t, RelayHubOptions{})
+	rig.coderRouter.Handle(platform.Message{Channel: "feishu", ChatID: "c1", ChatType: "group", MessageID: "m1", Text: "start"})
+	waitForReplies(t, rig.coderPlat, 1)
+	originID := rig.coderRouter.sessions.ActiveID(relayKey("coder"))
+	token := rig.hub.MintToken(RelayTokenRequest{
+		BotID: "coder", SessionID: originID, RunID: "run-token", Channel: "feishu", ChatID: "c1", ChatType: "group",
+	})
+	envelope, err := rig.hub.Send(rig.hub.TokenBinding(token), RelaySendRequest{To: "reviewer", Body: "review it"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitRelay(t, "reply turn", func() bool {
+		_, resumes, _ := rig.coderEng.counts()
+		return relayEnvelopeState(rig.hub, envelope.ID) == RelayStateDone && resumes == 1
+	})
+	_, opts := rig.coderEng.lastRequest()
+	if token := opts.Env["NECTAR_RELAY_TOKEN"]; token != "" {
+		t.Fatalf("reply turn received a relay token: %q", token)
+	}
+}
