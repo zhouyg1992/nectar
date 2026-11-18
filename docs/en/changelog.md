@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.5 — 2026-11-18
+
+### Fixed
+
+- Improved DingTalk card layout: plain paragraphs now use the `Text` component and fill the card width, and small tables render as Markdown, avoiding the native `Table` gray header and width mismatch
+
 ## v0.10.4 — 2026-11-18
 
 ### Added

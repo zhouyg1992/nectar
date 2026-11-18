@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.5 complete
+
+- DingTalk card layout improvements: plain paragraphs fill the card width, and small tables (up to 8 columns and 50 rows) render as Markdown, fixing the gray header and width mismatch
+
 ## v0.10.4 complete
 
 - Completion reactions on final messages (`DONE` on Feishu, 👍 on Telegram), plus a fix for duplicated `v` prefixes in `/about` and the agent identity prompt
