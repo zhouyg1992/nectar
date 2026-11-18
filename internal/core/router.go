@@ -951,10 +951,7 @@ func (r *Router) identityBrief(workdir string) string {
 	if name == "" {
 		name = "Nectar"
 	}
-	version := r.cfg.Version
-	if version == "" {
-		version = "dev"
-	}
+	version := displayVersion(r.cfg.Version)
 	engineName := engineDisplayName(r.engine.Name())
 	modelName := r.resolvedModel()
 	return fmt.Sprintf(`## Nectar runtime
@@ -984,10 +981,7 @@ func (r *Router) aboutText() string {
 	if name == "" {
 		name = "Nectar"
 	}
-	version := r.cfg.Version
-	if version == "" {
-		version = "dev"
-	}
+	version := displayVersion(r.cfg.Version)
 	return strings.Join([]string{
 		fmt.Sprintf("%s v%s", name, version),
 		"A self-hosted bridge between chat platforms and coding-agent CLIs.",
@@ -999,6 +993,14 @@ func (r *Router) aboutText() string {
 		"I can run coding tasks, keep sessions, manage scheduled tasks, and use long-term memory.",
 		"Use /help for commands.",
 	}, "\n")
+}
+
+func displayVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "dev"
+	}
+	return strings.TrimPrefix(version, "v")
 }
 
 func (r *Router) resolvedModel() string {

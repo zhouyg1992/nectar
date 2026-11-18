@@ -510,6 +510,7 @@ func TestRouterInjectsNectarIdentity(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{}
 	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.Version = "v0.10.3"
 
 	router.Handle(platform.Message{
 		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "who are you?",
@@ -520,12 +521,16 @@ func TestRouterInjectsNectarIdentity(t *testing.T) {
 	for _, want := range []string{
 		"## Nectar runtime",
 		"You are Nectar",
+		"Nectar v0.10.3",
 		"Underlying engine: fake",
 		"execution backend",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt = %q, want %q", prompt, want)
 		}
+	}
+	if strings.Contains(prompt, "Nectar vv0.10.3") {
+		t.Fatalf("prompt contains duplicated version prefix: %q", prompt)
 	}
 	if opts.Env["NECTAR_PRODUCT_NAME"] != "Nectar" || opts.Env["NECTAR_AGENT_ID"] != "codex" {
 		t.Fatalf("identity env = %#v", opts.Env)
@@ -539,19 +544,40 @@ func TestRouterAboutCommand(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{}
 	router, _ := newTestRouter(t, eng, plat)
+	router.cfg.Version = "v0.10.3"
 
 	router.Handle(platform.Message{
 		Channel: "feishu", ChatID: "c1", MessageID: "m1", Text: "/about",
 	})
 	waitForReplies(t, plat, 1)
 	reply := plat.lastReply()
-	for _, want := range []string{"Nectar vdev", "Platform: fake", "Engine: fake", "Model: fake"} {
+	for _, want := range []string{"Nectar v0.10.3", "Platform: fake", "Engine: fake", "Model: fake"} {
 		if !strings.Contains(reply, want) {
 			t.Fatalf("about reply = %q, want %q", reply, want)
 		}
 	}
+	if strings.Contains(reply, "Nectar vv0.10.3") {
+		t.Fatalf("about reply contains duplicated version prefix: %q", reply)
+	}
 	if starts, resumes, _ := eng.counts(); starts != 0 || resumes != 0 {
 		t.Fatalf("/about should not call the engine: starts=%d resumes=%d", starts, resumes)
+	}
+}
+
+func TestDisplayVersion(t *testing.T) {
+	for _, tt := range []struct {
+		in   string
+		want string
+	}{
+		{"", "dev"},
+		{"dev", "dev"},
+		{"v0.10.3", "0.10.3"},
+		{"0.10.3", "0.10.3"},
+		{" v0.10.3 ", "0.10.3"},
+	} {
+		if got := displayVersion(tt.in); got != tt.want {
+			t.Fatalf("displayVersion(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
 
