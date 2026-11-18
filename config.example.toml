@@ -266,10 +266,13 @@ workspace_mode = "shared"
 #
 # [relay]
 # enabled = true
-# # Target visibility: full (progress + answer), summary (one result card), off.
+# # Target visibility: full (progress + answer), summary (updates the handoff card), off.
 # echo = "summary"
 # # When a group message @mentions several bots, only the first one acts.
 # first_mention_only = true
+# # Relay from a direct chat is refused: the target bot is not in that DM.
+# # Set true to allow it; target output is then silent and only the answer returns.
+# allow_direct = false
 # max_generation = 4
 # max_envelopes_per_root = 12
 # max_runs_per_root = 8
