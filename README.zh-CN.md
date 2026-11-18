@@ -1,8 +1,8 @@
 <h1 align="center">🍯 Nectar</h1>
 
 <p align="center">
-  <strong>一条消息，唤起你的编程 Agent。</strong><br>
-  在飞书 / 钉钉 / Telegram 里直接使用 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi。
+  <strong>让多个编程 Agent 在同一个仓库里并行工作。</strong><br>
+  在飞书 / 钉钉 / Telegram 里使用 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi：每个会话独立工作区，失败教训先审核再注入，任务运行中随时插话。
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <a href="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml"><img src="https://github.com/zhouyg1992/nectar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果以实时消息或卡片回传。会话保持连续，进度实时可见，任务可以定时执行；安装器会检测本机引擎、写入配置并启动后台服务。
+Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果回传。它不只转发消息，还管理工作区、记忆和运行中的任务——让多个 Agent 可以同时干活，而不是互相踩。
 
 <p align="center">
   <img src="docs/assets/nectar-flow.svg?v=20261114" alt="飞书、钉钉和 Telegram 消息经过 Nectar 转发给 Codex、OpenCode、Cursor Agent、Claude Code 或 Pi" width="860">
@@ -36,14 +36,13 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 
 ## 为什么是 Nectar
 
-- **聊天就是入口**：在飞书 / 钉钉 / Telegram 里直接对话，单聊和群聊都支持。
-- **会话不断**：会话映射持久化到 `~/.nectar/sessions.json`；`/list`、`/switch`、`/rename` 让一个聊天可以保留多个会话，服务重启后如果原会话仍然有效，就继续使用它。
-- **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
-- **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
-- **记忆可携带**：本地优先的 Bot 级 / project / chat 记忆，支持审核、检索注入和 Agent CLI 读写。
-- **本地控制台（可选）**：默认关闭的 Dashboard，可看 Bot 状态、批量审核/拒绝/恢复记忆和管理定时任务，配置修改保持只读。
-- **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
-- **一个进程跑多个 Bot**：Codex、Claude、运维 Bot 各自拥有独立身份、工作区、会话和记忆，并支持每个 session 独立 git worktree。
+- **并行不打架**：开启 `workspace_mode = "worktree"` 后，每个会话有独立的 git worktree 和分支；同一 workspace 串行，不同 chat 可并发，一个进程可跑多个独立 Bot。
+- **记忆可审核**：失败任务先写成 `pending` 候选，批准后才注入；支持 `bot` / `project` / `chat` scope、Dashboard 批量审核、`nectar memory` 和 Agent Skill。
+- **运行中可插话**：`/steer`、`/append`、`/ps`、`/btw` 向正在运行的任务追加信息；普通消息仍然排队，支持 Codex、Claude Code、Pi 和 OpenCode。
+- **会话不断**：会话持久化到本地数据目录，`/list`、`/switch`、`/rename`、`/archive` 管理多个会话，服务重启后继续使用有效会话。
+- **聊天就是入口**：飞书 / Lark、钉钉、Telegram，单聊、群聊和飞书话题回复都支持。
+- **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，卡片实时更新。
+- **任务、文件与安装**：cron、固定间隔和一次性任务；入站图片和文件直接交给 Agent，`.nectar/outbox/` 里的文件自动发回聊天；安装器检测引擎并启动后台服务。
 
 ## 快速开始
 
