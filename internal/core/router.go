@@ -342,7 +342,7 @@ func (r *Router) Handle(msg platform.Message) {
 			r.sendCommandResult(msg, platform.CardInfo, "🌿 Session Status", r.status(key))
 			return
 		case "/about", "/whoami":
-			r.sendCommandResult(msg, platform.CardInfo, "🍯 About "+r.cfg.BotName, r.aboutText())
+			r.sendCommandResult(msg, platform.CardInfo, "🍯 About Nectar", r.aboutText())
 			return
 		case "/stop":
 			if !r.canManageSessions(msg) {
@@ -868,12 +868,14 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 			ThreadID: msg.ThreadID,
 			Card:     card,
 		}); err == nil {
+			r.addCompletionReaction(msg, cardID, card)
 			return nil
 		} else {
 			r.logger.Error("update final card failed", "message_id", cardID, "error", err)
 			fallback := replyTarget(msg)
 			fallback.Card = card
-			if _, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
+			if id, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
+				r.addCompletionReaction(msg, id, card)
 				return nil
 			} else {
 				r.logger.Error("send final card failed", "chat", msg.ChatID, "error", sendErr)
@@ -881,6 +883,21 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 		}
 	}
 	return r.reply(msg, fallbackText)
+}
+
+func (r *Router) addCompletionReaction(msg platform.Message, messageID string, card *platform.Card) {
+	if card == nil || card.Status != platform.CardComplete || strings.TrimSpace(messageID) == "" {
+		return
+	}
+	reactor, ok := r.platform.(platform.CompletionReactor)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := reactor.AddCompletionReaction(ctx, messageID, replyTarget(msg)); err != nil {
+		r.logger.Debug("add completion reaction failed", "message_id", messageID, "error", err)
+	}
 }
 
 func (r *Router) stop(key SessionKey, msg platform.Message) {
@@ -951,11 +968,11 @@ func (r *Router) identityBrief(workdir string) string {
 	if name == "" {
 		name = "Nectar"
 	}
-	version := displayVersion(r.cfg.Version)
+	version := versionLabel(r.cfg.Version)
 	engineName := engineDisplayName(r.engine.Name())
 	modelName := r.resolvedModel()
 	return fmt.Sprintf(`## Nectar runtime
-You are %s, the assistant provided by Nectar v%s. Nectar is a self-hosted
+You are %s, the assistant provided by Nectar %s. Nectar is a self-hosted
 bridge that connects chat platforms to local coding-agent CLIs.
 
 Current platform: %s
@@ -977,13 +994,9 @@ long-term memory. Use the `+"`\"${NECTAR_CLI:-nectar}\" schedule`"+` and
 }
 
 func (r *Router) aboutText() string {
-	name := r.cfg.BotName
-	if name == "" {
-		name = "Nectar"
-	}
-	version := displayVersion(r.cfg.Version)
+	version := versionLabel(r.cfg.Version)
 	return strings.Join([]string{
-		fmt.Sprintf("%s v%s", name, version),
+		fmt.Sprintf("Nectar %s", version),
 		"A self-hosted bridge between chat platforms and coding-agent CLIs.",
 		"",
 		"Platform: " + r.platform.Name(),
@@ -1001,6 +1014,14 @@ func displayVersion(version string) string {
 		return "dev"
 	}
 	return strings.TrimPrefix(version, "v")
+}
+
+func versionLabel(version string) string {
+	version = displayVersion(version)
+	if version == "dev" {
+		return version
+	}
+	return "v" + version
 }
 
 func (r *Router) resolvedModel() string {
