@@ -243,7 +243,8 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 	)
 	if q := strings.TrimSpace(query.Get("q")); q != "" {
 		items, err = bot.Memory.Search(r.Context(), memory.SearchOptions{
-			Query: q, Scope: scope, Limit: limit,
+			Query: q, Scope: scope, Status: status,
+			IncludeInactive: true, Limit: limit,
 		})
 	} else {
 		items, err = bot.Memory.List(r.Context(), memory.ListOptions{
@@ -313,12 +314,32 @@ func (s *Server) handleMemoryPatch(w http.ResponseWriter, r *http.Request) {
 		Status  *string `json:"status,omitempty"`
 		Pinned  *bool   `json:"pinned,omitempty"`
 		Content *string `json:"content,omitempty"`
+		Scope   *string `json:"scope,omitempty"`
+		ScopeID *string `json:"scope_id,omitempty"`
 	}
 	if !readJSON(w, r, &patch) {
 		return
 	}
+	var (
+		targetScope   memory.Scope
+		targetScopeID string
+	)
+	if patch.Scope != nil {
+		scope, scopeID, err := memoryScopeForPatch(bot, *patch.Scope, patch.ScopeID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		targetScope, targetScopeID = scope, scopeID
+	}
 	if patch.Content != nil {
 		if _, err := bot.Memory.UpdateContent(r.Context(), id, *patch.Content); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if patch.Scope != nil {
+		if err := bot.Memory.SetScope(r.Context(), id, targetScope, targetScopeID); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -347,6 +368,39 @@ func (s *Server) handleMemoryPatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
+// memoryScopeForPatch resolves the concrete scope id for an edit. Project
+// memories default to the bot workspace, chat memories require an explicit
+// target, and global is a bot alias.
+func memoryScopeForPatch(bot Bot, rawScope string, rawScopeID *string) (memory.Scope, string, error) {
+	scope := memory.Scope(strings.ToLower(strings.TrimSpace(rawScope)))
+	scopeID := ""
+	if rawScopeID != nil {
+		scopeID = strings.TrimSpace(*rawScopeID)
+	}
+	switch scope {
+	case memory.ScopeBot, memory.ScopeGlobal:
+		return memory.ScopeBot, "", nil
+	case memory.ScopeProject:
+		if scopeID == "" {
+			scopeID = memory.ProjectScope(bot.Workspace)
+		}
+		if scopeID == "" {
+			return "", "", errors.New("could not resolve the current project scope")
+		}
+	case memory.ScopeChat:
+		if scopeID == "" {
+			return "", "", errors.New("chat scope requires a chat target")
+		}
+	default:
+		return "", "", fmt.Errorf("unsupported memory scope %q", scope)
+	}
+	normalizedScope, normalizedID, _, err := memory.NormalizeScope(scope, scopeID)
+	if err != nil {
+		return "", "", err
+	}
+	return normalizedScope, normalizedID, nil
+}
+
 func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
 	bot, ok := s.botFromRequest(r)
 	if !ok {
@@ -371,6 +425,88 @@ func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"deleted": id})
+}
+
+// handleMemoryBulk applies one review action to a set of memories. The console
+// uses it for reviewing candidates in batches; single-item actions still go
+// through handleMemoryPatch.
+func (s *Server) handleMemoryBulk(w http.ResponseWriter, r *http.Request) {
+	bot, ok := s.botFromRequest(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, errors.New("bot not found"))
+		return
+	}
+	if bot.Memory == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("memory is disabled for this bot"))
+		return
+	}
+	var req struct {
+		Action  string   `json:"action"`
+		IDs     []string `json:"ids"`
+		Confirm bool     `json:"confirm"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	switch action {
+	case "approve", "reject", "archive", "restore", "pin", "unpin", "delete":
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unsupported memory action %q", action))
+		return
+	}
+	if action == "delete" && !req.Confirm {
+		writeError(w, http.StatusBadRequest, errors.New("memory bulk delete requires confirm=true"))
+		return
+	}
+	ids := make([]string, 0, len(req.IDs))
+	seen := make(map[string]bool, len(req.IDs))
+	for _, raw := range req.IDs {
+		id := strings.TrimSpace(raw)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("at least one memory id is required"))
+		return
+	}
+	if len(ids) > 500 {
+		writeError(w, http.StatusBadRequest, errors.New("too many memories in one request"))
+		return
+	}
+
+	updated := 0
+	failed := make([]map[string]string, 0)
+	for _, id := range ids {
+		var err error
+		switch action {
+		case "approve":
+			err = bot.Memory.SetStatus(r.Context(), id, memory.StatusActive)
+		case "reject", "archive":
+			err = bot.Memory.SetStatus(r.Context(), id, memory.StatusArchived)
+		case "restore":
+			err = bot.Memory.SetStatus(r.Context(), id, memory.StatusCandidate)
+		case "pin":
+			err = bot.Memory.SetPinned(r.Context(), id, true)
+		case "unpin":
+			err = bot.Memory.SetPinned(r.Context(), id, false)
+		case "delete":
+			err = bot.Memory.Delete(r.Context(), id)
+		}
+		if err != nil {
+			failed = append(failed, map[string]string{"id": id, "error": err.Error()})
+			continue
+		}
+		updated++
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"action":  action,
+		"updated": updated,
+		"failed":  failed,
+	})
 }
 
 func (s *Server) handleSchedules(w http.ResponseWriter, r *http.Request) {

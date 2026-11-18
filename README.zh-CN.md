@@ -41,7 +41,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 - **进度看得见**：🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed，执行过程实时更新。
 - **任务可以定时**：支持 cron、固定间隔和一次性任务，聊天与 CLI 都能管理。
 - **记忆可携带**：本地优先的 Bot 级 / project / chat 记忆，支持审核、检索注入和 Agent CLI 读写。
-- **本地控制台（可选）**：默认关闭的 Dashboard，可看 Bot 状态、审核记忆和管理定时任务，配置修改保持只读。
+- **本地控制台（可选）**：默认关闭的 Dashboard，可看 Bot 状态、批量审核/拒绝/恢复记忆和管理定时任务，配置修改保持只读。
 - **引擎和平台可换**：Codex、Claude Code、Cursor Agent、OpenCode、Pi 按需选择。
 - **一个进程跑多个 Bot**：Codex、Claude、运维 Bot 各自拥有独立身份、工作区、会话和记忆，并支持每个 session 独立 git worktree。
 

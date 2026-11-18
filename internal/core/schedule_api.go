@@ -339,12 +339,42 @@ func (a *ScheduleAPI) handleMemoryItem(w http.ResponseWriter, r *http.Request) {
 			Status  *string `json:"status,omitempty"`
 			Pinned  *bool   `json:"pinned,omitempty"`
 			Content *string `json:"content,omitempty"`
+			Scope   *string `json:"scope,omitempty"`
+			ScopeID *string `json:"scope_id,omitempty"`
 		}
 		if err := decodeJSON(w, r, &patch); err != nil {
 			return
 		}
+		var (
+			targetScope   memory.Scope
+			targetScopeID string
+		)
+		if patch.Scope != nil {
+			scope := memory.Scope(strings.ToLower(strings.TrimSpace(*patch.Scope)))
+			scopeID := ""
+			if patch.ScopeID != nil {
+				scopeID = *patch.ScopeID
+			}
+			normalizedScope, normalizedID, _, err := memory.NormalizeScope(scope, scopeID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			if normalizedScope == memory.ScopeBot &&
+				!a.memoryAdmin(strings.TrimSpace(r.Header.Get("X-Nectar-User-ID"))) {
+				writeError(w, http.StatusForbidden, errors.New("bot-wide memory changes require an admin user"))
+				return
+			}
+			targetScope, targetScopeID = normalizedScope, normalizedID
+		}
 		if patch.Content != nil {
 			if _, err := a.memory.UpdateContent(r.Context(), id, *patch.Content); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		if patch.Scope != nil {
+			if err := a.memory.SetScope(r.Context(), id, targetScope, targetScopeID); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}

@@ -25,8 +25,15 @@
       "common.delete": "Delete",
       "common.approve": "Approve",
       "common.archive": "Archive",
+      "common.reject": "Reject",
+      "common.restore": "Restore",
       "common.pin": "Pin",
       "common.unpin": "Unpin",
+      "common.copyId": "Copy ID",
+      "common.copied": "Copied to clipboard",
+      "common.prev": "Previous",
+      "common.next": "Next",
+      "common.page": "Page {page} / {pages}",
       "overview.eyebrow": "RUNTIMES",
       "overview.botStatus": "Bot status",
       "overview.recentErrors": "Recent errors",
@@ -35,7 +42,7 @@
       "overview.summary.bots": "Running bots",
       "overview.summary.botsHint": "Up {uptime}",
       "overview.summary.activeMemories": "Active memories",
-      "overview.summary.pendingMemories": "{count} pending review",
+      "overview.summary.memoryHint": "{pending} pending · {archived} archived",
       "overview.summary.activeSchedules": "Active schedules",
       "overview.summary.running": "{count} running",
       "overview.summary.noRunning": "No runs in progress",
@@ -57,22 +64,63 @@
       "memory.status.candidate": "Pending review",
       "memory.status.active": "Active",
       "memory.status.archived": "Archived",
+      "memory.filter.archived": "Archived / rejected",
       "memory.allScopes": "All scopes",
       "memory.allTypes": "All types",
       "memory.query": "Query",
       "memory.results": "{count} results",
+      "memory.resultsOne": "1 result",
       "memory.empty": "No matching memories.",
       "memory.count.pending": "Pending",
       "memory.count.active": "Active",
       "memory.count.archived": "Archived",
+      "memory.count.all": "All",
       "memory.used": "used {count}",
       "memory.updated": "updated {time}",
+      "memory.refreshed": "refreshed {time}",
       "memory.pinned": "pinned",
       "memory.toast.updated": "Memory updated",
+      "memory.toast.approved": "Memory approved",
+      "memory.toast.rejected": "Memory rejected",
+      "memory.toast.archived": "Memory archived",
+      "memory.toast.restored": "Memory restored to review",
       "memory.confirmDelete": "Delete this memory? It will no longer be injected.",
       "memory.toast.deleted": "Memory deleted",
       "memory.toast.saved": "Memory content saved",
+      "memory.toast.scopeSaved": "Memory content and scope saved",
       "memory.dialog.title": "Edit memory",
+      "memory.dialog.scope": "Scope",
+      "memory.dialog.chatTarget": "Chat target",
+      "memory.scope.hint.bot": "Visible to every chat handled by this bot.",
+      "memory.scope.hint.project": "Visible to chats working in the current project.",
+      "memory.scope.hint.chat": "Visible only to the selected chat.",
+      "memory.scope.noTargets": "No chat targets yet. Send a message in a chat first.",
+      "memory.scope.selectChat": "Choose a chat target for this memory.",
+      "memory.reviewPending": "Review pending",
+      "memory.pendingBanner": "{count} memories pending review",
+      "memory.pendingBannerOne": "1 memory pending review",
+      "memory.reset": "Reset filters",
+      "memory.selectAll": "Select all",
+      "memory.select": "Select memory",
+      "memory.selected": "{count} selected",
+      "memory.filterTag": "Tag: {tag}",
+      "memory.clearTag": "Clear tag filter",
+      "memory.bulk.done": "Updated {count} memories",
+      "memory.bulk.doneOne": "Updated 1 memory",
+      "memory.bulk.partial": "Updated {count}, {failed} failed",
+      "memory.confirmBulkDelete": "Delete {count} selected memories? They will no longer be injected.",
+      "memory.id": "ID",
+      "memory.source": "Source",
+      "memory.confidence": "Confidence",
+      "memory.revision": "Revision",
+      "memory.created": "Created",
+      "memory.expires": "Expires",
+      "memory.evidence": "Evidence",
+      "memory.emptyPending": "Nothing pending review.",
+      "memory.emptyActive": "No active memories.",
+      "memory.emptyArchived": "No archived memories.",
+      "memory.copyFailed": "Could not copy to clipboard",
+      "memory.openDetails": "Details",
       "schedule.eyebrow": "SCHEDULER",
       "schedule.title": "Scheduled tasks",
       "schedule.showCompleted": "Show completed",
@@ -181,8 +229,15 @@
       "common.delete": "删除",
       "common.approve": "批准",
       "common.archive": "归档",
+      "common.reject": "拒绝",
+      "common.restore": "恢复",
       "common.pin": "固定",
       "common.unpin": "取消固定",
+      "common.copyId": "复制 ID",
+      "common.copied": "已复制到剪贴板",
+      "common.prev": "上一页",
+      "common.next": "下一页",
+      "common.page": "第 {page} / {pages} 页",
       "overview.eyebrow": "运行时",
       "overview.botStatus": "Bot 状态",
       "overview.recentErrors": "最近异常",
@@ -191,7 +246,7 @@
       "overview.summary.bots": "运行中的 Bot",
       "overview.summary.botsHint": "已运行 {uptime}",
       "overview.summary.activeMemories": "已启用记忆",
-      "overview.summary.pendingMemories": "{count} 条待审核",
+      "overview.summary.memoryHint": "{pending} 条待审核 · {archived} 条已归档",
       "overview.summary.activeSchedules": "活跃定时任务",
       "overview.summary.running": "{count} 个正在执行",
       "overview.summary.noRunning": "暂无执行中的任务",
@@ -213,22 +268,63 @@
       "memory.status.candidate": "待审核",
       "memory.status.active": "已启用",
       "memory.status.archived": "已归档",
+      "memory.filter.archived": "已归档 / 已拒绝",
       "memory.allScopes": "全部 scope",
       "memory.allTypes": "全部类型",
       "memory.query": "查询",
       "memory.results": "{count} 条结果",
+      "memory.resultsOne": "1 条结果",
       "memory.empty": "没有匹配的记忆。",
       "memory.count.pending": "待审核",
       "memory.count.active": "已启用",
       "memory.count.archived": "已归档",
+      "memory.count.all": "全部",
       "memory.used": "使用 {count} 次",
       "memory.updated": "更新于 {time}",
+      "memory.refreshed": "刷新于 {time}",
       "memory.pinned": "已固定",
       "memory.toast.updated": "记忆已更新",
+      "memory.toast.approved": "记忆已批准",
+      "memory.toast.rejected": "记忆已拒绝",
+      "memory.toast.archived": "记忆已归档",
+      "memory.toast.restored": "记忆已恢复到待审核",
       "memory.confirmDelete": "确定删除这条记忆？删除后不会参与注入。",
       "memory.toast.deleted": "记忆已删除",
       "memory.toast.saved": "记忆内容已保存",
+      "memory.toast.scopeSaved": "记忆内容和 scope 已保存",
       "memory.dialog.title": "编辑记忆",
+      "memory.dialog.scope": "Scope",
+      "memory.dialog.chatTarget": "会话目标",
+      "memory.scope.hint.bot": "当前 Bot 的所有会话都可见。",
+      "memory.scope.hint.project": "当前项目下的会话可见。",
+      "memory.scope.hint.chat": "只有选中的会话可见。",
+      "memory.scope.noTargets": "还没有可选的会话：先在聊天里发一条消息。",
+      "memory.scope.selectChat": "请选择一个会话目标。",
+      "memory.reviewPending": "审核待处理",
+      "memory.pendingBanner": "{count} 条记忆待审核",
+      "memory.pendingBannerOne": "1 条记忆待审核",
+      "memory.reset": "重置筛选",
+      "memory.selectAll": "全选",
+      "memory.select": "选择记忆",
+      "memory.selected": "已选 {count} 条",
+      "memory.filterTag": "标签：{tag}",
+      "memory.clearTag": "清除标签筛选",
+      "memory.bulk.done": "已更新 {count} 条记忆",
+      "memory.bulk.doneOne": "已更新 1 条记忆",
+      "memory.bulk.partial": "已更新 {count} 条，{failed} 条失败",
+      "memory.confirmBulkDelete": "确定删除选中的 {count} 条记忆？删除后不会参与注入。",
+      "memory.id": "ID",
+      "memory.source": "来源",
+      "memory.confidence": "置信度",
+      "memory.revision": "版本",
+      "memory.created": "创建于",
+      "memory.expires": "过期于",
+      "memory.evidence": "依据",
+      "memory.emptyPending": "没有待审核的记忆。",
+      "memory.emptyActive": "没有已启用的记忆。",
+      "memory.emptyArchived": "没有已归档的记忆。",
+      "memory.copyFailed": "复制到剪贴板失败",
+      "memory.openDetails": "详情",
       "schedule.eyebrow": "调度器",
       "schedule.title": "定时任务",
       "schedule.showCompleted": "显示已完成",
@@ -322,8 +418,14 @@
     view: "overview",
     lang: "en",
     memories: [],
+    memoryPage: 1,
+    memoryPageItems: [],
     memoryCounts: {},
+    memoryTag: "",
+    memoryLoadedAt: null,
+    selectedMemories: new Set(),
     schedules: [],
+    schedulePage: 1,
     settings: null,
     targets: [],
     editingMemory: null,
@@ -331,6 +433,8 @@
     schedulePreviewRuns: null,
     toastTimer: null,
   };
+
+  const PAGE_SIZE = 50;
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -398,6 +502,7 @@
         renderSchedulePreview(state.schedulePreviewRuns);
       }
     }
+    if ($("#memoryDialog")?.open) updateMemoryScopeFields();
   }
 
   function renderCurrentView() {
@@ -510,6 +615,61 @@
     return `${minutes}m`;
   }
 
+  function fmtPercent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return "—";
+    return `${Math.round(number * 100)}%`;
+  }
+
+  function copyFallback(text) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    if (!copied) throw new Error("copy failed");
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          copyFallback(text);
+        }
+      } else {
+        copyFallback(text);
+      }
+      toast(t("common.copied"));
+    } catch {
+      toast(t("memory.copyFailed"), true);
+    }
+  }
+
+  function pageSlice(items, page) {
+    const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    const safePage = Math.min(Math.max(1, page), pages);
+    return {
+      page: safePage,
+      pages,
+      items: items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    };
+  }
+
+  function renderPager(pagerSelector, infoSelector, prevSelector, nextSelector, paged) {
+    const pager = $(pagerSelector);
+    pager.hidden = paged.pages <= 1;
+    if (pager.hidden) return;
+    $(infoSelector).textContent = t("common.page", { page: paged.page, pages: paged.pages });
+    $(prevSelector).disabled = paged.page <= 1;
+    $(nextSelector).disabled = paged.page >= paged.pages;
+  }
+
   function botData(id) {
     if (!state.overview) return null;
     return (state.overview.bots || []).find((bot) => bot.id === id) || null;
@@ -555,12 +715,30 @@
     if (state.view === "overview") renderOverview();
   }
 
-  function summaryCard(value, label, hint) {
-    const card = el("div", "summary-card");
+  function summaryCard(value, label, hint, onClick) {
+    const card = el("div", `summary-card${onClick ? " is-link" : ""}`);
+    if (onClick) {
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      card.addEventListener("click", onClick);
+      card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      });
+    }
     card.append(el("div", "summary-value", value));
     card.append(el("div", "summary-label", label));
     if (hint) card.append(el("div", "summary-hint", hint));
     return card;
+  }
+
+  function openMemoryFilter(status) {
+    const select = $("#memoryStatus");
+    if (select) select.value = status;
+    history.replaceState(null, "", "#memory");
+    showView("memory");
   }
 
   function renderOverview() {
@@ -569,6 +747,7 @@
     const bots = overview.bots || [];
     const activeMemories = bots.reduce((sum, bot) => sum + ((bot.memory_counts || {}).active || 0), 0);
     const candidates = bots.reduce((sum, bot) => sum + ((bot.memory_counts || {}).candidate || 0), 0);
+    const archivedMemories = bots.reduce((sum, bot) => sum + ((bot.memory_counts || {}).archived || 0), 0);
     const activeSchedules = bots.reduce((sum, bot) => sum + ((bot.schedule_counts || {}).active || 0), 0);
     const running = bots.reduce((sum, bot) => sum + (bot.running_schedules || 0), 0);
 
@@ -582,7 +761,8 @@
     summary.append(summaryCard(
       activeMemories,
       t("overview.summary.activeMemories"),
-      t("overview.summary.pendingMemories", { count: candidates }),
+      t("overview.summary.memoryHint", { pending: candidates, archived: archivedMemories }),
+      () => openMemoryFilter("active"),
     ));
     summary.append(summaryCard(
       activeSchedules,
@@ -590,11 +770,19 @@
       running
         ? t("overview.summary.running", { count: running })
         : t("overview.summary.noRunning"),
+      () => {
+        history.replaceState(null, "", "#schedules");
+        showView("schedules");
+      },
     ));
     summary.append(summaryCard(
       overview.read_only ? t("overview.summary.readOnly") : t("overview.summary.writable"),
       t("overview.summary.mode"),
       overview.config_path || t("overview.summary.noConfigPath"),
+      () => {
+        history.replaceState(null, "", "#settings");
+        showView("settings");
+      },
     ));
 
     const cards = $("#botCards");
@@ -663,8 +851,9 @@
     return row;
   }
 
-  async function loadMemories() {
+  async function loadMemories(resetPage = false) {
     if (!state.bot) return;
+    if (resetPage) state.memoryPage = 1;
     const params = new URLSearchParams();
     const status = $("#memoryStatus").value;
     const scope = $("#memoryScope").value;
@@ -673,54 +862,172 @@
     params.set("status", status);
     params.set("scope", scope);
     params.set("kind", kind);
-    if (query) params.set("q", query);
+    if (query) {
+      params.set("q", query);
+      params.set("limit", "1000");
+    }
+    if (state.memoryTag) params.set("tag", state.memoryTag);
     const data = await api(botPath(`/memories?${params.toString()}`));
     state.memories = data.memories || [];
     state.memoryCounts = data.counts || {};
+    state.memoryLoadedAt = new Date().toISOString();
+    state.selectedMemories.clear();
     renderMemories();
   }
 
   function renderMemories() {
     const counts = state.memoryCounts || {};
-    const countRow = $("#memoryCounts");
-    clear(countRow);
-    for (const [label, key, cls] of [
-      [t("memory.count.pending"), "candidate", "chip-candidate"],
-      [t("memory.count.active"), "active", "chip-active"],
-      [t("memory.count.archived"), "archived", "chip-archived"],
-    ]) {
-      const pill = el("span", "count-pill");
-      pill.append(document.createTextNode(`${label} `));
-      pill.append(el("strong", "", counts[key] || 0));
-      countRow.append(pill);
+    renderMemoryCounts(counts);
+    renderPendingBanner(counts);
+    renderMemoryMeta();
+    const paged = pageSlice(state.memories, state.memoryPage);
+    state.memoryPage = paged.page;
+    state.memoryPageItems = paged.items;
+    const visible = new Set(paged.items.map((item) => item.id));
+    for (const id of Array.from(state.selectedMemories)) {
+      if (!visible.has(id)) state.selectedMemories.delete(id);
     }
-    $("#memoryMeta").textContent = t("memory.results", { count: state.memories.length });
-
     const list = $("#memoryList");
     clear(list);
-    if (!state.memories.length) {
-      list.append(el("div", "empty", t("memory.empty")));
+    if (!paged.items.length) {
+      list.append(el("div", "empty", memoryEmptyLabel()));
+    } else {
+      for (const item of paged.items) {
+        list.append(renderMemoryCard(item));
+      }
+    }
+    renderMemoryPager(paged);
+    renderBulkBar();
+  }
+
+  function renderMemoryCounts(counts) {
+    const countRow = $("#memoryCounts");
+    clear(countRow);
+    const current = $("#memoryStatus").value;
+    const total = Object.values(counts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    for (const [label, key, cls, value] of [
+      [t("memory.count.all"), "all", "chip-all", total],
+      [t("memory.count.pending"), "candidate", "chip-candidate", counts.candidate || 0],
+      [t("memory.count.active"), "active", "chip-active", counts.active || 0],
+      [t("memory.count.archived"), "archived", "chip-archived", counts.archived || 0],
+    ]) {
+      const pill = el("button", `count-pill ${cls}${current === key ? " is-active" : ""}`);
+      pill.type = "button";
+      pill.setAttribute("aria-pressed", current === key ? "true" : "false");
+      pill.append(document.createTextNode(`${label} `));
+      pill.append(el("strong", "", value));
+      pill.addEventListener("click", () => {
+        if ($("#memoryStatus").value === key) return;
+        $("#memoryStatus").value = key;
+        loadMemories(true).catch((error) => toast(error.message, true));
+      });
+      countRow.append(pill);
+    }
+    if (state.memoryTag) {
+      const tagPill = el("button", "filter-pill", `${t("memory.filterTag", { tag: state.memoryTag })} ×`);
+      tagPill.type = "button";
+      tagPill.title = t("memory.clearTag");
+      tagPill.addEventListener("click", () => {
+        state.memoryTag = "";
+        loadMemories(true).catch((error) => toast(error.message, true));
+      });
+      countRow.append(tagPill);
+    }
+  }
+
+  function renderPendingBanner(counts) {
+    const pending = Number(counts.candidate) || 0;
+    const banner = $("#memoryPendingBanner");
+    if (!pending || $("#memoryStatus").value === "candidate") {
+      banner.hidden = true;
       return;
     }
-    for (const item of state.memories) {
-      list.append(renderMemoryCard(item));
+    banner.hidden = false;
+    $("#memoryPendingText").textContent = pending === 1
+      ? t("memory.pendingBannerOne")
+      : t("memory.pendingBanner", { count: pending });
+  }
+
+  function renderMemoryMeta() {
+    let text = state.memories.length === 1
+      ? t("memory.resultsOne")
+      : t("memory.results", { count: state.memories.length });
+    if (state.memoryLoadedAt) {
+      text += ` · ${t("memory.refreshed", { time: fmtTime(state.memoryLoadedAt) })}`;
     }
+    $("#memoryMeta").textContent = text;
+  }
+
+  function renderMemoryPager(paged) {
+    renderPager("#memoryPager", "#memoryPageInfo", "#memoryPrev", "#memoryNext", paged);
+  }
+
+  function memoryEmptyLabel() {
+    if ($("#memorySearch").value.trim() || state.memoryTag) return t("memory.empty");
+    const status = $("#memoryStatus").value;
+    if (status === "candidate") return t("memory.emptyPending");
+    if (status === "active") return t("memory.emptyActive");
+    if (status === "archived") return t("memory.emptyArchived");
+    return t("memory.empty");
+  }
+
+  function renderBulkBar() {
+    const bar = $("#memoryBulkBar");
+    const items = state.memoryPageItems || [];
+    const enabled = !isReadOnly() && items.length > 0;
+    bar.hidden = !enabled;
+    if (!enabled) return;
+    const count = state.selectedMemories.size;
+    $("#memorySelectedMeta").textContent = t("memory.selected", { count });
+    const selectAll = $("#memorySelectAll");
+    selectAll.checked = count > 0 && count === items.length;
+    selectAll.indeterminate = count > 0 && count < items.length;
   }
 
   function renderMemoryCard(item) {
     const card = el("article", "memory-card");
+    if (state.selectedMemories.has(item.id)) card.classList.add("is-selected");
+    const status = item.status || "candidate";
     const head = el("div", "memory-head");
+    const select = el("input", "memory-check");
+    select.type = "checkbox";
+    select.checked = state.selectedMemories.has(item.id);
+    select.setAttribute("aria-label", t("memory.select"));
+    select.addEventListener("change", () => {
+      if (select.checked) state.selectedMemories.add(item.id);
+      else state.selectedMemories.delete(item.id);
+      card.classList.toggle("is-selected", select.checked);
+      renderBulkBar();
+    });
+    const selectWrap = el("label", "memory-select");
+    selectWrap.append(select);
     const meta = el("div", "memory-meta");
     meta.append(chip(item.kind || "fact"));
     meta.append(chip(item.scope || "chat"));
-    meta.append(chip(memoryStatusLabel(item.status || "candidate"), `chip-${item.status || "candidate"}`));
+    meta.append(chip(memoryStatusLabel(status), `chip-${status}`));
     if (item.pinned) meta.append(chip(t("memory.pinned"), "chip-pinned"));
     if (item.locality) meta.append(chip(item.locality));
+    if (!isReadOnly()) head.append(selectWrap);
     head.append(meta);
 
     const content = el("div", "memory-content", item.content || "");
     card.append(head);
     card.append(content);
+
+    if (Array.isArray(item.tags) && item.tags.length) {
+      const tags = el("div", "memory-tags");
+      for (const tag of item.tags) {
+        const tagButton = el("button", "tag-chip", `#${tag}`);
+        tagButton.type = "button";
+        tagButton.title = t("memory.filterTag", { tag });
+        tagButton.addEventListener("click", () => {
+          state.memoryTag = tag;
+          loadMemories(true).catch((error) => toast(error.message, true));
+        });
+        tags.append(tagButton);
+      }
+      card.append(tags);
+    }
 
     const sub = el("div", "muted",
       [
@@ -732,29 +1039,87 @@
         .join(" · "));
     card.append(sub);
 
+    const details = el("details", "memory-details");
+    details.append(el("summary", "", t("memory.openDetails")));
+    const detailGrid = el("div", "detail-grid");
+    for (const [label, value] of [
+      [t("memory.id"), item.id],
+      [t("memory.source"), item.source],
+      [t("memory.confidence"), fmtPercent(item.confidence)],
+      [t("memory.revision"), item.revision],
+      [t("memory.created"), fmtTime(item.created_at)],
+      [t("memory.expires"), item.expires_at ? fmtTime(item.expires_at) : ""],
+    ]) {
+      if (value === undefined || value === null || value === "") continue;
+      const row = el("div", "detail-row");
+      row.append(el("span", "detail-key", label));
+      row.append(el("span", "detail-value", value));
+      detailGrid.append(row);
+    }
+    if (Array.isArray(item.evidence) && item.evidence.length) {
+      const row = el("div", "detail-row detail-wide");
+      row.append(el("span", "detail-key", t("memory.evidence")));
+      row.append(el("span", "detail-value detail-pre", item.evidence.join("\n")));
+      detailGrid.append(row);
+    }
+    details.append(detailGrid);
+    card.append(details);
+
     if (!isReadOnly()) {
       const actions = el("div", "memory-actions");
-      if (item.status !== "active") {
-        actions.append(button(t("common.approve"), "button-accent", () => patchMemory(item.id, { status: "active" })));
+      if (status !== "active") {
+        actions.append(button(t("common.approve"), "button-accent", () => patchMemory(item.id, { status: "active" }, "memory.toast.approved")));
       }
-      if (item.status !== "archived") {
-        actions.append(button(t("common.archive"), "button-ghost", () => patchMemory(item.id, { status: "archived" })));
+      if (status === "candidate") {
+        actions.append(button(t("common.reject"), "button-ghost", () => patchMemory(item.id, { status: "archived" }, "memory.toast.rejected")));
+      } else if (status === "active") {
+        actions.append(button(t("common.archive"), "button-ghost", () => patchMemory(item.id, { status: "archived" }, "memory.toast.archived")));
+      } else if (status === "archived") {
+        actions.append(button(t("common.restore"), "button-ghost", () => patchMemory(item.id, { status: "candidate" }, "memory.toast.restored")));
       }
       actions.append(button(item.pinned ? t("common.unpin") : t("common.pin"), "button-ghost", () => patchMemory(item.id, { pinned: !item.pinned })));
-      actions.append(button(t("common.edit"), "button-ghost", () => openMemoryDialog(item)));
+      actions.append(button(t("common.edit"), "button-ghost", () => openMemoryDialog(item).catch((error) => toast(error.message, true))));
+      actions.append(button(t("common.copyId"), "button-ghost", () => copyText(item.id)));
       actions.append(button(t("common.delete"), "button-danger", () => deleteMemory(item)));
       card.append(actions);
     }
     return card;
   }
 
-  async function patchMemory(id, patch) {
+  async function patchMemory(id, patch, messageKey = "memory.toast.updated") {
     try {
       await api(botPath(`/memories/${encodeURIComponent(id)}`), {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
-      toast(t("memory.toast.updated"));
+      toast(t(messageKey));
+      await Promise.all([loadMemories(), loadOverview()]);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  async function bulkMemory(action) {
+    const ids = Array.from(state.selectedMemories);
+    if (!ids.length) return;
+    if (action === "delete" && !window.confirm(t("memory.confirmBulkDelete", { count: ids.length }))) return;
+    const body = { action, ids };
+    if (action === "delete") body.confirm = true;
+    try {
+      const data = await api(botPath("/memories/bulk"), {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const updated = data.updated || 0;
+      const failed = (data.failed || []).length;
+      const message = failed
+        ? t("memory.bulk.partial", { count: updated, failed })
+        : updated === 1
+          ? t("memory.bulk.doneOne")
+          : t("memory.bulk.done", { count: updated });
+      toast(message, failed > 0);
+      if (failed) console.warn("memory bulk failures", data.failed);
+      state.selectedMemories.clear();
       await Promise.all([loadMemories(), loadOverview()]);
     } catch (error) {
       toast(error.message, true);
@@ -772,24 +1137,92 @@
     }
   }
 
-  function openMemoryDialog(item) {
+  function chatScopeID(target) {
+    return `chat:${target.channel}/${target.chat_id}`;
+  }
+
+  async function populateMemoryChatTargets(item) {
+    const select = $("#memoryChatTarget");
+    clear(select);
+    let targets = [];
+    try {
+      targets = await loadTargets();
+    } catch (error) {
+      console.warn("load chat targets failed", error);
+    }
+    const seen = new Set();
+    for (const target of targets) {
+      const id = chatScopeID(target);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const option = el("option", "", target.label);
+      option.value = id;
+      select.append(option);
+    }
+    if (item && item.scope === "chat" && item.scope_id && !seen.has(item.scope_id)) {
+      const option = el("option", "", item.scope_id);
+      option.value = item.scope_id;
+      select.append(option);
+      seen.add(item.scope_id);
+    }
+    if (!select.options.length) {
+      const option = el("option", "", t("memory.scope.noTargets"));
+      option.value = "";
+      select.append(option);
+    }
+    if (item && item.scope === "chat" && item.scope_id) {
+      select.value = item.scope_id;
+    } else if (select.options.length) {
+      select.value = select.options[0].value;
+    }
+  }
+
+  function updateMemoryScopeFields() {
+    const scope = $("#memoryScopeEdit").value;
+    const chatField = $("#memoryChatTargetField");
+    chatField.hidden = scope !== "chat";
+    const hint = $("#memoryScopeHint");
+    if (scope === "chat" && !$("#memoryChatTarget").value) {
+      hint.textContent = t("memory.scope.noTargets");
+      return;
+    }
+    hint.textContent = t(`memory.scope.hint.${scope}`);
+  }
+
+  async function openMemoryDialog(item) {
     state.editingMemory = item;
-    $("#memoryDialogMeta").textContent = `${item.kind} · ${item.scope} · ${item.id}`;
+    $("#memoryDialogMeta").textContent = [item.kind, item.scope, item.scope_id, item.id].filter(Boolean).join(" · ");
     $("#memoryContent").value = item.content || "";
+    $("#memoryScopeEdit").value = ["bot", "project", "chat"].includes(item.scope) ? item.scope : "bot";
+    await populateMemoryChatTargets(item);
+    updateMemoryScopeFields();
     $("#memoryDialog").showModal();
   }
 
   async function saveMemory() {
     const item = state.editingMemory;
     if (!item) return;
+    const scope = $("#memoryScopeEdit").value;
+    const scopeID = scope === "chat" ? $("#memoryChatTarget").value : "";
+    if (scope === "chat" && !scopeID) {
+      toast(t("memory.scope.selectChat"), true);
+      return;
+    }
+    const scopeChanged = scope !== item.scope ||
+      (scope === "chat" && scopeID !== (item.scope_id || ""));
+    const patch = { content: $("#memoryContent").value };
+    if (scopeChanged) {
+      patch.scope = scope;
+      if (scope === "chat") patch.scope_id = scopeID;
+    }
     try {
       await api(botPath(`/memories/${encodeURIComponent(item.id)}`), {
         method: "PATCH",
-        body: JSON.stringify({ content: $("#memoryContent").value }),
+        body: JSON.stringify(patch),
       });
       $("#memoryDialog").close();
-      toast(t("memory.toast.saved"));
-      await loadMemories();
+      toast(scopeChanged ? t("memory.toast.scopeSaved") : t("memory.toast.saved"));
+      await Promise.all([loadMemories(), loadOverview()]);
     } catch (error) {
       toast(error.message, true);
     }
@@ -802,8 +1235,9 @@
     return state.targets;
   }
 
-  async function loadSchedules() {
+  async function loadSchedules(resetPage = false) {
     if (!state.bot) return;
+    if (resetPage) state.schedulePage = 1;
     const showAll = $("#showAllSchedules").checked;
     const data = await api(botPath(`/schedules?all=${showAll ? "1" : "0"}`));
     state.schedules = data.tasks || [];
@@ -812,15 +1246,18 @@
 
   function renderSchedules() {
     $("#scheduleMeta").textContent = t("schedule.count", { count: state.schedules.length });
+    const paged = pageSlice(state.schedules, state.schedulePage);
+    state.schedulePage = paged.page;
     const list = $("#scheduleList");
     clear(list);
-    if (!state.schedules.length) {
+    if (!paged.items.length) {
       list.append(el("div", "empty", t("schedule.empty")));
-      return;
+    } else {
+      for (const task of paged.items) {
+        list.append(renderScheduleCard(task));
+      }
     }
-    for (const task of state.schedules) {
-      list.append(renderScheduleCard(task));
-    }
+    renderPager("#schedulePager", "#schedulePageInfo", "#schedulePrev", "#scheduleNext", paged);
   }
 
   function renderScheduleCard(task) {
@@ -1125,6 +1562,10 @@
     }
     $("#botSelect").addEventListener("change", (event) => {
       state.bot = event.target.value;
+      state.memoryTag = "";
+      state.selectedMemories.clear();
+      state.memoryPage = 1;
+      state.schedulePage = 1;
       showView(state.view);
     });
     $("#languageSelect").addEventListener("change", (event) => {
@@ -1144,17 +1585,69 @@
       }
     });
     $("#memoryRefresh").addEventListener("click", () => loadMemories().catch((error) => toast(error.message, true)));
+    $("#memoryClearBtn").addEventListener("click", () => {
+      $("#memorySearch").value = "";
+      $("#memoryStatus").value = "all";
+      $("#memoryScope").value = "all";
+      $("#memoryKind").value = "all";
+      state.memoryTag = "";
+      state.selectedMemories.clear();
+      loadMemories(true).catch((error) => toast(error.message, true));
+    });
+    $("#memoryReviewPending").addEventListener("click", () => {
+      $("#memoryStatus").value = "candidate";
+      state.memoryTag = "";
+      loadMemories(true).catch((error) => toast(error.message, true));
+    });
+    $("#memorySelectAll").addEventListener("change", (event) => {
+      const items = state.memoryPageItems || [];
+      if (event.target.checked) {
+        for (const item of items) state.selectedMemories.add(item.id);
+      } else {
+        state.selectedMemories.clear();
+      }
+      renderMemories();
+    });
+    for (const node of $$("[data-bulk-action]")) {
+      node.addEventListener("click", () => bulkMemory(node.dataset.bulkAction));
+    }
     $("#memorySearch").addEventListener("keydown", (event) => {
-      if (event.key === "Enter") loadMemories().catch((error) => toast(error.message, true));
+      if (event.key === "Enter") loadMemories(true).catch((error) => toast(error.message, true));
     });
     for (const id of ["#memoryStatus", "#memoryScope", "#memoryKind"]) {
-      $(id).addEventListener("change", () => loadMemories().catch((error) => toast(error.message, true)));
+      $(id).addEventListener("change", () => loadMemories(true).catch((error) => toast(error.message, true)));
     }
-    $("#showAllSchedules").addEventListener("change", () => loadSchedules().catch((error) => toast(error.message, true)));
+    $("#memoryPrev").addEventListener("click", () => {
+      if (state.memoryPage <= 1) return;
+      state.memoryPage--;
+      state.selectedMemories.clear();
+      renderMemories();
+    });
+    $("#memoryNext").addEventListener("click", () => {
+      const pages = Math.max(1, Math.ceil(state.memories.length / PAGE_SIZE));
+      if (state.memoryPage >= pages) return;
+      state.memoryPage++;
+      state.selectedMemories.clear();
+      renderMemories();
+    });
+    $("#showAllSchedules").addEventListener("change", () => loadSchedules(true).catch((error) => toast(error.message, true)));
+    $("#schedulePrev").addEventListener("click", () => {
+      if (state.schedulePage <= 1) return;
+      state.schedulePage--;
+      renderSchedules();
+    });
+    $("#scheduleNext").addEventListener("click", () => {
+      const pages = Math.max(1, Math.ceil(state.schedules.length / PAGE_SIZE));
+      if (state.schedulePage >= pages) return;
+      state.schedulePage++;
+      renderSchedules();
+    });
     $("#newScheduleBtn").addEventListener("click", () => openScheduleDialog(null).catch((error) => toast(error.message, true)));
     $("#scheduleMode").addEventListener("change", updateScheduleModeFields);
     $("#schedulePreviewBtn").addEventListener("click", previewSchedule);
     $("#scheduleSaveBtn").addEventListener("click", saveSchedule);
+    $("#memoryScopeEdit").addEventListener("change", updateMemoryScopeFields);
+    $("#memoryChatTarget").addEventListener("change", updateMemoryScopeFields);
     $("#memorySaveBtn").addEventListener("click", saveMemory);
     for (const node of $$("[data-close-dialog]")) {
       node.addEventListener("click", () => {

@@ -109,6 +109,97 @@ func TestFileStoreSearchScopeStatusAndExpiry(t *testing.T) {
 			t.Fatalf("unexpected %q in %#v", unwanted, got)
 		}
 	}
+
+	candidates, err := store.Search(ctx, SearchOptions{
+		Query:    "候选",
+		Status:   StatusCandidate,
+		ScopeIDs: []string{"chat:feishu/c1", "project:nectar"},
+		Limit:    10,
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 || candidates[0].Content != "候选记忆" {
+		t.Fatalf("candidate search results = %#v", candidates)
+	}
+
+	inactive, err := store.Search(ctx, SearchOptions{
+		Query:           "候选",
+		IncludeInactive: true,
+		ScopeIDs:        []string{"chat:feishu/c1", "project:nectar"},
+		Limit:           10,
+		Now:             now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundCandidate := false
+	for _, item := range inactive {
+		if item.Content == "候选记忆" && item.Status == StatusCandidate {
+			foundCandidate = true
+		}
+	}
+	if !foundCandidate {
+		t.Fatalf("candidate missing from inactive search results = %#v", inactive)
+	}
+}
+
+func TestFileStoreSetScope(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.Put(ctx, Memory{
+		Kind: KindFact, Scope: ScopeBot, Content: "scope can move", Status: StatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.SetScope(ctx, item.ID, ScopeProject, "project:nectar"); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := store.Get(ctx, item.ID)
+	if err != nil || !ok {
+		t.Fatalf("get after project scope: ok=%v err=%v", ok, err)
+	}
+	if got.Scope != ScopeProject || got.ScopeID != "project:nectar" || got.ProjectID != "nectar" {
+		t.Fatalf("project scope = %#v", got)
+	}
+
+	if err := store.SetScope(ctx, item.ID, ScopeChat, "chat:feishu/c1"); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = store.Get(ctx, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Scope != ScopeChat || got.ScopeID != "chat:feishu/c1" || got.ProjectID != "" {
+		t.Fatalf("chat scope = %#v", got)
+	}
+
+	if err := store.SetScope(ctx, item.ID, ScopeGlobal, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = store.Get(ctx, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Scope != ScopeBot || got.ScopeID != "" || got.ProjectID != "" {
+		t.Fatalf("bot scope = %#v", got)
+	}
+
+	if err := store.SetScope(ctx, item.ID, ScopeProject, "nectar"); err == nil {
+		t.Fatal("invalid project scope was accepted")
+	}
+	if err := store.SetScope(ctx, item.ID, ScopeChat, ""); err == nil {
+		t.Fatal("empty chat scope was accepted")
+	}
+	if err := store.SetScope(ctx, item.ID, Scope("invalid"), ""); err == nil {
+		t.Fatal("unknown scope was accepted")
+	}
 }
 
 func TestFileStoreDeduplicatesAndUpdatesPin(t *testing.T) {

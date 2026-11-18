@@ -211,7 +211,14 @@ func (s *FileStore) Search(ctx context.Context, opts SearchOptions) ([]Memory, e
 	}
 	var candidates []scored
 	for _, item := range s.items {
-		if item.Status != StatusActive || item.DeletedAt != nil || expired(item, now) {
+		if item.DeletedAt != nil || expired(item, now) {
+			continue
+		}
+		if opts.Status != "" {
+			if item.Status != opts.Status {
+				continue
+			}
+		} else if !opts.IncludeInactive && item.Status != StatusActive {
 			continue
 		}
 		if opts.Scope != "" && item.Scope != opts.Scope {
@@ -250,6 +257,18 @@ func (s *FileStore) SetStatus(ctx context.Context, id string, status Status) err
 func (s *FileStore) SetPinned(ctx context.Context, id string, pinned bool) error {
 	return s.update(ctx, id, func(item *Memory) {
 		item.Pinned = pinned
+	})
+}
+
+func (s *FileStore) SetScope(ctx context.Context, id string, scope Scope, scopeID string) error {
+	scope, scopeID, projectID, err := NormalizeScope(scope, scopeID)
+	if err != nil {
+		return err
+	}
+	return s.update(ctx, id, func(item *Memory) {
+		item.Scope = scope
+		item.ScopeID = scopeID
+		item.ProjectID = projectID
 	})
 }
 

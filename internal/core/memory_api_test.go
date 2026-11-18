@@ -68,6 +68,22 @@ func TestMemoryAPIAddListSearchPatchDelete(t *testing.T) {
 		t.Fatalf("patch status = %s", resp.Status)
 	}
 
+	patch, _ = json.Marshal(map[string]any{"scope": memory.ScopeBot})
+	req, _ = http.NewRequest(http.MethodPatch, server.URL+"/memory/"+created.ID, bytes.NewReader(patch))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scoped memory.Memory
+	if err := json.NewDecoder(resp.Body).Decode(&scoped); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || scoped.Scope != memory.ScopeBot || scoped.ScopeID != "" {
+		t.Fatalf("scope patch status = %s memory = %#v", resp.Status, scoped)
+	}
+
 	req, _ = http.NewRequest(http.MethodDelete, server.URL+"/memory/"+created.ID+"?confirm=1", nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {

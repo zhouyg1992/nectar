@@ -41,7 +41,7 @@ Nectar sends chat messages to a coding agent on your machine and streams progres
 - **Progress is visible**: 🌼 Thinking → 🐝 Working → 🍯 Complete / ⚠️ Failed, updated while the agent runs.
 - **Tasks can be scheduled**: cron, fixed intervals, and one-shot runs, managed from chat or the CLI.
 - **Memory travels with you**: bot-wide, project, or chat-scoped local memory with review, retrieval, and an agent CLI.
-- **Optional local console**: a disabled-by-default dashboard for bot status, memory review, and scheduled tasks; configuration stays read-only.
+- **Optional local console**: a disabled-by-default dashboard for bot status, batch memory review/reject/restore, and scheduled tasks; configuration stays read-only.
 - **Bring your own engine**: choose Codex, Claude Code, Cursor Agent, OpenCode, or Pi.
 - **Run several bots at once**: give Codex, Claude, and ops bots separate identities, workspaces, sessions, and memory in one process, with optional per-session git worktrees.
 

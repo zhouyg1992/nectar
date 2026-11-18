@@ -52,9 +52,14 @@ The token file is generated with `0600` permissions on first start. The listener
 is loopback-only by default; remote access requires `allow_remote = true` plus
 an HTTPS reverse proxy.
 
-The console covers bot status, memory search/review/pin/delete, scheduled-task
-CRUD/pause/resume/run, and a read-only effective-config view. Configuration
-changes still belong in `config.toml` and require a service restart.
+The console covers bot status, memory search, approve/reject/restore for
+pending memories, batch review, pin/edit/delete, scheduled-task
+CRUD/pause/resume/run, and a read-only effective-config view. Status counts are
+clickable filters, and tags can be clicked to filter the list. The memory editor
+can also move an item between `bot`, `project`, and `chat` scopes. Memory and
+scheduled-task lists show 50 items per page with previous/next controls.
+Configuration changes still belong in `config.toml` and require a service
+restart.
 
 ## Multiple bots
 
