@@ -79,6 +79,24 @@ func TestDashboardAuthOverviewAndMemory(t *testing.T) {
 	if _, _, err := store.Get(context.Background(), listed.Memories[0].ID); err != nil {
 		t.Fatal(err)
 	}
+
+	resp, err = doBearer(t, http.MethodGet, httpServer.URL+"/api/v1/bots/default/memories?status=candidate&q=pending", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("candidate search status = %s", resp.Status)
+	}
+	var searched struct {
+		Memories []memory.Memory `json:"memories"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&searched); err != nil {
+		t.Fatal(err)
+	}
+	if len(searched.Memories) != 1 || searched.Memories[0].Status != memory.StatusCandidate {
+		t.Fatalf("candidate search = %#v", searched.Memories)
+	}
 }
 
 func TestDashboardCookieCSRFAndReadOnly(t *testing.T) {
@@ -228,6 +246,193 @@ func TestDashboardScheduleCRUDAndTargets(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("delete status = %s", resp.Status)
+	}
+}
+
+func TestDashboardMemoryBulkActions(t *testing.T) {
+	server, store := newDashboardTestServer(t, false)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	create := func(content string, status memory.Status) memory.Memory {
+		t.Helper()
+		item, err := store.Put(context.Background(), memory.Memory{
+			Kind: memory.KindFact, Scope: memory.ScopeBot, Content: content, Status: status,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return item
+	}
+	first := create("bulk candidate one", memory.StatusCandidate)
+	second := create("bulk candidate two", memory.StatusCandidate)
+	active := create("bulk active", memory.StatusActive)
+	archived := create("bulk archived", memory.StatusArchived)
+
+	type bulkResponse struct {
+		Action  string              `json:"action"`
+		Updated int                 `json:"updated"`
+		Failed  []map[string]string `json:"failed"`
+	}
+	doBulk := func(action string, ids []string, confirm bool) (int, bulkResponse) {
+		t.Helper()
+		body, err := json.Marshal(map[string]any{"action": action, "ids": ids, "confirm": confirm})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := doBearer(t, http.MethodPost, httpServer.URL+"/api/v1/bots/default/memories/bulk", body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out bulkResponse
+		if resp.StatusCode == http.StatusOK {
+			if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return resp.StatusCode, out
+	}
+	statusOf := func(id string) memory.Status {
+		t.Helper()
+		item, ok, err := store.Get(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatalf("memory %s not found", id)
+		}
+		return item.Status
+	}
+
+	code, out := doBulk("approve", []string{first.ID, second.ID, second.ID}, false)
+	if code != http.StatusOK || out.Updated != 2 || len(out.Failed) != 0 {
+		t.Fatalf("approve code=%d out=%#v", code, out)
+	}
+	if got := statusOf(first.ID); got != memory.StatusActive {
+		t.Fatalf("first status = %s", got)
+	}
+	if got := statusOf(second.ID); got != memory.StatusActive {
+		t.Fatalf("second status = %s", got)
+	}
+
+	code, out = doBulk("reject", []string{active.ID}, false)
+	if code != http.StatusOK || out.Updated != 1 {
+		t.Fatalf("reject code=%d out=%#v", code, out)
+	}
+	if got := statusOf(active.ID); got != memory.StatusArchived {
+		t.Fatalf("active status after reject = %s", got)
+	}
+
+	code, out = doBulk("restore", []string{archived.ID}, false)
+	if code != http.StatusOK || out.Updated != 1 {
+		t.Fatalf("restore code=%d out=%#v", code, out)
+	}
+	if got := statusOf(archived.ID); got != memory.StatusCandidate {
+		t.Fatalf("archived status after restore = %s", got)
+	}
+
+	code, _ = doBulk("delete", []string{archived.ID}, false)
+	if code != http.StatusBadRequest {
+		t.Fatalf("delete without confirm code = %d", code)
+	}
+	code, out = doBulk("delete", []string{archived.ID}, true)
+	if code != http.StatusOK || out.Updated != 1 {
+		t.Fatalf("delete code=%d out=%#v", code, out)
+	}
+	if _, ok, err := store.Get(context.Background(), archived.ID); err != nil || ok {
+		t.Fatalf("deleted memory still present: ok=%v err=%v", ok, err)
+	}
+
+	code, _ = doBulk("explode", []string{first.ID}, false)
+	if code != http.StatusBadRequest {
+		t.Fatalf("unsupported action code = %d", code)
+	}
+	code, _ = doBulk("approve", nil, false)
+	if code != http.StatusBadRequest {
+		t.Fatalf("empty ids code = %d", code)
+	}
+
+	readOnly, _ := newDashboardTestServer(t, true)
+	readOnlyServer := httptest.NewServer(readOnly.Handler())
+	defer readOnlyServer.Close()
+	body, _ := json.Marshal(map[string]any{"action": "approve", "ids": []string{first.ID}})
+	resp, err := doBearer(t, http.MethodPost, readOnlyServer.URL+"/api/v1/bots/default/memories/bulk", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("read-only bulk status = %s", resp.Status)
+	}
+}
+
+func TestDashboardMemoryScopePatch(t *testing.T) {
+	server, store := newDashboardTestServer(t, false)
+	httpServer := httptest.NewServer(server.Handler())
+	defer httpServer.Close()
+
+	item, err := store.Put(context.Background(), memory.Memory{
+		Kind: memory.KindFact, Scope: memory.ScopeBot,
+		Content: "scope patch test", Status: memory.StatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch := func(body map[string]any) (int, memory.Memory) {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := doBearer(t, http.MethodPatch, httpServer.URL+"/api/v1/bots/default/memories/"+item.ID, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var updated memory.Memory
+		if resp.StatusCode == http.StatusOK {
+			if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return resp.StatusCode, updated
+	}
+
+	code, updated := patch(map[string]any{"scope": "project"})
+	if code != http.StatusOK {
+		t.Fatalf("project scope status = %d", code)
+	}
+	if updated.Scope != memory.ScopeProject || !strings.HasPrefix(updated.ScopeID, "project:") || updated.ProjectID == "" {
+		t.Fatalf("project scope = %#v", updated)
+	}
+
+	code, updated = patch(map[string]any{"scope": "chat", "scope_id": "chat:feishu/chat-1"})
+	if code != http.StatusOK {
+		t.Fatalf("chat scope status = %d", code)
+	}
+	if updated.Scope != memory.ScopeChat || updated.ScopeID != "chat:feishu/chat-1" || updated.ProjectID != "" {
+		t.Fatalf("chat scope = %#v", updated)
+	}
+
+	code, updated = patch(map[string]any{"scope": "bot"})
+	if code != http.StatusOK || updated.Scope != memory.ScopeBot {
+		t.Fatalf("bot scope status = %d scope = %s", code, updated.Scope)
+	}
+
+	code, _ = patch(map[string]any{"scope": "chat"})
+	if code != http.StatusBadRequest {
+		t.Fatalf("chat without target status = %d", code)
+	}
+
+	code, updated = patch(map[string]any{"scope": "global"})
+	if code != http.StatusOK || updated.Scope != memory.ScopeBot {
+		t.Fatalf("global alias status = %d scope = %s", code, updated.Scope)
+	}
+
+	code, _ = patch(map[string]any{"scope": "invalid"})
+	if code != http.StatusBadRequest {
+		t.Fatalf("invalid scope status = %d", code)
 	}
 }
 

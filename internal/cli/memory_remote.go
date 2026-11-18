@@ -145,6 +145,12 @@ func (s *remoteMemoryStore) SetPinned(ctx context.Context, id string, pinned boo
 	return s.request(ctx, http.MethodPatch, "/memory/"+url.PathEscape(id), map[string]any{"pinned": pinned}, nil)
 }
 
+func (s *remoteMemoryStore) SetScope(ctx context.Context, id string, scope memory.Scope, scopeID string) error {
+	return s.request(ctx, http.MethodPatch, "/memory/"+url.PathEscape(id), map[string]any{
+		"scope": scope, "scope_id": scopeID,
+	}, nil)
+}
+
 func (s *remoteMemoryStore) UpdateContent(ctx context.Context, id, content string) (memory.Memory, error) {
 	var out memory.Memory
 	if err := s.request(ctx, http.MethodPatch, "/memory/"+url.PathEscape(id), map[string]any{"content": content}, &out); err != nil {

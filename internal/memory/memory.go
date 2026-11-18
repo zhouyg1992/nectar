@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -76,8 +78,14 @@ type SearchOptions struct {
 	// ScopeIDs are the concrete scopes visible to this search. Bot and global
 	// memories are always included. Empty means every scope.
 	ScopeIDs []string
-	Limit    int
-	Now      time.Time
+	// Status optionally restricts results to one status. Empty means active
+	// memories only unless IncludeInactive is set.
+	Status Status
+	// IncludeInactive lets management surfaces search candidate and archived
+	// memories as well. Injection paths leave this false.
+	IncludeInactive bool
+	Limit           int
+	Now             time.Time
 }
 
 type ListOptions struct {
@@ -93,6 +101,7 @@ type Store interface {
 	Search(ctx context.Context, opts SearchOptions) ([]Memory, error)
 	SetStatus(ctx context.Context, id string, status Status) error
 	SetPinned(ctx context.Context, id string, pinned bool) error
+	SetScope(ctx context.Context, id string, scope Scope, scopeID string) error
 	UpdateContent(ctx context.Context, id, content string) (Memory, error)
 	Touch(ctx context.Context, ids []string) error
 	Delete(ctx context.Context, id string) error
@@ -117,4 +126,29 @@ func ProjectScope(workdir string) string {
 		return ""
 	}
 	return "project:" + projectID
+}
+
+// NormalizeScope validates a scope and its concrete scope id. Bot-wide
+// memories have no scope id; project and chat memories require a portable
+// project:<id> or chat:<channel>/<id> id.
+func NormalizeScope(scope Scope, scopeID string) (Scope, string, string, error) {
+	scopeID = strings.TrimSpace(scopeID)
+	switch scope {
+	case ScopeBot, ScopeGlobal:
+		return ScopeBot, "", "", nil
+	case ScopeProject:
+		projectID := strings.TrimPrefix(scopeID, "project:")
+		if projectID == scopeID || projectID == "" {
+			return "", "", "", errors.New("project scope requires a project:<id> scope id")
+		}
+		return ScopeProject, scopeID, projectID, nil
+	case ScopeChat:
+		chatID := strings.TrimPrefix(scopeID, "chat:")
+		if chatID == scopeID || chatID == "" {
+			return "", "", "", errors.New("chat scope requires a chat:<channel>/<id> scope id")
+		}
+		return ScopeChat, scopeID, "", nil
+	default:
+		return "", "", "", fmt.Errorf("unsupported memory scope %q", scope)
+	}
 }

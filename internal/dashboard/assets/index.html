@@ -69,20 +69,23 @@
             <div><p class="eyebrow" data-i18n="memory.eyebrow">MEMORY STORE</p><h2 data-i18n="memory.title">Memory management</h2></div>
             <span class="muted" id="memoryMeta"></span>
           </div>
+          <div class="pending-banner" id="memoryPendingBanner" hidden>
+            <span id="memoryPendingText"></span>
+            <button class="button button-small button-accent" id="memoryReviewPending" type="button" data-i18n="memory.reviewPending">Review pending</button>
+          </div>
           <div class="toolbar">
             <input class="input grow" id="memorySearch" type="search" data-i18n-placeholder="memory.searchPlaceholder" placeholder="Search memory content, projects, or tags…">
             <select class="input" id="memoryStatus">
               <option value="all" data-i18n="memory.allStatuses">All statuses</option>
               <option value="candidate" data-i18n="memory.status.candidate">Pending review</option>
               <option value="active" data-i18n="memory.status.active">Active</option>
-              <option value="archived" data-i18n="memory.status.archived">Archived</option>
+              <option value="archived" data-i18n="memory.filter.archived">Archived / rejected</option>
             </select>
             <select class="input" id="memoryScope">
               <option value="all" data-i18n="memory.allScopes">All scopes</option>
               <option value="bot">bot</option>
               <option value="chat">chat</option>
               <option value="project">project</option>
-              <option value="global">global</option>
             </select>
             <select class="input" id="memoryKind">
               <option value="all" data-i18n="memory.allTypes">All types</option>
@@ -93,9 +96,25 @@
               <option value="episode">episode</option>
             </select>
             <button class="button button-accent" id="memoryRefresh" type="button" data-i18n="memory.query">Query</button>
+            <button class="button button-ghost" id="memoryClearBtn" type="button" data-i18n="memory.reset">Reset filters</button>
           </div>
           <div class="count-row" id="memoryCounts"></div>
+          <div class="bulk-bar" id="memoryBulkBar" hidden>
+            <label class="check"><input id="memorySelectAll" type="checkbox"> <span data-i18n="memory.selectAll">Select all</span></label>
+            <span class="muted" id="memorySelectedMeta"></span>
+            <div class="inline-actions">
+              <button class="button button-small button-accent" type="button" data-bulk-action="approve" data-i18n="common.approve">Approve</button>
+              <button class="button button-small button-ghost" type="button" data-bulk-action="reject" data-i18n="common.reject">Reject</button>
+              <button class="button button-small button-ghost" type="button" data-bulk-action="restore" data-i18n="common.restore">Restore</button>
+              <button class="button button-small button-danger" type="button" data-bulk-action="delete" data-i18n="common.delete">Delete</button>
+            </div>
+          </div>
           <div class="memory-list" id="memoryList"></div>
+          <div class="pager" id="memoryPager" hidden>
+            <button class="button button-small" id="memoryPrev" type="button" data-i18n="common.prev">Previous</button>
+            <span class="muted" id="memoryPageInfo"></span>
+            <button class="button button-small" id="memoryNext" type="button" data-i18n="common.next">Next</button>
+          </div>
         </div>
       </section>
 
@@ -110,6 +129,11 @@
           </div>
           <div class="muted" id="scheduleMeta"></div>
           <div class="schedule-list" id="scheduleList"></div>
+          <div class="pager" id="schedulePager" hidden>
+            <button class="button button-small" id="schedulePrev" type="button" data-i18n="common.prev">Previous</button>
+            <span class="muted" id="schedulePageInfo"></span>
+            <button class="button button-small" id="scheduleNext" type="button" data-i18n="common.next">Next</button>
+          </div>
         </div>
       </section>
 
@@ -130,6 +154,19 @@
     <div class="dialog-card">
       <div class="dialog-head"><h2 data-i18n="memory.dialog.title">Edit memory</h2><button class="icon-button" type="button" data-close-dialog="memoryDialog" data-i18n-aria-label="common.close">×</button></div>
       <p class="muted" id="memoryDialogMeta"></p>
+      <div class="form-grid memory-edit-grid">
+        <label><span data-i18n="memory.dialog.scope">Scope</span>
+          <select class="input" id="memoryScopeEdit">
+            <option value="bot">bot</option>
+            <option value="chat">chat</option>
+            <option value="project">project</option>
+          </select>
+        </label>
+        <label id="memoryChatTargetField" hidden><span data-i18n="memory.dialog.chatTarget">Chat target</span>
+          <select class="input" id="memoryChatTarget"></select>
+        </label>
+      </div>
+      <p class="muted memory-scope-hint" id="memoryScopeHint"></p>
       <textarea class="input textarea" id="memoryContent" rows="8"></textarea>
       <div class="dialog-actions">
         <button class="button" type="button" data-close-dialog="memoryDialog" data-i18n="common.cancel">Cancel</button>

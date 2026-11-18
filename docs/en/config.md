@@ -304,7 +304,8 @@ nectar dashboard
 ```
 
 The command prints a one-time login URL with a token. The console provides bot
-status overview, memory search and review, scheduled-task management, and a
+status overview, memory search and review (approve, reject, restore, and batch
+operations, plus scope changes while editing), scheduled-task management, and a
 read-only view of effective configuration. Platform credentials and engine
 secrets are never returned to the browser. The console does not edit the config
 file; restart the service after changing `config.toml`.

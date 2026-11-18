@@ -238,6 +238,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/bots/{id}/targets", s.authAPI(s.handleTargets))
 
 	mux.HandleFunc("GET /api/v1/bots/{id}/memories", s.authAPI(s.handleMemories))
+	mux.HandleFunc("POST /api/v1/bots/{id}/memories/bulk", s.mutation(s.handleMemoryBulk))
 	mux.HandleFunc("PATCH /api/v1/bots/{id}/memories/{memoryID}", s.mutation(s.handleMemoryPatch))
 	mux.HandleFunc("DELETE /api/v1/bots/{id}/memories/{memoryID}", s.mutation(s.handleMemoryDelete))
 
