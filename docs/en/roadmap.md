@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.4 complete
+
+- Completion reactions on final messages (`DONE` on Feishu, 👍 on Telegram), plus a fix for duplicated `v` prefixes in `/about` and the agent identity prompt
+
 ## v0.10.3 complete
 
 - `nectar update` supports GitHub mirror prefixes and HTTP Range resume, making updates more reliable on weak networks or when GitHub is unreachable

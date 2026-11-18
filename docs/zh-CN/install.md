@@ -87,7 +87,7 @@ DINGTALK_CLIENT_SECRET  同 --dingtalk-client-secret
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
-  sh -s -- --version v0.10.3
+  sh -s -- --version v0.10.4
 
 curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
   sh -s -- --dir /usr/local/bin
@@ -154,7 +154,7 @@ nectar update
 
 ```bash
 nectar update --check          # 只检查最新版本
-nectar update --version v0.10.3 # 指定版本或降级
+nectar update --version v0.10.4 # 指定版本或降级
 nectar update --force          # 重装当前版本
 nectar update --no-restart     # 更新二进制和 Skill，不重启服务
 nectar update --no-skills      # 跳过 Skill 刷新
@@ -173,8 +173,8 @@ NECTAR_UPDATE_MIRROR=https://ghfast.top nectar update
 `--mirror` 会把前缀加到 release 页面、GitHub API 和资产地址前，例如 `https://ghfast.top/https://github.com/...`。如果镜像不代理 latest 页面或 API，可以指定版本，或显式覆盖地址：
 
 ```bash
-nectar update --version v0.10.3 --mirror https://ghfast.top
-nectar update --version v0.10.3 --download-base https://mirror.example/nectar/releases/download/v0.10.3
+nectar update --version v0.10.4 --mirror https://ghfast.top
+nectar update --version v0.10.4 --download-base https://mirror.example/nectar/releases/download/v0.10.4
 nectar update --latest-url https://mirror.example/nectar/releases/latest
 nectar update --latest-api-url https://mirror.example/api/repos/zhouyg1992/nectar/releases/latest
 ```

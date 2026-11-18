@@ -1,5 +1,9 @@
 # 路线图与待实现
 
+## v0.10.4 已完成
+
+- 任务完成后给最终消息添加完成表情（飞书 `DONE`、Telegram 👍）；`/about` 与 Agent 身份提示修复版本号重复 `v` 前缀
+
 ## v0.10.3 已完成
 
 - `nectar update` 支持 GitHub 镜像前缀和 HTTP Range 断点续传，弱网或无法直连 GitHub 时更新更稳

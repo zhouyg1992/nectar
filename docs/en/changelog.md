@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.10.4 — 2026-11-18
+
+### Added
+
+- Successful runs mark the final message with a completion reaction: `DONE` on Feishu and 👍 on Telegram; reactions are best-effort and never change the task result
+
+### Fixed
+
+- `/about` and the agent identity prompt no longer render a duplicated `v` prefix (such as `Nectar vv0.10.3`), and show the Nectar version instead of the bot name
+
 ## v0.10.3 — 2026-11-18
 
 ### Added
