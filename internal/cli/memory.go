@@ -27,6 +27,7 @@ type memoryCLIOptions struct {
 	socket     string
 	limit      int
 	jsonOut    bool
+	explain    bool
 	confirm    bool
 	statusSet  bool
 }
@@ -72,6 +73,8 @@ func runMemory(args []string) error {
 		return memoryCLISetPinned(positional, opts, true)
 	case "unpin":
 		return memoryCLISetPinned(positional, opts, false)
+	case "feedback", "good", "bad", "useful", "harmful":
+		return memoryCLIFeedback(command, positional, opts)
 	case "forget", "delete", "rm":
 		return memoryCLIForget(positional, opts)
 	default:
@@ -85,18 +88,20 @@ func printMemoryUsage() {
   nectar memory add [--bot ID] [--kind profile|project|fact|lesson|episode]
                     [--scope bot|chat|project|global] [--status candidate|active]
                     [--tags a,b] [--source agent] [--socket PATH] [--json] <text>
-  nectar memory search [--bot ID] [--scope chat|project|global|all] [--limit N] [--json] <query>
+  nectar memory search [--bot ID] [--scope chat|project|global|all] [--limit N] [--json] [--explain] <query>
   nectar memory list [--bot ID] [--status active|pending|archived|all]
                      [--scope chat|project|global|all] [--json]
   nectar memory get [--bot ID] <id> [--json]
   nectar memory update <id> [--json] <new text>
   nectar memory approve|reject|pin|unpin <id>
+  nectar memory feedback good|bad <id>
   nectar memory forget <id> --confirm
 
 Scope defaults to the current chat when NECTAR_CHAT_ID is set, otherwise the
 current project. In an agent session, NECTAR_API_SOCKET routes writes through
 the Nectar daemon so sandboxed agents do not need write access to ~/.nectar.
 Add --json for machine-readable output.
+Add --explain to memory search to show BM25 and feedback rank reasons.
 `)
 }
 
@@ -134,6 +139,11 @@ func parseMemoryCLIOptions(args []string) ([]string, memoryCLIOptions, error) {
 				return nil, opts, fmt.Errorf("%s does not take a value", name)
 			}
 			opts.confirm = true
+		case "--explain":
+			if hasValue {
+				return nil, opts, fmt.Errorf("%s does not take a value", name)
+			}
+			opts.explain = true
 		case "--kind", "--scope", "--status", "--tags", "--source",
 			"--project", "--chat", "--channel", "--config", "--bot", "--socket", "--limit":
 			if !hasValue {
@@ -262,12 +272,31 @@ func memoryCLISearch(positional []string, opts memoryCLIOptions) error {
 	if err != nil {
 		return err
 	}
-	items, err := store.Search(context.Background(), memory.SearchOptions{
+	searchOpts := memory.SearchOptions{
 		Query:    query,
 		Scope:    scope,
 		ScopeIDs: scopeIDs,
 		Limit:    opts.limit,
-	})
+	}
+	if opts.explain {
+		scored, err := store.SearchRanked(context.Background(), searchOpts)
+		if err != nil {
+			return err
+		}
+		if opts.jsonOut {
+			return printJSON(scored)
+		}
+		if len(scored) == 0 {
+			fmt.Println("No matching memories.")
+			return nil
+		}
+		for _, item := range scored {
+			fmt.Printf("%s score=%.2f why=%s\n", item.ID, item.Score, strings.Join(item.Why, ", "))
+			printMemoryCLIItem(item.Memory)
+		}
+		return nil
+	}
+	items, err := store.Search(context.Background(), searchOpts)
 	if err != nil {
 		return err
 	}
@@ -420,9 +449,12 @@ func memoryCLISetPinned(positional []string, opts memoryCLIOptions, pinned bool)
 	if err != nil {
 		return err
 	}
-	_, store, err := memoryCLILoad(opts)
+	cfg, store, err := memoryCLILoad(opts)
 	if err != nil {
 		return err
+	}
+	if !cfg.MemoryFeedbackEnabled() {
+		return errors.New("memory feedback is disabled in config")
 	}
 	item, err := memoryCLIManageable(store, id, opts)
 	if err != nil {
@@ -440,6 +472,51 @@ func memoryCLISetPinned(positional []string, opts memoryCLIOptions, pinned bool)
 		action = "pinned"
 	}
 	fmt.Printf("%s %s\n", id, action)
+	return nil
+}
+
+func memoryCLIFeedback(command string, positional []string, opts memoryCLIOptions) error {
+	event := strings.ToLower(strings.TrimSpace(command))
+	if event == "feedback" {
+		if len(positional) < 2 {
+			return errors.New("memory feedback requires good|bad and an id")
+		}
+		event = strings.ToLower(strings.TrimSpace(positional[0]))
+		positional = positional[1:]
+	}
+	switch event {
+	case "good", "useful":
+		event = memory.FeedbackUseful
+	case "bad", "harmful":
+		event = memory.FeedbackHarmful
+	default:
+		return fmt.Errorf("unknown feedback event %q", event)
+	}
+	id, err := memoryCLIID(positional)
+	if err != nil {
+		return err
+	}
+	_, store, err := memoryCLILoad(opts)
+	if err != nil {
+		return err
+	}
+	item, err := memoryCLIManageable(store, id, opts)
+	if err != nil {
+		return err
+	}
+	if err := store.RecordFeedback(context.Background(), id, memory.FeedbackEvent{
+		Event:  event,
+		Source: "cli",
+	}); err != nil {
+		return err
+	}
+	if updated, ok, err := store.Get(context.Background(), id); err == nil && ok {
+		item = updated
+	}
+	if opts.jsonOut {
+		return printJSON(item)
+	}
+	fmt.Printf("%s %s\n", id, event)
 	return nil
 }
 

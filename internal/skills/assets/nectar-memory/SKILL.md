@@ -54,15 +54,37 @@ but outdated, tell the user and update it in place after confirmation:
 "${NECTAR_CLI:-nectar}" memory update <id> "<corrected text>"
 ```
 
+## When to check memory
+
+Do not search or write memory on every turn. Nectar injects relevant active
+memories automatically. Run a memory check only when:
+
+- The user explicitly asks you to remember, recall, correct, or forget
+  something.
+- The turn contains a durable preference, a correction that should apply to
+  future work, a project fact, or a reusable lesson.
+- The user asks what you remember.
+
+At the end of such a turn, do one quick pass:
+
+1. Search for an existing equivalent memory.
+2. Add a `candidate` if it is inferred.
+3. Add an `active` memory only when the user explicitly asked to remember it.
+4. Skip one-off task state, transient errors, and anything that sounds like
+   "this time" or "for now".
+
+Inferred memories default to `chat` scope. Do not write `bot` scope unless the
+user explicitly says the fact should apply to every chat and is an admin.
+
 ## Writing
 
 Use `--status active` when the user explicitly asks you to remember something.
 Use `--status candidate` when you are proactively saving something you inferred.
 Candidates are not injected until an admin approves them.
 
-Do not pass `--scope chat` for ordinary "remember this" requests. If the user
-does not explicitly say the information is only for this conversation, omit
-`--scope` and let Nectar use its configured default (`bot`).
+For inferred memories, pass `--scope chat` unless the fact is clearly about the
+current project; then use `--scope project`. For an explicit "remember this"
+request, omit `--scope` and let Nectar use its configured default (`bot`).
 
 ```bash
 "${NECTAR_CLI:-nectar}" memory add --status active --kind profile \
@@ -84,8 +106,11 @@ Choose the kind:
 
 Choose the scope:
 
-- Omit `--scope` to follow `[memory] default_scope`. The default is `bot`, so
-  the memory is shared by every chat handled by this bot.
+- For inferred memories, prefer `chat` or `project`; do not silently write
+  bot-wide memory.
+- For explicit user requests, omit `--scope` to follow
+  `[memory] default_scope`. The default is `bot`, so the memory is shared by
+  every chat handled by this bot.
 - `bot`: every chat handled by this bot.
 - `chat`: this chat only. Use it when the user says the information should stay
   in this conversation.
@@ -156,6 +181,15 @@ the user would expect them to apply immediately. A human can activate them with:
 "${NECTAR_CLI:-nectar}" memory approve <id>
 "${NECTAR_CLI:-nectar}" memory reject <id>
 ```
+
+If a memory was helpful or harmful, record it:
+
+```bash
+"${NECTAR_CLI:-nectar}" memory feedback good <id>
+"${NECTAR_CLI:-nectar}" memory feedback bad <id>
+```
+
+Feedback only changes future ranking; it never rewrites the memory content.
 
 ## Constraints
 

@@ -289,6 +289,45 @@ func TestMemoryCLIUsesDaemonSocket(t *testing.T) {
 	}
 }
 
+func TestMemoryCLIExplainAndFeedback(t *testing.T) {
+	configPath, dataDir := writeMemoryCLIConfig(t, "")
+	t.Setenv("NECTAR_CHANNEL", "feishu")
+	t.Setenv("NECTAR_CHAT_ID", "c1")
+	t.Setenv("NECTAR_WORKING_DIR", t.TempDir())
+
+	if err := runMemory([]string{
+		"add", "--config", configPath, "--kind", "project", "--status", "active",
+		"项目使用 Go 1.22，禁止 CGO",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := captureMemoryCLIOutput(t, func() error {
+		return runMemory([]string{"search", "--config", configPath, "--explain", "CGO"})
+	})
+	if !strings.Contains(out, "score=") || !strings.Contains(out, "bm25=") {
+		t.Fatalf("explain output = %s", out)
+	}
+
+	store, err := memory.NewFileStore(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := store.List(context.Background(), memory.ListOptions{Status: memory.StatusActive})
+	if err != nil || len(active) != 1 {
+		t.Fatalf("active = %#v err=%v", active, err)
+	}
+	if err := runMemory([]string{"feedback", "--config", configPath, "good", active[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	updated, ok, err := store.Get(context.Background(), active[0].ID)
+	if err != nil || !ok {
+		t.Fatalf("get feedback: ok=%v err=%v", ok, err)
+	}
+	if updated.UsefulCount != 1 {
+		t.Fatalf("useful count = %d", updated.UsefulCount)
+	}
+}
+
 func captureMemoryCLIOutput(t *testing.T, fn func() error) string {
 	t.Helper()
 	old := os.Stdout

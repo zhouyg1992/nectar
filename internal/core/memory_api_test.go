@@ -150,3 +150,38 @@ func TestMemoryAPIGroupNonAdminBecomesCandidate(t *testing.T) {
 		t.Fatalf("guest patch status = %s", resp.Status)
 	}
 }
+
+func TestMemoryAPIFeedback(t *testing.T) {
+	store, err := memory.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := NewScheduleAPI(ScheduleAPIOptions{Memory: store})
+	server := httptest.NewServer(api.Handler())
+	defer server.Close()
+
+	item, err := store.Put(t.Context(), memory.Memory{
+		Kind: memory.KindFact, Scope: memory.ScopeChat,
+		ScopeID: memory.ChatScope("feishu", "c1"), Content: "部署使用 make release",
+		Status: memory.StatusActive, Confidence: 0.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(memory.FeedbackEvent{Event: memory.FeedbackUseful, Source: "test"})
+	resp, err := http.Post(server.URL+"/memory/"+item.ID+"/feedback", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("feedback status = %s", resp.Status)
+	}
+	updated, ok, err := store.Get(t.Context(), item.ID)
+	if err != nil || !ok {
+		t.Fatalf("get updated: ok=%v err=%v", ok, err)
+	}
+	if updated.UsefulCount != 1 {
+		t.Fatalf("useful count = %d", updated.UsefulCount)
+	}
+}

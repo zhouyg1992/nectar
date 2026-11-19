@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 )
 
 type memoryFile struct {
@@ -188,6 +188,18 @@ func (s *FileStore) List(ctx context.Context, opts ListOptions) ([]Memory, error
 }
 
 func (s *FileStore) Search(ctx context.Context, opts SearchOptions) ([]Memory, error) {
+	scored, err := s.SearchRanked(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Memory, 0, len(scored))
+	for _, candidate := range scored {
+		out = append(out, candidate.Memory)
+	}
+	return out, nil
+}
+
+func (s *FileStore) SearchRanked(ctx context.Context, opts SearchOptions) ([]ScoredMemory, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -204,12 +216,11 @@ func (s *FileStore) Search(ctx context.Context, opts SearchOptions) ([]Memory, e
 	if limit <= 0 {
 		limit = 5
 	}
-	terms := queryTerms(opts.Query)
-	type scored struct {
-		item  Memory
-		score float64
-	}
-	var candidates []scored
+	terms := tokenizeMemory(opts.Query)
+	var (
+		items []Memory
+		docs  []bm25Doc
+	)
 	for _, item := range s.items {
 		if item.DeletedAt != nil || expired(item, now) {
 			continue
@@ -227,25 +238,32 @@ func (s *FileStore) Search(ctx context.Context, opts SearchOptions) ([]Memory, e
 		if !inScopes(item, opts.ScopeIDs) {
 			continue
 		}
-		if !memoryRelevant(item, terms) {
+		items = append(items, item)
+		docs = append(docs, newBM25Doc(item.Content, item.Tags))
+	}
+	scores := newBM25Index(docs).scores(terms)
+	candidates := make([]ScoredMemory, 0, len(items))
+	for i, item := range items {
+		raw := scores[i]
+		if len(terms) > 0 && raw == 0 && !item.Pinned && item.Kind != KindProfile {
 			continue
 		}
-		candidates = append(candidates, scored{item: item, score: scoreMemory(item, terms, now)})
+		candidates = append(candidates, ScoredMemory{
+			Memory: item,
+			Score:  rankingScore(item, raw, now),
+			Why:    rankingWhy(item, raw, terms),
+		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].score == candidates[j].score {
-			return candidates[i].item.UpdatedAt.After(candidates[j].item.UpdatedAt)
+		if candidates[i].Score == candidates[j].Score {
+			return candidates[i].UpdatedAt.After(candidates[j].UpdatedAt)
 		}
-		return candidates[i].score > candidates[j].score
+		return candidates[i].Score > candidates[j].Score
 	})
 	if len(candidates) > limit {
 		candidates = candidates[:limit]
 	}
-	out := make([]Memory, 0, len(candidates))
-	for _, candidate := range candidates {
-		out = append(out, candidate.item)
-	}
-	return out, nil
+	return candidates, nil
 }
 
 func (s *FileStore) SetStatus(ctx context.Context, id string, status Status) error {
@@ -377,6 +395,78 @@ func (s *FileStore) Delete(ctx context.Context, id string) error {
 		return s.persistLocked()
 	}
 	return fmt.Errorf("memory %q not found", id)
+}
+
+func (s *FileStore) RecordFeedback(ctx context.Context, id string, event FeedbackEvent) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	switch event.Event {
+	case FeedbackInjected:
+		if event.CreatedAt.IsZero() {
+			event.CreatedAt = s.now().UTC()
+		}
+		event.MemoryID = id
+		return s.appendFeedback(event)
+	case FeedbackUseful, FeedbackHarmful:
+	default:
+		return fmt.Errorf("unsupported feedback event %q", event.Event)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lock, err := s.acquireWriteLock()
+	if err != nil {
+		return err
+	}
+	defer s.releaseWriteLock(lock)
+	if err := s.readLocked(); err != nil {
+		return err
+	}
+	now := s.now().UTC()
+	for i := range s.items {
+		item := &s.items[i]
+		if item.ID != id || item.DeletedAt != nil {
+			continue
+		}
+		switch event.Event {
+		case FeedbackUseful:
+			item.UsefulCount++
+			item.Confidence = math.Min(0.99, item.Confidence+0.03)
+		case FeedbackHarmful:
+			item.HarmfulCount++
+			item.Confidence = math.Max(0.05, item.Confidence-0.05)
+		}
+		item.LastFeedbackAt = &now
+		item.Revision++
+		if err := s.persistLocked(); err != nil {
+			return err
+		}
+		event.MemoryID = id
+		if event.CreatedAt.IsZero() {
+			event.CreatedAt = now
+		}
+		return s.appendFeedback(event)
+	}
+	return fmt.Errorf("memory %q not found", id)
+}
+
+func (s *FileStore) appendFeedback(event FeedbackEvent) error {
+	path := filepath.Join(filepath.Dir(s.path), "feedback.jsonl")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("open feedback log: %w", err)
+	}
+	defer file.Close()
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("encode feedback: %w", err)
+	}
+	data = append(data, '\n')
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("write feedback: %w", err)
+	}
+	return nil
 }
 
 func (s *FileStore) Counts(ctx context.Context, scopeIDs []string) (map[Status]int, error) {
@@ -574,8 +664,8 @@ func sortMemories(items []Memory) {
 	})
 }
 
-func scoreMemory(item Memory, terms []string, now time.Time) float64 {
-	score := 0.0
+func rankingScore(item Memory, bm25 float64, now time.Time) float64 {
+	score := bm25 * 2
 	if item.Pinned {
 		score += 10
 	}
@@ -598,75 +688,37 @@ func scoreMemory(item Memory, terms []string, now time.Time) float64 {
 	}
 	score += 2 / (1 + age.Hours()/(24*30))
 	score += float64(item.UseCount) * 0.05
-
-	haystack := strings.ToLower(item.Content + " " + strings.Join(item.Tags, " "))
-	for _, term := range terms {
-		if strings.Contains(haystack, term) {
-			score += 2
-		}
-	}
+	score += item.FeedbackScore()
 	return score
 }
 
-func memoryRelevant(item Memory, terms []string) bool {
-	if len(terms) == 0 || item.Pinned || item.Kind == KindProfile {
-		return true
+func rankingWhy(item Memory, bm25 float64, terms []string) []string {
+	var why []string
+	if bm25 > 0 {
+		why = append(why, fmt.Sprintf("bm25=%.2f", bm25))
 	}
 	haystack := strings.ToLower(item.Content + " " + strings.Join(item.Tags, " "))
-	for _, term := range terms {
-		if strings.Contains(haystack, term) {
-			return true
+	tagText := strings.ToLower(strings.Join(item.Tags, " "))
+	for _, term := range uniqueTerms(terms) {
+		if !strings.Contains(haystack, term) {
+			continue
+		}
+		if strings.Contains(tagText, term) {
+			why = append(why, "tag:"+term)
+		} else {
+			why = append(why, "hit:"+term)
+		}
+		if len(why) >= 5 {
+			break
 		}
 	}
-	return false
-}
-
-func queryTerms(query string) []string {
-	query = strings.ToLower(strings.TrimSpace(query))
-	if query == "" {
-		return nil
+	if item.Pinned {
+		why = append(why, "pinned")
 	}
-	seen := make(map[string]bool)
-	var terms []string
-	add := func(term string) {
-		if len([]rune(term)) < 2 || seen[term] || len(terms) >= 120 {
-			return
-		}
-		seen[term] = true
-		terms = append(terms, term)
+	if item.UsefulCount > 0 || item.HarmfulCount > 0 {
+		why = append(why, fmt.Sprintf("feedback=%+.2f", item.FeedbackScore()))
 	}
-
-	var latin strings.Builder
-	var han []rune
-	flushLatin := func() {
-		add(latin.String())
-		latin.Reset()
-	}
-	flushHan := func() {
-		if len(han) == 1 {
-			add(string(han))
-		}
-		for i := 0; i+1 < len(han); i++ {
-			add(string(han[i : i+2]))
-		}
-		han = han[:0]
-	}
-	for _, r := range query {
-		switch {
-		case unicode.Is(unicode.Han, r):
-			flushLatin()
-			han = append(han, r)
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			flushHan()
-			latin.WriteRune(r)
-		default:
-			flushLatin()
-			flushHan()
-		}
-	}
-	flushLatin()
-	flushHan()
-	return terms
+	return why
 }
 
 func normalizeTags(tags []string) []string {

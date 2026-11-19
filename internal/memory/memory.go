@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -46,28 +47,38 @@ const (
 // Memory is a portable, inspectable piece of context. It is deliberately
 // engine-neutral and platform-neutral so it can be synced across devices.
 type Memory struct {
-	ID          string     `json:"id"`
-	Kind        Kind       `json:"kind"`
-	Scope       Scope      `json:"scope"`
-	ScopeID     string     `json:"scope_id,omitempty"`
-	ProjectID   string     `json:"project_id,omitempty"`
-	DeviceID    string     `json:"device_id,omitempty"`
-	Locality    Locality   `json:"locality,omitempty"`
-	Content     string     `json:"content"`
-	Tags        []string   `json:"tags,omitempty"`
-	Source      string     `json:"source,omitempty"`
-	Evidence    []string   `json:"evidence,omitempty"`
-	Revision    int        `json:"revision,omitempty"`
-	ContentHash string     `json:"content_hash,omitempty"`
-	Confidence  float64    `json:"confidence,omitempty"`
-	Pinned      bool       `json:"pinned,omitempty"`
-	Status      Status     `json:"status"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
-	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
-	UseCount    int        `json:"use_count,omitempty"`
+	ID             string     `json:"id"`
+	Kind           Kind       `json:"kind"`
+	Scope          Scope      `json:"scope"`
+	ScopeID        string     `json:"scope_id,omitempty"`
+	ProjectID      string     `json:"project_id,omitempty"`
+	DeviceID       string     `json:"device_id,omitempty"`
+	Locality       Locality   `json:"locality,omitempty"`
+	Content        string     `json:"content"`
+	Tags           []string   `json:"tags,omitempty"`
+	Source         string     `json:"source,omitempty"`
+	Evidence       []string   `json:"evidence,omitempty"`
+	Revision       int        `json:"revision,omitempty"`
+	ContentHash    string     `json:"content_hash,omitempty"`
+	Confidence     float64    `json:"confidence,omitempty"`
+	Pinned         bool       `json:"pinned,omitempty"`
+	Status         Status     `json:"status"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
+	UseCount       int        `json:"use_count,omitempty"`
+	UsefulCount    int        `json:"useful_count,omitempty"`
+	HarmfulCount   int        `json:"harmful_count,omitempty"`
+	LastFeedbackAt *time.Time `json:"last_feedback_at,omitempty"`
+	SupersedesID   string     `json:"supersedes_id,omitempty"`
+}
+
+// FeedbackScore is a small, explainable ranking signal. Explicit negative
+// feedback outweighs positive feedback so bad memories fall quickly.
+func (m Memory) FeedbackScore() float64 {
+	return 0.6*math.Log1p(float64(m.UsefulCount)) - 0.8*math.Log1p(float64(m.HarmfulCount))
 }
 
 type SearchOptions struct {
@@ -94,11 +105,39 @@ type ListOptions struct {
 	ScopeIDs []string
 }
 
+// ScoredMemory is a search result with its ranking explanation. Explanations
+// intentionally expose only simple, auditable signals.
+type ScoredMemory struct {
+	Memory
+	Score float64  `json:"score"`
+	Why   []string `json:"why,omitempty"`
+}
+
+const (
+	FeedbackInjected = "injected"
+	FeedbackUseful   = "useful"
+	FeedbackHarmful  = "harmful"
+)
+
+// FeedbackEvent is appended to memory/feedback.jsonl for audit and future
+// tuning. It never changes memory content by itself.
+type FeedbackEvent struct {
+	MemoryID  string    `json:"memory_id"`
+	Event     string    `json:"event"`
+	Source    string    `json:"source,omitempty"`
+	SessionID string    `json:"session_id,omitempty"`
+	QueryHash string    `json:"query_hash,omitempty"`
+	Score     float64   `json:"score,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type Store interface {
 	Put(ctx context.Context, item Memory) (Memory, error)
 	Get(ctx context.Context, id string) (Memory, bool, error)
 	List(ctx context.Context, opts ListOptions) ([]Memory, error)
 	Search(ctx context.Context, opts SearchOptions) ([]Memory, error)
+	SearchRanked(ctx context.Context, opts SearchOptions) ([]ScoredMemory, error)
+	RecordFeedback(ctx context.Context, id string, event FeedbackEvent) error
 	SetStatus(ctx context.Context, id string, status Status) error
 	SetPinned(ctx context.Context, id string, pinned bool) error
 	SetScope(ctx context.Context, id string, scope Scope, scopeID string) error

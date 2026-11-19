@@ -119,8 +119,21 @@ func (s *remoteMemoryStore) List(ctx context.Context, opts memory.ListOptions) (
 }
 
 func (s *remoteMemoryStore) Search(ctx context.Context, opts memory.SearchOptions) ([]memory.Memory, error) {
+	scored, err := s.SearchRanked(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]memory.Memory, 0, len(scored))
+	for _, item := range scored {
+		out = append(out, item.Memory)
+	}
+	return out, nil
+}
+
+func (s *remoteMemoryStore) SearchRanked(ctx context.Context, opts memory.SearchOptions) ([]memory.ScoredMemory, error) {
 	query := url.Values{}
 	query.Set("q", opts.Query)
+	query.Set("explain", "1")
 	if opts.Scope != "" {
 		query.Set("scope", string(opts.Scope))
 	}
@@ -130,11 +143,25 @@ func (s *remoteMemoryStore) Search(ctx context.Context, opts memory.SearchOption
 	if opts.Limit > 0 {
 		query.Set("limit", fmt.Sprintf("%d", opts.Limit))
 	}
-	var out memoryCLIListResult
+	var out struct {
+		Scored   []memory.ScoredMemory `json:"scored"`
+		Memories []memory.Memory       `json:"memories"`
+	}
 	if err := s.request(ctx, http.MethodGet, "/memory?"+query.Encode(), nil, &out); err != nil {
 		return nil, err
 	}
-	return out.Memories, nil
+	if out.Scored != nil {
+		return out.Scored, nil
+	}
+	scored := make([]memory.ScoredMemory, 0, len(out.Memories))
+	for _, item := range out.Memories {
+		scored = append(scored, memory.ScoredMemory{Memory: item})
+	}
+	return scored, nil
+}
+
+func (s *remoteMemoryStore) RecordFeedback(ctx context.Context, id string, event memory.FeedbackEvent) error {
+	return s.request(ctx, http.MethodPost, "/memory/"+url.PathEscape(id)+"/feedback", event, nil)
 }
 
 func (s *remoteMemoryStore) SetStatus(ctx context.Context, id string, status memory.Status) error {

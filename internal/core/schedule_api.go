@@ -274,9 +274,19 @@ func (a *ScheduleAPI) handleMemoryCollection(w http.ResponseWriter, r *http.Requ
 			err   error
 		)
 		if q := strings.TrimSpace(query.Get("q")); q != "" {
-			items, err = a.memory.Search(r.Context(), memory.SearchOptions{
+			opts := memory.SearchOptions{
 				Query: q, Scope: scope, ScopeIDs: scopeIDs, Limit: limit,
-			})
+			}
+			if query.Get("explain") == "1" || query.Get("explain") == "true" {
+				scored, searchErr := a.memory.SearchRanked(r.Context(), opts)
+				if searchErr != nil {
+					writeError(w, http.StatusBadRequest, searchErr)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"scored": scored})
+				return
+			}
+			items, err = a.memory.Search(r.Context(), opts)
 		} else {
 			items, err = a.memory.List(r.Context(), memory.ListOptions{
 				Status: status, Scope: scope, ScopeIDs: scopeIDs,
@@ -313,9 +323,19 @@ func (a *ScheduleAPI) handleMemoryItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, errors.New("memory is disabled"))
 		return
 	}
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/memory/"), "/")
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/memory/"), "/")
+	parts := strings.Split(rest, "/")
+	id := strings.TrimSpace(parts[0])
 	if id == "" {
 		writeError(w, http.StatusNotFound, errors.New("memory id is required"))
+		return
+	}
+	if len(parts) > 1 {
+		if len(parts) == 2 && parts[1] == "feedback" {
+			a.handleMemoryFeedback(w, r, id)
+			return
+		}
+		writeError(w, http.StatusNotFound, errors.New("memory action not found"))
 		return
 	}
 	item, ok, err := a.memory.Get(r.Context(), id)
@@ -415,6 +435,40 @@ func (a *ScheduleAPI) handleMemoryItem(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, PATCH, DELETE")
 		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 	}
+}
+
+func (a *ScheduleAPI) handleMemoryFeedback(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+		return
+	}
+	var event memory.FeedbackEvent
+	if err := decodeJSON(w, r, &event); err != nil {
+		return
+	}
+	if event.Event != memory.FeedbackUseful && event.Event != memory.FeedbackHarmful {
+		writeError(w, http.StatusBadRequest, errors.New("feedback event must be useful or harmful"))
+		return
+	}
+	item, ok, err := a.memory.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("memory %s not found", id))
+		return
+	}
+	if err := a.prepareMemoryWrite(r, &item, false); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if err := a.memory.RecordFeedback(r.Context(), id, event); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "event": event.Event})
 }
 
 func (a *ScheduleAPI) prepareMemoryWrite(r *http.Request, item *memory.Memory, creating bool) error {
