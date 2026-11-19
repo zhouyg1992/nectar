@@ -154,11 +154,15 @@ type StorageConfig struct {
 }
 
 type MemoryConfig struct {
-	Enabled           *bool  `toml:"enabled"`
-	MaxItems          int    `toml:"max_items"`
-	MaxChars          int    `toml:"max_chars"`
-	AutoLearnFailures *bool  `toml:"auto_learn_failures"`
-	DefaultScope      string `toml:"default_scope"`
+	Enabled              *bool  `toml:"enabled"`
+	MaxItems             int    `toml:"max_items"`
+	MaxChars             int    `toml:"max_chars"`
+	AutoLearnFailures    *bool  `toml:"auto_learn_failures"`
+	DefaultScope         string `toml:"default_scope"`
+	RuleExtract          *bool  `toml:"rule_extract"`
+	AgentSelfOrganize    *bool  `toml:"agent_self_organize"`
+	FeedbackEnabled      *bool  `toml:"feedback_enabled"`
+	MaxCandidatesPerTurn int    `toml:"max_candidates_per_turn"`
 }
 
 type ScheduleConfig struct {
@@ -231,9 +235,10 @@ func defaults() Config {
 		Bot:     BotConfig{Name: "Nectar", WorkspaceMode: "shared"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
 		Memory: MemoryConfig{
-			MaxItems:     6,
-			MaxChars:     1500,
-			DefaultScope: "bot",
+			MaxItems:             6,
+			MaxChars:             1500,
+			DefaultScope:         "bot",
+			MaxCandidatesPerTurn: 2,
 		},
 		Schedule: ScheduleConfig{
 			StartupGrace:  "5m",
@@ -320,6 +325,25 @@ func (c Config) MemoryEnabled() bool {
 
 func (c Config) MemoryAutoLearnFailures() bool {
 	return c.Memory.AutoLearnFailures == nil || *c.Memory.AutoLearnFailures
+}
+
+func (c Config) MemoryRuleExtract() bool {
+	return c.Memory.RuleExtract == nil || *c.Memory.RuleExtract
+}
+
+func (c Config) MemoryAgentSelfOrganize() bool {
+	return c.Memory.AgentSelfOrganize == nil || *c.Memory.AgentSelfOrganize
+}
+
+func (c Config) MemoryFeedbackEnabled() bool {
+	return c.Memory.FeedbackEnabled == nil || *c.Memory.FeedbackEnabled
+}
+
+func (c Config) MemoryMaxCandidatesPerTurn() int {
+	if c.Memory.MaxCandidatesPerTurn <= 0 {
+		return 2
+	}
+	return c.Memory.MaxCandidatesPerTurn
 }
 
 func (c Config) DashboardEnabled() bool {
@@ -487,6 +511,9 @@ func normalize(cfg *Config) error {
 	}
 	if cfg.Memory.MaxChars <= 0 {
 		cfg.Memory.MaxChars = 1500
+	}
+	if cfg.Memory.MaxCandidatesPerTurn <= 0 {
+		cfg.Memory.MaxCandidatesPerTurn = 2
 	}
 	cfg.Memory.DefaultScope = strings.ToLower(strings.TrimSpace(cfg.Memory.DefaultScope))
 	if cfg.Memory.DefaultScope == "" {

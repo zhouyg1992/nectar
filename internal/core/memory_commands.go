@@ -107,6 +107,26 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 			return
 		}
 		r.sendMemoryCard(msg, "Search\n\n"+formatMemoryTable(items))
+	case "explain", "why":
+		query := strings.TrimSpace(strings.Join(args, " "))
+		if query == "" {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /memory explain <query>")
+			return
+		}
+		items, err := r.memories.SearchRanked(r.ctx, memory.SearchOptions{
+			Query:    query,
+			ScopeIDs: scopes,
+			Limit:    10,
+		})
+		if err != nil {
+			r.sendCommandResult(msg, platform.CardError, "⚠️ Memory Error", err.Error())
+			return
+		}
+		if len(items) == 0 {
+			r.sendMemoryCard(msg, "Explain\n\nNo matching memories.")
+			return
+		}
+		r.sendMemoryCard(msg, "Explain\n\n"+formatScoredMemoryTable(items))
 	case "show":
 		if len(args) < 1 {
 			r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /memory show <id>")
@@ -126,6 +146,10 @@ func (r *Router) handleMemoryCommand(msg platform.Message, text string) {
 		r.setMemoryPinned(msg, args, true)
 	case "unpin":
 		r.setMemoryPinned(msg, args, false)
+	case "good", "useful":
+		r.setMemoryFeedback(msg, args, memory.FeedbackUseful)
+	case "bad", "harmful":
+		r.setMemoryFeedback(msg, args, memory.FeedbackHarmful)
 	case "forget", "delete", "rm":
 		r.handleMemoryForget(msg, args)
 	case "add":
@@ -196,6 +220,38 @@ func (r *Router) handleRemember(msg platform.Message, text string) {
 		body += "\n\nPending review: `/memory approve " + item.ID + "`"
 	}
 	r.sendMemoryCard(msg, "Saved\n\n"+body)
+}
+
+func (r *Router) extractRuleMemories(msg platform.Message, prompt, projectRoot string) {
+	if r.memories == nil {
+		return
+	}
+	scopeID := memoryChatScope(msg)
+	if scopeID == "" || isMemoryCommand(prompt) {
+		return
+	}
+	candidates := memory.ExtractRuleCandidates(prompt, r.cfg.MemoryMaxCandidates)
+	for _, candidate := range candidates {
+		content, locality := memory.NormalizeContent(projectRoot, candidate.Content)
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		_, err := r.memories.Put(r.ctx, memory.Memory{
+			Kind:       candidate.Kind,
+			Scope:      memory.ScopeChat,
+			ScopeID:    scopeID,
+			Content:    content,
+			Locality:   locality,
+			Tags:       candidate.Tags,
+			Source:     "rule:" + msg.Channel + "/" + msg.ChatID,
+			Evidence:   candidate.Evidence,
+			Confidence: candidate.Confidence,
+			Status:     memory.StatusCandidate,
+		})
+		if err != nil {
+			r.logger.Warn("rule memory candidate failed", "error", err)
+		}
+	}
 }
 
 func (r *Router) handleForget(msg platform.Message, id string) {
@@ -275,6 +331,38 @@ func (r *Router) setMemoryPinned(msg platform.Message, args []string, pinned boo
 	r.sendMemoryCard(msg, fmt.Sprintf("Pinned\n\nMemory `%s` is now %s.", args[0], action))
 }
 
+func (r *Router) setMemoryFeedback(msg platform.Message, args []string, event string) {
+	if r.cfg.DisableMemoryFeedback {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Memory Feedback Disabled", "Memory feedback is disabled in config.")
+		return
+	}
+	if len(args) < 1 {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Usage", "Usage: /memory good|bad <id>")
+		return
+	}
+	item, ok := r.visibleMemory(msg, args[0])
+	if !ok {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Not Found", "No visible memory with that id.")
+		return
+	}
+	if !r.manageableMemory(msg, item) {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Admin Only", "Only configured admin users can change shared memory.")
+		return
+	}
+	if err := r.memories.RecordFeedback(r.ctx, args[0], memory.FeedbackEvent{
+		Event:  event,
+		Source: "chat",
+	}); err != nil {
+		r.sendCommandResult(msg, platform.CardError, "⚠️ Memory Error", err.Error())
+		return
+	}
+	label := "marked useful"
+	if event == memory.FeedbackHarmful {
+		label = "marked harmful"
+	}
+	r.sendMemoryCard(msg, fmt.Sprintf("Feedback\n\nMemory `%s` is now %s.", args[0], label))
+}
+
 func (r *Router) visibleMemory(msg platform.Message, id string) (memory.Memory, bool) {
 	item, ok, err := r.memories.Get(r.ctx, id)
 	if err != nil || !ok {
@@ -309,6 +397,7 @@ func memoryVisible(item memory.Memory, scopeIDs []string) bool {
 }
 
 func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, projectRoot, prompt, sessionID string, hasSession bool) string {
+	prompt = r.withMemoryHint(prompt)
 	if r.memories == nil {
 		return prompt
 	}
@@ -317,18 +406,24 @@ func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, 
 		scopes = append(scopes, scope)
 	}
 	scopes = append(scopes, memory.ProjectScopeAliases(projectRoot)...)
-	items, err := r.memories.Search(ctx, memory.SearchOptions{
+	ranked, err := r.memories.SearchRanked(ctx, memory.SearchOptions{
 		Query:    prompt,
 		ScopeIDs: scopes,
-		Limit:    r.cfg.MemoryMaxItems * 3,
+		Limit:    r.cfg.MemoryMaxItems * 5,
 	})
 	if err != nil {
 		r.logger.Warn("memory search failed", "error", err)
 		return prompt
 	}
-	if len(items) == 0 {
+	if len(ranked) == 0 {
 		r.memorySeen.Store(sessionID, memory.BriefHash(nil))
 		return prompt
+	}
+	scores := make(map[string]float64, len(ranked))
+	items := make([]memory.Memory, 0, len(ranked))
+	for _, candidate := range ranked {
+		items = append(items, candidate.Memory)
+		scores[candidate.ID] = candidate.Score
 	}
 	items = selectMemoryBrief(items, r.cfg.MemoryMaxItems)
 	hash := memory.BriefHash(items)
@@ -365,7 +460,31 @@ func (r *Router) withMemory(ctx context.Context, msg platform.Message, workdir, 
 	if err := r.memories.Touch(ctx, ids); err != nil {
 		r.logger.Warn("memory touch failed", "error", err)
 	}
+	if !r.cfg.DisableMemoryFeedback {
+		for _, id := range ids {
+			if err := r.memories.RecordFeedback(ctx, id, memory.FeedbackEvent{
+				Event:     memory.FeedbackInjected,
+				Source:    "injection",
+				SessionID: sessionID,
+				Score:     scores[id],
+			}); err != nil {
+				r.logger.Warn("memory injection feedback failed", "id", id, "error", err)
+			}
+		}
+	}
 	return block + "\n\n" + prompt
+}
+
+func (r *Router) withMemoryHint(prompt string) string {
+	if !r.cfg.MemorySelfOrganize || r.memories == nil {
+		return prompt
+	}
+	if len(memory.ExtractRuleCandidates(prompt, 1)) == 0 {
+		return prompt
+	}
+	const hint = "## Memory Check\n" +
+		"This turn may contain durable information. If it does, search memory before writing and save inferred entries as candidates. Do not search every turn.\n\n"
+	return hint + prompt
 }
 
 func selectMemoryBrief(items []memory.Memory, max int) []memory.Memory {
@@ -502,6 +621,21 @@ func formatMemoryTable(items []memory.Memory) string {
 	return strings.TrimRight(body.String(), "\n")
 }
 
+func formatScoredMemoryTable(items []memory.ScoredMemory) string {
+	var body strings.Builder
+	body.WriteString("| ID | Score | Why | Content |\n")
+	body.WriteString("|---|---|---|---|\n")
+	for _, item := range items {
+		body.WriteString(fmt.Sprintf("| `%s` | %.2f | %s | %s |\n",
+			item.ID,
+			item.Score,
+			tableCell(strings.Join(item.Why, ", "), 80),
+			tableCell(item.Content, 100),
+		))
+	}
+	return strings.TrimRight(body.String(), "\n")
+}
+
 func memoryScopeLabel(scope memory.Scope) string {
 	if scope == memory.ScopeBot || scope == memory.ScopeGlobal {
 		return "bot"
@@ -563,9 +697,11 @@ func singleLine(value string) string {
 const memoryHelpText = "`/memory` — list active memories\n" +
 	"`/memory list pending|archived|all` — inspect other states\n" +
 	"`/memory search <query>` — search active memories\n" +
+	"`/memory explain <query>` — show why memories ranked\n" +
 	"`/memory show <id>` — view one memory\n" +
 	"`/memory approve <id>` — activate a candidate\n" +
 	"`/memory reject <id>` — archive a memory\n" +
 	"`/memory pin|unpin <id>` — keep a memory prominent\n" +
+	"`/memory good|bad <id>` — improve or reduce future ranking\n" +
 	"`/memory forget <id>` — start a two-step memory deletion\n" +
 	"`/remember [bot|chat|project] <text>` — add a memory"

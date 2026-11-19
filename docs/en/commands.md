@@ -246,6 +246,7 @@ nectar memory list [--status active|pending|archived|all] [--json]
 nectar memory get <id> [--json]
 nectar memory update <id> <new text> [--json]
 nectar memory approve|reject|pin|unpin <id>
+nectar memory feedback good|bad <id>
 nectar memory forget <id> --confirm
 ```
 
@@ -258,6 +259,9 @@ With multiple bots, pass `--bot ID` to select that bot's data directory and acce
 - In group chats, non-admin writes become candidates and review/pin/delete operations require an admin.
 - Deletion requires `--confirm` so agents cannot remove memory by accident.
 - Project/home paths are normalized to `${PROJECT_ROOT}` / `${HOME}`; other absolute paths are marked device-local.
+- `memory search --explain <query>` shows the BM25 score and rank reasons (matched terms, tags, pinned, feedback).
+- `memory feedback good|bad <id>` only adjusts future ranking and confidence; it never rewrites memory content.
+- Retrieval uses local BM25 rather than embeddings. Explicit preferences, corrections, and project facts are extracted into candidates by local rules; questions and one-off task state are skipped.
 
 ## Uninstall
 
@@ -356,11 +360,14 @@ Scheduled tasks are enabled by default. Management commands are limited to `bot.
 /memory
 /memory list [active|pending|archived|all]
 /memory search <query>
+/memory explain <query>
 /memory show <id>
 /memory approve <id>
 /memory reject <id>
 /memory pin <id>
 /memory unpin <id>
+/memory good <id>
+/memory bad <id>
 /memory forget <id> [confirm]
 /remember [bot|chat|project] <text>
 /forget <id> [confirm]
@@ -372,6 +379,8 @@ Scheduled tasks are enabled by default. Management commands are limited to `bot.
 - Global memories can only be approved, pinned, or deleted by an admin.
 - In group chats, non-admin `/remember` creates a pending candidate; review and deletion require an admin.
 - `/memory forget` is a two-step confirmation: the first call returns a confirmation card; the second call with `confirm` performs the deletion.
+- `/memory good|bad <id>` adjusts the memory's future ranking weight; the content is unchanged.
+- Memory retrieval uses BM25, and local rules turn explicit preferences, corrections, and project facts into candidates for review.
 
 Memories are stored in `~/.nectar/memory/memory.json` for inspection and backup.
 

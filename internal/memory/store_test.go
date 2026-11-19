@@ -432,3 +432,80 @@ func TestFileStoreConcurrentWriters(t *testing.T) {
 		t.Fatalf("items = %d, want %d", len(items), writers*perWriter)
 	}
 }
+
+func TestFileStoreFeedbackUpdatesAndRanks(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+	scope := "chat:feishu/c1"
+
+	good, err := store.Put(ctx, Memory{
+		Kind: KindFact, Scope: ScopeChat, ScopeID: scope,
+		Content: "部署使用 make release", Status: StatusActive, Confidence: 0.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := store.Put(ctx, Memory{
+		Kind: KindFact, Scope: ScopeChat, ScopeID: scope,
+		Content: "部署使用 make release", Status: StatusActive, Confidence: 0.5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put deduplicates identical content in the same scope, so create the second
+	// entry in a different scope to compare feedback ranking.
+	if bad.ID == good.ID {
+		bad, err = store.Put(ctx, Memory{
+			Kind: KindFact, Scope: ScopeProject, ScopeID: "project:nectar",
+			Content: "部署使用 make release", Status: StatusActive, Confidence: 0.5,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := store.RecordFeedback(ctx, good.ID, FeedbackEvent{Event: FeedbackUseful, Source: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	updated, ok, err := store.Get(ctx, good.ID)
+	if err != nil || !ok {
+		t.Fatalf("get useful: ok=%v err=%v", ok, err)
+	}
+	if updated.UsefulCount != 1 || updated.Confidence <= 0.5 {
+		t.Fatalf("useful feedback = %#v", updated)
+	}
+	if err := store.RecordFeedback(ctx, bad.ID, FeedbackEvent{Event: FeedbackHarmful, Source: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	updatedBad, _, err := store.Get(ctx, bad.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updatedBad.HarmfulCount != 1 || updatedBad.Confidence >= 0.5 {
+		t.Fatalf("harmful feedback = %#v", updatedBad)
+	}
+
+	results, err := store.Search(ctx, SearchOptions{
+		Query: "部署 make release", ScopeIDs: []string{scope, "project:nectar"}, Limit: 5, Now: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) < 2 || results[0].ID != good.ID {
+		t.Fatalf("feedback ranking = %#v", results)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "memory", "feedback.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), FeedbackUseful) || !strings.Contains(string(data), FeedbackHarmful) {
+		t.Fatalf("feedback log = %s", data)
+	}
+}

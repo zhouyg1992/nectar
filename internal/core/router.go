@@ -30,23 +30,27 @@ const (
 )
 
 type RouterConfig struct {
-	BotID                  string
-	AgentID                string
-	BotName                string
-	Version                string
-	ModelName              string
-	ContextWindow          int
-	CardUpdateInterval     time.Duration
-	QueueNoticeDelay       time.Duration
-	EngineOptions          engine.EngineOptions
-	AdminUsers             []string
-	DataDir                string
-	APISocket              string
-	WorkspaceLocks         *execguard.WorkspaceLocks
-	MemoryMaxItems         int
-	MemoryMaxChars         int
-	MemoryDefaultScope     string
-	DisableMemoryAutoLearn bool
+	BotID                    string
+	AgentID                  string
+	BotName                  string
+	Version                  string
+	ModelName                string
+	ContextWindow            int
+	CardUpdateInterval       time.Duration
+	QueueNoticeDelay         time.Duration
+	EngineOptions            engine.EngineOptions
+	AdminUsers               []string
+	DataDir                  string
+	APISocket                string
+	WorkspaceLocks           *execguard.WorkspaceLocks
+	MemoryMaxItems           int
+	MemoryMaxChars           int
+	MemoryDefaultScope       string
+	DisableMemoryAutoLearn   bool
+	DisableMemoryRuleExtract bool
+	DisableMemoryFeedback    bool
+	MemoryMaxCandidates      int
+	MemorySelfOrganize       bool
 }
 
 type sessionRun struct {
@@ -131,6 +135,9 @@ func NewRouter(
 	}
 	if strings.TrimSpace(cfg.MemoryDefaultScope) == "" {
 		cfg.MemoryDefaultScope = "bot"
+	}
+	if cfg.MemoryMaxCandidates <= 0 {
+		cfg.MemoryMaxCandidates = 2
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -840,6 +847,9 @@ func (r *Router) execute(ctx context.Context, key SessionKey, sessionID, runID s
 		_ = r.reply(msg, "⚠️ 附件发送失败: "+mediaErr.Error())
 	}
 
+	if !r.cfg.DisableMemoryRuleExtract {
+		r.extractRuleMemories(msg, lessonPrompt, projectRoot)
+	}
 	if len(errTexts) > 0 && ctx.Err() == nil {
 		r.recordLesson(msg, lessonPrompt, strings.Join(errTexts, "\n"), projectRoot)
 	}

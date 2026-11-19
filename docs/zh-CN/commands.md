@@ -232,6 +232,7 @@ nectar memory list [--status active|pending|archived|all] [--json]
 nectar memory get <id> [--json]
 nectar memory update <id> <new text> [--json]
 nectar memory approve|reject|pin|unpin <id>
+nectar memory feedback good|bad <id>
 nectar memory forget <id> --confirm
 ```
 
@@ -243,6 +244,9 @@ nectar memory forget <id> --confirm
 - `bot` / `global` 记忆仅管理员可写、审核、固定和删除。
 - 群聊中非管理员的写入会变为 `candidate`，审核、固定和删除也需要管理员。
 - 删除必须显式传 `--confirm`，避免 Agent 误删。
+- `memory search --explain <query>` 会显示 BM25 分数和命中原因（命中词、标签、pinned、反馈）。
+- `memory feedback good|bad <id>` 只调整后续排序和 confidence，不修改记忆正文。
+- 检索使用本地 BM25，不需要 embedding；普通消息中的显式偏好/纠正会由规则抽取写入 candidate，问题句和一次性任务会被跳过。
 - 项目/主目录路径会自动转换为 `${PROJECT_ROOT}` / `${HOME}` 模板；其他绝对路径标记为设备本地记忆。
 
 ## 卸载
@@ -332,11 +336,14 @@ Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当
 /memory
 /memory list [active|pending|archived|all]
 /memory search <query>
+/memory explain <query>
 /memory show <id>
 /memory approve <id>
 /memory reject <id>
 /memory pin <id>
 /memory unpin <id>
+/memory good <id>
+/memory bad <id>
 /memory forget <id> [confirm]
 /remember [bot|chat|project] <text>
 /forget <id> [confirm]
@@ -348,6 +355,8 @@ Nectar 按聊天、话题和引擎维护会话列表。`/new` 会新建一个当
 - `global` 记忆的审核、固定和删除也只允许管理员操作。
 - 群聊中非管理员 `/remember` 只创建 `pending` 候选，审核/删除需要管理员。
 - `/memory forget` 是两步确认：第一次只返回删除确认卡片，第二次带 `confirm` 才真正删除。
+- `/memory good|bad <id>` 调整该记忆在后续检索中的排序权重；记忆正文不会改变。
+- 记忆检索使用 BM25；显式偏好、纠正和项目事实会由本地规则抽取为 candidate，审核后才注入。
 
 记忆保存在 `~/.nectar/memory/memory.json`，便于查看、备份和后续同步。
 

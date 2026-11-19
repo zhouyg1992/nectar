@@ -187,6 +187,94 @@ func TestFormatMemoryTableIncludesScope(t *testing.T) {
 	}
 }
 
+func TestRouterExtractsRuleCandidate(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, memories := newTestRouterWithMemory(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1",
+		Text: "以后默认用中文回复",
+	})
+	waitForReplies(t, plat, 1)
+
+	var candidates []memory.Memory
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		candidates, err = memories.List(context.Background(), memory.ListOptions{Status: memory.StatusCandidate})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(candidates) > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("rule candidates = %#v", candidates)
+	}
+	if candidates[0].Kind != memory.KindProfile || candidates[0].Content != "以后默认用中文回复" {
+		t.Fatalf("rule candidate = %#v", candidates[0])
+	}
+}
+
+func TestRouterAddsMemoryCheckHintOnlyForDurableTurns(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, _ := newTestRouterWithMemory(t, eng, plat)
+	router.cfg.MemorySelfOrganize = true
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1",
+		Text: "以后默认用中文回复",
+	})
+	waitForReplies(t, plat, 1)
+	prompt, _ := eng.lastRequest()
+	if !strings.Contains(prompt, "## Memory Check") {
+		t.Fatalf("durable turn missing memory hint: %q", prompt)
+	}
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m2",
+		Text: "hello",
+	})
+	waitForReplies(t, plat, 2)
+	prompt, _ = eng.lastRequest()
+	if strings.Contains(prompt, "## Memory Check") {
+		t.Fatalf("ordinary turn should not get memory hint: %q", prompt)
+	}
+}
+
+func TestRouterMemoryFeedbackCommand(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, memories := newTestRouterWithMemory(t, eng, plat)
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m1",
+		Text: "/remember 用户喜欢吃苹果",
+	})
+	waitForReplies(t, plat, 1)
+	active, err := memories.List(context.Background(), memory.ListOptions{Status: memory.StatusActive})
+	if err != nil || len(active) != 1 {
+		t.Fatalf("active = %#v err=%v", active, err)
+	}
+
+	router.Handle(platform.Message{
+		Channel: "feishu", ChatID: "c1", MessageID: "m2",
+		Text: "/memory bad " + active[0].ID,
+	})
+	waitForReplies(t, plat, 2)
+	updated, ok, err := memories.Get(context.Background(), active[0].ID)
+	if err != nil || !ok {
+		t.Fatalf("get feedback: ok=%v err=%v", ok, err)
+	}
+	if updated.HarmfulCount != 1 {
+		t.Fatalf("harmful count = %d", updated.HarmfulCount)
+	}
+}
+
 func TestRouterDoesNotRepeatUnchangedMemoryBlock(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{}
