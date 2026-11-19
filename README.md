@@ -82,6 +82,20 @@ The installer is interactive. Choose an engine and platform (Feishu / Lark by de
 
 > The installer starts the background service by default. You do not need to run `nectar` manually.
 
+If you are not using the installer, write this minimal config to `~/.nectar/config.toml`:
+
+```toml
+[bot]
+engine = "codex"
+platform = "feishu"
+
+[feishu]
+app_id = "cli_your_app_id"
+app_secret = "your_app_secret"
+```
+
+Everything else has built-in defaults. Make sure the `codex` CLI is installed and logged in. See the [configuration reference](docs/en/config.md) for details.
+
 ### 3. Verify
 
 ```bash

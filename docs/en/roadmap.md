@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.6 complete
+
+- Memory system upgrade: local BM25 retrieval, match explanations, good/bad feedback ranking, and candidate extraction from ordinary conversations
+
 ## v0.10.5 complete
 
 - DingTalk card layout improvements: plain paragraphs fill the card width, and small tables (up to 8 columns and 50 rows) render as Markdown, fixing the gray header and width mismatch

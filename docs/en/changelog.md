@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.6 — 2026-11-19
+
+### Added
+
+- Memory retrieval now uses local BM25 with Chinese bigrams, tag and pinned ranking; `/memory explain` and `nectar memory search --explain` show why results matched
+- Added memory feedback ranking: `/memory good|bad` and `nectar memory feedback good|bad` adjust future ranking and confidence without rewriting memory content
+- Local rules extract explicit preferences, corrections, and project facts into pending candidates, skipping questions and one-off task state; new `rule_extract`, `agent_self_organize`, `feedback_enabled`, and `max_candidates_per_turn` settings
+
+### Changed
+
+- README now includes a minimal Feishu + Codex configuration example
+
 ## v0.10.5 — 2026-11-18
 
 ### Fixed

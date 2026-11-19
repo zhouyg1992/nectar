@@ -82,6 +82,20 @@ curl -fsSL https://raw.githubusercontent.com/zhouyg1992/nectar/main/install.sh |
 
 > 安装脚本默认会启动后台服务，不需要再手动运行 `nectar`。
 
+不使用安装器时，手动写入最小配置 `~/.nectar/config.toml`：
+
+```toml
+[bot]
+engine = "codex"
+platform = "feishu"
+
+[feishu]
+app_id = "cli_你的AppID"
+app_secret = "你的AppSecret"
+```
+
+其余项均有默认值；确保 `codex` CLI 已安装并登录。完整说明见 [配置参考](docs/zh-CN/config.md)。
+
 ### 3. 验证
 
 ```bash

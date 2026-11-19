@@ -137,7 +137,7 @@ Examples:
 ```bash
 nectar update
 nectar update --check
-nectar update --version v0.10.5
+nectar update --version v0.10.6
 nectar update --no-restart
 nectar update --timeout 15m --attempts 3
 ```

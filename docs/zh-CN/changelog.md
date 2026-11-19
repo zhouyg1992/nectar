@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.6 — 2026-11-19
+
+### 新增
+
+- 记忆检索改为本地 BM25，支持中文 bigram、标签和 pinned 排序；`/memory explain` 与 `nectar memory search --explain` 可查看命中原因
+- 新增记忆反馈排序：`/memory good|bad` 与 `nectar memory feedback good|bad` 调整后续排序和 confidence，不修改记忆正文
+- 本地规则会把显式偏好、纠正和项目事实抽取为待审核 candidate，跳过问题句和一次性任务；新增 `rule_extract`、`agent_self_organize`、`feedback_enabled`、`max_candidates_per_turn` 配置
+
+### 变更
+
+- README 增加飞书 + Codex 的最小配置示例
+
 ## v0.10.5 — 2026-11-18
 
 ### 修复
