@@ -67,7 +67,7 @@ nectar service uninstall
 ```bash
 nectar update
 nectar update --check
-nectar update --version v0.10.6
+nectar update --version v0.10.7
 nectar update --no-restart
 ```
 

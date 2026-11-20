@@ -1,5 +1,9 @@
 # Roadmap
 
+## v0.10.7 complete
+
+- Completion feedback now sends a separate `✅ Finished` message, giving Feishu card updates a visible completion notification and removing the message reaction permission dependency
+
 ## v0.10.6 complete
 
 - Memory system upgrade: local BM25 retrieval, match explanations, good/bad feedback ranking, and candidate extraction from ordinary conversations

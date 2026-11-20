@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.7 — 2026-11-20
+
+### Changed
+
+- Successful runs now send a separate `✅ Finished` message instead of adding a message reaction; Feishu card updates produce a visible completion notification, and send failures are logged without affecting the task result
+- Removed the unused completion-reaction interface and platform implementations; Feishu no longer requires message reaction permissions
+
 ## v0.10.6 — 2026-11-19
 
 ### Added
