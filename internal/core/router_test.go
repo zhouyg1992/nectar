@@ -28,6 +28,7 @@ type fakePlatform struct {
 	name            string
 	cards           bool
 	replies         []string
+	completions     []string
 	sentCards       []platform.Card
 	updates         []platform.Card
 	replyTargets    []string
@@ -73,6 +74,10 @@ func (f *fakePlatform) Send(_ context.Context, reply platform.Reply) (string, er
 	if reply.Card != nil {
 		f.sentCards = append(f.sentCards, *reply.Card)
 		return "card-1", nil
+	}
+	if reply.Text == completionMessageText {
+		f.completions = append(f.completions, reply.Text)
+		return "completion", nil
 	}
 	f.replies = append(f.replies, reply.Text)
 	return "reply", nil
@@ -194,20 +199,6 @@ type fakeEngine struct {
 	lastOpts   engine.EngineOptions
 	fail       bool
 	resumeErr  error
-}
-
-type reactionPlatform struct {
-	*fakePlatform
-	mu        sync.Mutex
-	reactions []string
-	reaction  error
-}
-
-func (p *reactionPlatform) AddCompletionReaction(_ context.Context, messageID string, _ platform.Reply) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.reactions = append(p.reactions, messageID)
-	return p.reaction
 }
 
 type blockingEngine struct {
@@ -623,8 +614,8 @@ func TestRouterAboutCardUsesFixedNectarIdentity(t *testing.T) {
 	}
 }
 
-func TestRouterAddsCompletionReactionOnlyForCompleteCards(t *testing.T) {
-	plat := &reactionPlatform{fakePlatform: &fakePlatform{cards: true}}
+func TestRouterSendsCompletionMessageOnlyForCompleteCards(t *testing.T) {
+	plat := &fakePlatform{cards: true}
 	eng := &fakeEngine{}
 	router, _ := newTestRouter(t, eng, plat)
 	msg := platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1"}
@@ -637,8 +628,8 @@ func TestRouterAddsCompletionReactionOnlyForCompleteCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	plat.mu.Lock()
-	if len(plat.reactions) != 1 || plat.reactions[0] != "card-1" {
-		t.Fatalf("completion reactions = %#v", plat.reactions)
+	if len(plat.completions) != 1 || plat.completions[0] != completionMessageText {
+		t.Fatalf("completion messages = %#v", plat.completions)
 	}
 	plat.mu.Unlock()
 
@@ -651,16 +642,24 @@ func TestRouterAddsCompletionReactionOnlyForCompleteCards(t *testing.T) {
 	}
 	plat.mu.Lock()
 	defer plat.mu.Unlock()
-	if len(plat.reactions) != 1 {
-		t.Fatalf("failure card added a reaction: %#v", plat.reactions)
+	if len(plat.completions) != 1 {
+		t.Fatalf("failure card added a completion message: %#v", plat.completions)
 	}
 }
 
-func TestRouterCompletionReactionFailureIsBestEffort(t *testing.T) {
-	plat := &reactionPlatform{
-		fakePlatform: &fakePlatform{cards: true},
-		reaction:     errors.New("reaction denied"),
+type completionErrorPlatform struct {
+	*fakePlatform
+}
+
+func (p *completionErrorPlatform) Send(ctx context.Context, reply platform.Reply) (string, error) {
+	if reply.Card == nil && reply.Text != "" {
+		return "", errors.New("completion message denied")
 	}
+	return p.fakePlatform.Send(ctx, reply)
+}
+
+func TestRouterCompletionMessageFailureIsBestEffort(t *testing.T) {
+	plat := &completionErrorPlatform{fakePlatform: &fakePlatform{cards: true}}
 	eng := &fakeEngine{}
 	router, _ := newTestRouter(t, eng, plat)
 
@@ -670,7 +669,30 @@ func TestRouterCompletionReactionFailureIsBestEffort(t *testing.T) {
 		&platform.Card{Status: platform.CardComplete, Title: cardTitleComplete, Body: "answer"},
 		"answer",
 	); err != nil {
-		t.Fatalf("reaction failure changed finish result: %v", err)
+		t.Fatalf("completion message failure changed finish result: %v", err)
+	}
+}
+
+func TestRouterSendsCompletionMessageAfterTextFallback(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _ := newTestRouter(t, eng, plat)
+
+	if err := router.finish(
+		platform.Message{Channel: "feishu", ChatID: "c1", MessageID: "m1"},
+		"",
+		&platform.Card{Status: platform.CardComplete, Title: cardTitleComplete, Body: "answer"},
+		"answer",
+	); err != nil {
+		t.Fatal(err)
+	}
+	plat.mu.Lock()
+	defer plat.mu.Unlock()
+	if len(plat.replies) != 1 || plat.replies[0] != "answer" {
+		t.Fatalf("replies = %#v", plat.replies)
+	}
+	if len(plat.completions) != 1 || plat.completions[0] != completionMessageText {
+		t.Fatalf("completion messages = %#v", plat.completions)
 	}
 }
 

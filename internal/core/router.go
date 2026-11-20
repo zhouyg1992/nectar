@@ -22,11 +22,13 @@ import (
 )
 
 const (
-	maxReplyBytes     = 60_000
-	cardTitleThinking = "🌼 Thinking..."
-	cardTitleWorking  = "🐝 Working..."
-	cardTitleComplete = "🍯 Complete"
-	cardTitleFailed   = "⚠️ Failed"
+	maxReplyBytes          = 60_000
+	cardTitleThinking      = "🌼 Thinking..."
+	cardTitleWorking       = "🐝 Working..."
+	cardTitleComplete      = "🍯 Complete"
+	cardTitleFailed        = "⚠️ Failed"
+	completionMessageText  = "✅ Finished"
+	completionMessageLimit = 5 * time.Second
 )
 
 type RouterConfig struct {
@@ -878,35 +880,37 @@ func (r *Router) finish(msg platform.Message, cardID string, card *platform.Card
 			ThreadID: msg.ThreadID,
 			Card:     card,
 		}); err == nil {
-			r.addCompletionReaction(msg, cardID, card)
+			r.sendCompletionMessage(msg, card)
 			return nil
 		} else {
 			r.logger.Error("update final card failed", "message_id", cardID, "error", err)
 			fallback := replyTarget(msg)
 			fallback.Card = card
-			if id, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
-				r.addCompletionReaction(msg, id, card)
+			if _, sendErr := r.platform.Send(r.ctx, fallback); sendErr == nil {
+				r.sendCompletionMessage(msg, card)
 				return nil
 			} else {
 				r.logger.Error("send final card failed", "chat", msg.ChatID, "error", sendErr)
 			}
 		}
 	}
-	return r.reply(msg, fallbackText)
+	if err := r.reply(msg, fallbackText); err != nil {
+		return err
+	}
+	r.sendCompletionMessage(msg, card)
+	return nil
 }
 
-func (r *Router) addCompletionReaction(msg platform.Message, messageID string, card *platform.Card) {
-	if card == nil || card.Status != platform.CardComplete || strings.TrimSpace(messageID) == "" {
+func (r *Router) sendCompletionMessage(msg platform.Message, card *platform.Card) {
+	if card == nil || card.Status != platform.CardComplete {
 		return
 	}
-	reactor, ok := r.platform.(platform.CompletionReactor)
-	if !ok {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), completionMessageLimit)
 	defer cancel()
-	if err := reactor.AddCompletionReaction(ctx, messageID, replyTarget(msg)); err != nil {
-		r.logger.Debug("add completion reaction failed", "message_id", messageID, "error", err)
+	reply := replyTarget(msg)
+	reply.Text = completionMessageText
+	if _, err := r.platform.Send(ctx, reply); err != nil {
+		r.logger.Debug("send completion message failed", "chat", msg.ChatID, "error", err)
 	}
 }
 
