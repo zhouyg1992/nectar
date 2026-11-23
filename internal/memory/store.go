@@ -149,9 +149,10 @@ func (s *FileStore) Get(ctx context.Context, id string) (Memory, bool, error) {
 	if err := s.readLocked(); err != nil {
 		return Memory{}, false, err
 	}
+	now := s.now()
 	for _, item := range s.items {
 		if item.ID == id && item.DeletedAt == nil {
-			return item, true, nil
+			return withEffectiveStatus(item, now), true, nil
 		}
 	}
 	return Memory{}, false, nil
@@ -172,6 +173,7 @@ func (s *FileStore) List(ctx context.Context, opts ListOptions) ([]Memory, error
 		if item.DeletedAt != nil || expired(item, now) {
 			continue
 		}
+		item = withEffectiveStatus(item, now)
 		if opts.Status != "" && item.Status != opts.Status {
 			continue
 		}
@@ -225,6 +227,7 @@ func (s *FileStore) SearchRanked(ctx context.Context, opts SearchOptions) ([]Sco
 		if item.DeletedAt != nil || expired(item, now) {
 			continue
 		}
+		item = withEffectiveStatus(item, now)
 		if opts.Status != "" {
 			if item.Status != opts.Status {
 				continue
@@ -484,6 +487,7 @@ func (s *FileStore) Counts(ctx context.Context, scopeIDs []string) (map[Status]i
 		if item.DeletedAt != nil || expired(item, now) || !inScopes(item, scopeIDs) {
 			continue
 		}
+		item = withEffectiveStatus(item, now)
 		counts[item.Status]++
 	}
 	return counts, nil
@@ -768,6 +772,25 @@ func localityForContent(content string) Locality {
 
 func expired(item Memory, now time.Time) bool {
 	return item.ExpiresAt != nil && !item.ExpiresAt.After(now)
+}
+
+// candidateReviewTTL keeps unreviewed candidates out of the queue after two
+// weeks. They remain stored and can still be restored from the archived view.
+const candidateReviewTTL = 14 * 24 * time.Hour
+
+func withEffectiveStatus(item Memory, now time.Time) Memory {
+	if item.Status != StatusCandidate {
+		return item
+	}
+	updated := item.UpdatedAt
+	if updated.IsZero() {
+		updated = item.CreatedAt
+	}
+	if updated.IsZero() || now.Sub(updated) <= candidateReviewTTL {
+		return item
+	}
+	item.Status = StatusArchived
+	return item
 }
 
 func newID() string {

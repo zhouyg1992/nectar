@@ -2,6 +2,7 @@ package memory
 
 import (
 	"strings"
+	"unicode"
 )
 
 // RuleCandidate is a deterministic, model-free memory candidate. Everything
@@ -21,35 +22,31 @@ type rulePattern struct {
 	tag        string
 }
 
+// rulePatterns deliberately stays narrow. Automatic extraction is
+// precision-first: a bare negation such as "不是" or a task acceptance
+// criterion is not a durable memory. Explicit remember/always phrasing is the
+// only signal strong enough to create a candidate without a model.
 var rulePatterns = []rulePattern{
 	{
-		markers:    []string{"记住", "以后", "默认", "请总是", "请始终", "别再", "不要再"},
+		markers:    []string{"记住", "以后", "今后", "从现在开始", "请总是", "请始终", "别再", "不要再", "下次不要"},
 		kind:       KindProfile,
 		confidence: 0.88,
 		tag:        "explicit",
-	},
-	{
-		markers:    []string{"我不喜欢", "我喜欢", "偏好", "习惯", "更喜欢", "希望以后"},
-		kind:       KindProfile,
-		confidence: 0.78,
-		tag:        "preference",
-	},
-	{
-		markers:    []string{"不对", "不是", "应该是", "改成", "改用", "别用", "不能用", "不要用"},
-		kind:       KindProfile,
-		confidence: 0.82,
-		tag:        "correction",
-	},
-	{
-		markers:    []string{"这个项目", "本项目", "技术栈", "部署", "端口", "路径", "仓库", "架构"},
-		kind:       KindProject,
-		confidence: 0.70,
-		tag:        "project",
 	},
 }
 
 var transientMarkers = []string{
 	"这次", "临时", "现在", "今天", "先试试", "帮我跑", "看一下", "看看这个",
+}
+
+var taskRequestMarkers = []string{
+	"帮我", "请你", "请帮", "麻烦", "检查", "验证", "排查", "修复", "复现",
+	"定位", "测试一下", "跑一下", "看一下", "看看", "审一下",
+}
+
+var taskSignalMarkers = []string{
+	"必须", "不能", "不要", "不是", "需要", "要求", "验收", "标准", "条件",
+	"过滤", "归因", "截图", "页面", "接口", "字段", "步骤", "清单", "用例",
 }
 
 // ExtractRuleCandidates extracts at most max explicit, durable-looking
@@ -58,6 +55,9 @@ var transientMarkers = []string{
 func ExtractRuleCandidates(text string, max int) []RuleCandidate {
 	text = strings.TrimSpace(text)
 	if text == "" || strings.HasPrefix(text, "/") || max <= 0 {
+		return nil
+	}
+	if looksLikeTaskRequest(text) {
 		return nil
 	}
 	var out []RuleCandidate
@@ -113,11 +113,6 @@ func matchRule(sentence string) (rulePattern, bool) {
 	if !found {
 		return rulePattern{}, false
 	}
-	// A sentence about the current project stays project-scoped even when it
-	// also contains an explicit "以后" marker.
-	if best.kind != KindProject && hasAny(lower, "这个项目", "本项目", "技术栈", "部署", "仓库") {
-		best.kind = KindProject
-	}
 	return best, true
 }
 
@@ -136,10 +131,81 @@ func isTransient(sentence string) bool {
 
 func isQuestion(sentence string) bool {
 	trimmed := strings.TrimSpace(sentence)
-	if strings.HasSuffix(trimmed, "?") || strings.HasSuffix(trimmed, "？") {
+	if strings.ContainsAny(trimmed, "?？") {
 		return true
 	}
-	return hasAny(strings.ToLower(trimmed), "什么", "怎么", "如何", "哪里", "哪个", "是否", "吗", "呢")
+	lower := strings.ToLower(trimmed)
+	if hasAny(lower, "请问", "想问", "问一下") {
+		return true
+	}
+	return hasAny(lower,
+		"什么", "怎么", "如何", "为什么", "为啥", "哪里", "哪个", "哪些",
+		"是否", "是不是", "能不能", "可不可以", "有没有", "要不要", "会不会",
+		"行不行", "对不对", "好不好", "多少", "几点", "几号", "咋",
+		"吗", "呢", "嘛",
+	)
+}
+
+// looksLikeTaskRequest detects one-off task descriptions such as checklists,
+// acceptance criteria, and explicit "check/fix this" requests. Those turns
+// describe what to do now, not what should persist across sessions.
+func looksLikeTaskRequest(text string) bool {
+	if hasChecklist(text) {
+		return true
+	}
+	lower := strings.ToLower(text)
+	if !hasAny(lower, taskRequestMarkers...) {
+		return false
+	}
+	return hasAny(lower, taskSignalMarkers...)
+}
+
+func hasChecklist(text string) bool {
+	items := 0
+	for _, line := range strings.Split(text, "\n") {
+		if hasListPrefix(strings.TrimSpace(line)) {
+			items++
+			if items >= 2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasListPrefix(line string) bool {
+	if line == "" {
+		return false
+	}
+	for _, prefix := range []string{"- ", "* ", "• ", "□ ", "☐ ", "[ ] ", "[x] ", "[X] "} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+
+	runes := []rune(line)
+	if len(runes) >= 2 && strings.ContainsRune("一二三四五六七八九十", runes[0]) {
+		switch runes[1] {
+		case '、', '.', '）', ')':
+			return true
+		}
+	}
+	if len(runes) >= 3 && runes[0] == '（' && unicode.IsDigit(runes[1]) && runes[2] == '）' {
+		return true
+	}
+
+	digits := 0
+	for digits < len(runes) && unicode.IsDigit(runes[digits]) {
+		digits++
+	}
+	if digits == 0 || digits >= len(runes) {
+		return false
+	}
+	switch runes[digits] {
+	case '.', '、', ')', '）':
+		return true
+	}
+	return false
 }
 
 func splitSentences(text string) []string {

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Memory candidate extraction is now precision-first: `rule_extract` is off by default, and when enabled it only extracts explicit "remember / from now on / always / never again" phrases; questions, checklists, acceptance criteria, and one-off task state no longer enter review
+- Near-duplicate candidates in the same scope are merged, active memories suppress new duplicates, and unreviewed candidates move to archived after 14 days
+
 ## v0.10.7 — 2026-11-20
 
 ### Changed

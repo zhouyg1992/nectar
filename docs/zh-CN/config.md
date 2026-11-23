@@ -253,15 +253,15 @@ default_scope = "bot"         # bot | chat | project；bot = 同一个 Bot 的�
 max_items = 6                 # 每轮最多注入多少条记忆
 max_chars = 1500              # 每轮记忆上下文的最大字符数
 auto_learn_failures = true    # 失败任务记录为 pending 候选，审核后才注入
-rule_extract = true           # 用本地规则从普通消息提取候选，无需外部模型
+rule_extract = false          # 仅提取显式的“记住/以后”类语句；默认关闭
 agent_self_organize = true    # 允许 Agent Skill 在必要时自行搜索/写入记忆
 feedback_enabled = true       # 记录 useful/harmful 反馈并参与排序
-max_candidates_per_turn = 2   # 每轮规则提取的候选上限
+max_candidates_per_turn = 1   # 每轮规则提取的候选上限
 ```
 
 记忆保存在 `~/.nectar/memory/memory.json`。默认 `/remember` 写入 bot scope，同一个 Bot 的单聊和群聊共享；设置 `default_scope = "chat"` 可退回按 chat 隔离，或用 `/remember chat <text>` 单次指定。`/remember project` 写入项目 scope。失败教训先进入 `candidate`，通过 `/memory approve <id>` 后才进入 `active` 并参与检索。
 
-检索使用本地 BM25（中文按二元组切词），不依赖 embedding 或外部模型。`rule_extract` 只提取显式、看起来长期有效的句子，问题句和一次性任务会被跳过。注入和显式反馈会写入 `~/.nectar/memory/feedback.jsonl`，用于排序和审计。
+检索使用本地 BM25（中文按二元组切词），不依赖 embedding 或外部模型。`rule_extract` 默认关闭；开启后也只提取显式的“记住/以后/请始终/别再”类语句，问句、清单、验收条件和一次性任务会被跳过。项目事实建议用 `/remember project` 或 Agent Skill 写入。未审核的 candidate 14 天后会自动从待审核列表移入 archived。注入和显式反馈会写入 `~/.nectar/memory/feedback.jsonl`，用于排序和审计。
 
 写入 Bot 级记忆需要管理员权限；`admin_users` 为空时不做限制。
 

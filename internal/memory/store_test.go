@@ -62,6 +62,65 @@ func TestFileStorePersistsAndSearches(t *testing.T) {
 	}
 }
 
+func TestFileStoreArchivesStaleCandidates(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return now }
+
+	candidate, err := store.Put(ctx, Memory{
+		Kind: KindProfile, Scope: ScopeChat, ScopeID: "chat:feishu/c1",
+		Content: "以后默认用中文回复", Status: StatusCandidate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := store.Put(ctx, Memory{
+		Kind: KindProfile, Scope: ScopeChat, ScopeID: "chat:feishu/c1",
+		Content: "以后默认走 pnpm", Status: StatusActive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := store.List(ctx, ListOptions{Status: StatusCandidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].ID != candidate.ID {
+		t.Fatalf("pending before TTL = %#v", pending)
+	}
+
+	now = now.Add(candidateReviewTTL + time.Hour)
+	pending, err = store.List(ctx, ListOptions{Status: StatusCandidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending after TTL = %#v", pending)
+	}
+	archived, err := store.List(ctx, ListOptions{Status: StatusArchived})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(archived) != 1 || archived[0].ID != candidate.ID {
+		t.Fatalf("archived after TTL = %#v", archived)
+	}
+	got, ok, err := store.Get(ctx, candidate.ID)
+	if err != nil || !ok {
+		t.Fatalf("get stale candidate: ok=%v err=%v", ok, err)
+	}
+	if got.Status != StatusArchived {
+		t.Fatalf("stale candidate status = %s", got.Status)
+	}
+	if _, _, err := store.Get(ctx, active.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFileStoreSearchScopeStatusAndExpiry(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewFileStore(t.TempDir())

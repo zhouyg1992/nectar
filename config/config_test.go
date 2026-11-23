@@ -174,12 +174,18 @@ func TestMemoryDefaultsAndOverrides(t *testing.T) {
 	if !cfg.MemoryEnabled() || !cfg.MemoryAutoLearnFailures() {
 		t.Fatalf("memory defaults = %#v", cfg.Memory)
 	}
+	if cfg.MemoryRuleExtract() {
+		t.Fatal("rule extraction should be disabled by default")
+	}
+	if got := cfg.MemoryMaxCandidatesPerTurn(); got != 1 {
+		t.Fatalf("max candidates default = %d, want 1", got)
+	}
 	if cfg.Memory.MaxItems != 6 || cfg.Memory.MaxChars != 1500 {
 		t.Fatalf("memory limits = %#v", cfg.Memory)
 	}
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	body := "[memory]\nenabled = false\nauto_learn_failures = false\nmax_items = 3\nmax_chars = 600\n"
+	body := "[memory]\nenabled = false\nauto_learn_failures = false\nrule_extract = true\nmax_candidates_per_turn = 4\nmax_items = 3\nmax_chars = 600\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -189,6 +195,9 @@ func TestMemoryDefaultsAndOverrides(t *testing.T) {
 	}
 	if cfg.MemoryEnabled() || cfg.MemoryAutoLearnFailures() {
 		t.Fatalf("memory overrides = %#v", cfg.Memory)
+	}
+	if !cfg.MemoryRuleExtract() || cfg.MemoryMaxCandidatesPerTurn() != 4 {
+		t.Fatalf("rule extraction overrides = %#v", cfg.Memory)
 	}
 	if cfg.Memory.MaxItems != 3 || cfg.Memory.MaxChars != 600 {
 		t.Fatalf("memory limits = %#v", cfg.Memory)

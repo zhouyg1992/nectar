@@ -219,6 +219,70 @@ func TestRouterExtractsRuleCandidate(t *testing.T) {
 	}
 }
 
+func TestRouterSkipsTaskStateAndQuestionRuleCandidates(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, memories := newTestRouterWithMemory(t, eng, plat)
+	msg := platform.Message{Channel: "feishu", ChatID: "c1", UserID: "u1"}
+
+	for _, text := range []string{
+		"1. 头像是正常男性头像，不是无头像\n2. AppsFlyer 归因不是 NONE 或 organic",
+		"帮我检查这个页面，必须过滤 NONE 和 organic",
+		"cpu吃紧，我家SWAP是不是不起作用",
+		"AppsFlyer 归因不是 NONE 或 organic",
+	} {
+		router.extractRuleMemories(msg, text, "")
+	}
+
+	candidates, err := memories.List(context.Background(), memory.ListOptions{Status: memory.StatusCandidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("task state produced candidates = %#v", candidates)
+	}
+}
+
+func TestRouterDeduplicatesRuleCandidates(t *testing.T) {
+	plat := &fakePlatform{}
+	eng := &fakeEngine{}
+	router, _, memories := newTestRouterWithMemory(t, eng, plat)
+	msg := platform.Message{Channel: "feishu", ChatID: "c1", UserID: "u1"}
+
+	router.extractRuleMemories(msg, "以后默认用中文回复", "")
+	router.extractRuleMemories(msg, "以后默认用中文回复吧", "")
+
+	candidates, err := memories.List(context.Background(), memory.ListOptions{Status: memory.StatusCandidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("deduplicated candidates = %#v", candidates)
+	}
+	if len(candidates[0].Evidence) != 2 {
+		t.Fatalf("merged evidence = %#v", candidates[0].Evidence)
+	}
+
+	if _, err := memories.Put(context.Background(), memory.Memory{
+		Kind:       memory.KindProfile,
+		Scope:      memory.ScopeChat,
+		ScopeID:    "chat:feishu/c1",
+		Content:    "以后默认用中文回答",
+		Status:     memory.StatusActive,
+		Confidence: 0.9,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	router.extractRuleMemories(msg, "以后默认用中文回答。", "")
+	candidates, err = memories.List(context.Background(), memory.ListOptions{Status: memory.StatusCandidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("active memory should suppress new candidates = %#v", candidates)
+	}
+}
+
 func TestRouterAddsMemoryCheckHintOnlyForDurableTurns(t *testing.T) {
 	plat := &fakePlatform{}
 	eng := &fakeEngine{}
