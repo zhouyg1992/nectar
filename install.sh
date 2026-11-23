@@ -27,7 +27,8 @@ ENGINE_DEFS='codex|codex|Codex CLI
 opencode|opencode|OpenCode
 cursor|agent,cursor-agent|Cursor Agent CLI
 claude|claude|Claude Code
-pi|pi|Pi'
+pi|pi|Pi
+antigravity|agy|Antigravity CLI'
 
 PLATFORM_DEFS='feishu|Feishu / Lark
 dingtalk|DingTalk
@@ -44,7 +45,7 @@ Options:
   --version vX.Y.Z        install a specific release (default: latest)
   --dir DIR               install directory (default: ~/.local/bin)
   --config PATH           config path (default: ~/.nectar/config.toml)
-  --engine NAME           engine: codex, opencode, cursor, claude, pi
+  --engine NAME           engine: codex, opencode, cursor, claude, pi, antigravity
   --platform NAME         platform: feishu, dingtalk, telegram (default: interactive)
   --feishu-app-id ID      Feishu app_id
   --feishu-app-secret S   Feishu app_secret
@@ -352,6 +353,7 @@ engine_command() {
 	cursor) printf 'agent,cursor-agent' ;;
 	claude) printf 'claude' ;;
 	pi) printf 'pi' ;;
+	antigravity) printf 'agy' ;;
 	*) return 1 ;;
 	esac
 }
@@ -375,6 +377,7 @@ normalize_engine() {
 	case "$1" in
 	agent | cursor-agent) printf 'cursor' ;;
 	claude-code) printf 'claude' ;;
+	agy) printf 'antigravity' ;;
 	*) printf '%s' "$1" ;;
 	esac
 }
@@ -386,6 +389,7 @@ engine_label() {
 	cursor) printf 'Cursor Agent CLI' ;;
 	claude) printf 'Claude Code' ;;
 	pi) printf 'Pi' ;;
+	antigravity) printf 'Antigravity CLI' ;;
 	*) printf '%s' "$1" ;;
 	esac
 }
@@ -425,7 +429,7 @@ select_engine() {
 			err "engine CLI not found in PATH: $(printf '%s' "$ENGINE_CMD" | tr ',' '/')"
 		return 0
 	fi
-	need_tty "--engine codex|opencode|cursor|claude|pi"
+	need_tty "--engine codex|opencode|cursor|claude|pi|antigravity"
 	choose_index "Select engine" "$DETECTED_COUNT" 1
 	DEF=$(printf '%s\n' "$DETECTED_DEFS" | sed -n "${CHOICE}p")
 	ENGINE=${DEF%%|*}
@@ -581,7 +585,7 @@ log "🍯 Nectar installer"
 step 1 "Detect installed engine CLIs"
 detect_engines
 if [ "$DETECTED_COUNT" -eq 0 ]; then
-	err "no supported engine CLI found in PATH (codex, opencode, agent/cursor-agent, claude, pi); install and log in to one engine, then rerun the installer"
+	err "no supported engine CLI found in PATH (codex, opencode, agent/cursor-agent, claude, pi, agy); install and log in to one engine, then rerun the installer"
 fi
 
 step 2 "Configure Nectar"

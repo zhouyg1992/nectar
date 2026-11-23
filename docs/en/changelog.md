@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added the Antigravity CLI (`agy`) engine: runs with `-p --output-format stream-json`, resumes with `--conversation`, and supports model, effort, agent, mode, sandbox, auto-approve, and token usage display; new `[antigravity]` config section and `ANTIGRAVITY_PATH`
+
 ## v0.10.7 — 2026-11-20
 
 ### Changed

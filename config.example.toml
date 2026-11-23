@@ -201,12 +201,42 @@ trust_workspace = true
 per_chat_workspace = false
 
 # ---------------------------------------------------------------------------
+# Antigravity CLI
+# ---------------------------------------------------------------------------
+[antigravity]
+# Executable name or absolute path. Default: agy.
+path = "agy"
+# Model slug passed as --model. Empty = Antigravity default.
+# model = "gemini-4-carbon-high"
+# Reasoning effort: low | medium | high | xhigh | max. Empty = model default.
+# effort = "high"
+# Agent name passed as --agent. Empty = default agent.
+# agent = "reviewer"
+# Execution mode: auto | plan | accept-edits. Empty = CLI default.
+# mode = "auto"
+# true = pass --sandbox (terminal sandbox restrictions).
+sandbox = false
+# true = pass --dangerously-skip-permissions. Required for unattended tool use
+# when your permissions.allow rules do not cover the task.
+auto_approve = true
+# Base workspace for agent runs. Default: ~/.nectar/workspace.
+working_dir = "~/.nectar/workspace"
+# Per-turn execution timeout. Default: 30m. Also passed as --print-timeout.
+timeout = "30m"
+# Maximum captured stdout bytes. Default: 2 MiB.
+max_output_bytes = 2097152
+# Context window used for the card footer. 0 = unknown/omit context usage.
+context_window = 0
+# true = create a separate subdirectory per chat under working_dir.
+per_chat_workspace = false
+
+# ---------------------------------------------------------------------------
 # Bot behavior
 # ---------------------------------------------------------------------------
 [bot]
 # Bot name. Default: Nectar.
 name = "Nectar"
-# Engine to use: codex | opencode | cursor | claude | pi.
+# Engine to use: codex | opencode | cursor | claude | pi | antigravity.
 engine = "codex"
 # Platform to use: feishu | dingtalk | telegram. Empty = auto-detect from credentials.
 # If both platforms have credentials, set this explicitly.

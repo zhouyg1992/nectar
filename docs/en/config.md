@@ -78,7 +78,7 @@ nectar service restart
 ```toml
 [bot]
 name = "Nectar"          # default: Nectar
-engine = "codex"         # codex | opencode | cursor | claude | pi
+engine = "codex"         # codex | opencode | cursor | claude | pi | antigravity
 # platform = "feishu"    # feishu | dingtalk | telegram; optional for a single platform
 admin_users = []
 allowed_chats = []
@@ -234,6 +234,26 @@ per_chat_workspace = false
 ```
 
 `trust_workspace = true` lets Pi load project-local settings, skills, context files, and extensions.
+
+### Antigravity CLI
+
+```toml
+[antigravity]
+path = "agy"
+model = ""                    # e.g. gemini-4-carbon-high; empty = Antigravity default
+effort = ""                   # low | medium | high | xhigh | max
+agent = ""                    # e.g. reviewer; empty = default agent
+mode = ""                     # auto | plan | accept-edits
+sandbox = false               # true enables the terminal sandbox
+auto_approve = true           # true = --dangerously-skip-permissions
+working_dir = "~/.nectar/workspace"
+timeout = "30m"               # also passed as --print-timeout
+max_output_bytes = 2097152
+context_window = 0            # 0 = unknown; footer omits context usage
+per_chat_workspace = false
+```
+
+Nectar runs `agy -p --output-format stream-json` and reads `conversation_id`, response text, and token usage from the `result` event. Sessions resume with `--conversation <id>`. Steering is not supported yet.
 
 ## Storage
 

@@ -5,7 +5,7 @@
 ## 前置条件
 
 - macOS 或 Linux，amd64 / arm64
-- 至少安装并登录一个引擎 CLI：Codex、Claude Code、Cursor Agent、OpenCode 或 Pi
+- 至少安装并登录一个引擎 CLI：Codex、Claude Code、Cursor Agent、OpenCode、Pi 或 Antigravity
 - 能访问 GitHub Releases
 - 需要 `curl` 或 `wget`、`tar`，以及 `sha256sum` 或 `shasum`
 
@@ -52,7 +52,7 @@ nectar service logs -f
 --version vX.Y.Z        安装指定版本（默认最新）
 --dir DIR               安装目录（默认 ~/.local/bin）
 --config PATH           配置文件路径（默认 ~/.nectar/config.toml）
---engine NAME           codex | opencode | cursor | claude | pi
+--engine NAME           codex | opencode | cursor | claude | pi | antigravity
 --platform NAME         feishu | dingtalk | telegram
 --feishu-app-id ID      飞书 app_id
 --feishu-app-secret S   飞书 app_secret

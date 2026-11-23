@@ -13,12 +13,13 @@ The installer detects installed engines. If none are found, it asks you to insta
 | Cursor Agent CLI | `[cursor]` | Existing Cursor subscriptions or Agent CLI |
 | OpenCode | `[opencode]` | OpenCode's provider / model setup |
 | Pi | `[pi]` | Pi provider and thinking configuration |
+| Antigravity CLI | `[antigravity]` | Google Antigravity (`agy`) with Gemini / Claude models |
 
 To switch engines, edit `~/.nectar/config.toml`:
 
 ```toml
 [bot]
-engine = "codex"   # codex | opencode | cursor | claude | pi
+engine = "codex"   # codex | opencode | cursor | claude | pi | antigravity
 ```
 
 Then restart the service:
@@ -69,6 +70,28 @@ backend = "stream-json"
 That mode uses `--input-format stream-json` to keep the process alive; `/steer` appends a user message to the same process. Set `backend = "print"` explicitly to use the old one-shot mode, which does not support steering.
 
 `auto_approve = true` maps to `--dangerously-skip-permissions` for unattended bot use. When disabled, Nectar passes `permission_mode` instead.
+
+## Antigravity CLI
+
+Install and log in to Antigravity CLI:
+
+```bash
+agy
+# Complete the Google sign-in prompt on first launch
+agy -p "Reply with exactly OK" --output-format json
+```
+
+Nectar runs `agy -p --output-format stream-json` and resumes with `--conversation <id>`. `auto_approve = true` maps to `--dangerously-skip-permissions`; `sandbox = true` enables the terminal sandbox. Steering is not supported yet: each headless stream input is a complete turn, with no in-turn steering semantics.
+
+```toml
+[antigravity]
+path = "agy"
+# model = "gemini-4-carbon-high"
+effort = "high"
+auto_approve = true
+```
+
+If the service environment cannot find `agy`, set `[antigravity].path` to an absolute path. When unauthenticated the CLI reports `authentication required`; run `agy` once as the same OS user that runs Nectar and complete the sign-in.
 
 ## Cursor Agent CLI
 
@@ -126,6 +149,6 @@ The RPC backend uses `pi --mode rpc`; `/steer` sends Pi's native `steer` command
 - **`command not found`**: make sure the engine CLI is on `PATH`; in service mode, prefer an absolute path in the config.
 - **Expired login**: log in again in a terminal, then restart the Nectar service.
 - **Stuck on Working**: run the verification command manually to rule out approvals, model, or network issues.
-- **Permission errors**: Cursor needs `--trust`, Claude needs `auto_approve` or a suitable `permission_mode`, and Pi needs `trust_workspace`.
+- **Permission errors**: Cursor needs `--trust`, Claude needs `auto_approve` or a suitable `permission_mode`, Pi needs `trust_workspace`, and Antigravity needs `auto_approve` or `permissions.allow` rules.
 
 Back to: [English README](../../README.md) · [Configuration](config.md) · [Commands](commands.md)

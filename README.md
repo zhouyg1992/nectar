@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Run multiple coding agents in the same repository — without stepping on each other.</strong><br>
-  Use Codex, Claude Code, Cursor Agent, OpenCode, or Pi from Feishu / Lark, DingTalk, or Telegram. Per-session worktrees, reviewable memory, and steering for running tasks.
+  Use Codex, Claude Code, Cursor Agent, OpenCode, Pi, or Antigravity from Feishu / Lark, DingTalk, or Telegram. Per-session worktrees, reviewable memory, and steering for running tasks.
 </p>
 
 <p align="center">
@@ -50,7 +50,7 @@ Requirements: macOS or Linux (Windows via WSL), `curl` or `wget`, `tar`, and one
 
 ### 1. Prepare one coding agent
 
-Install and log in to **one** of: **Codex, Claude Code, Cursor Agent, OpenCode, or Pi**. The installer detects installed engines.
+Install and log in to **one** of: **Codex, Claude Code, Cursor Agent, OpenCode, Pi, or Antigravity**. The installer detects installed engines.
 
 → [Engine setup and login checks](docs/en/engines.md)
 
@@ -145,6 +145,7 @@ The IDs above are Feishu examples: DingTalk uses `staffId` / `openConversationId
 | Cursor Agent CLI | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ Supported | `-p --output-format stream-json` / `--resume` |
 | Pi | ✅ Supported | `--mode json` / `--session` |
+| Antigravity CLI | ✅ Supported | `-p --output-format stream-json` / `--conversation` |
 | Kimi | 🚧 Planned | See [Roadmap](docs/en/roadmap.md) |
 
 ## Commands

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### 新增
+
+- 新增 Antigravity CLI（`agy`）引擎：使用 `-p --output-format stream-json` 流式执行，`--conversation` 续接会话，支持模型、effort、agent、mode、sandbox、自动批准和 token 用量展示；新增 `[antigravity]` 配置段与 `ANTIGRAVITY_PATH`
+
 ## v0.10.7 — 2026-11-20
 
 ### 变更

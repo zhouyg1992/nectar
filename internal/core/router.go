@@ -1399,6 +1399,8 @@ func engineDisplayName(name string) string {
 		return "Claude Code"
 	case "pi":
 		return "Pi"
+	case "antigravity":
+		return "Antigravity"
 	case "":
 		return "the configured agent"
 	default:

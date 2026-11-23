@@ -13,12 +13,13 @@ Nectar 不要求安装所有引擎。任选一个编程 Agent CLI，安装、登
 | Cursor Agent CLI | `[cursor]` | 已使用 Cursor 订阅或 Agent CLI |
 | OpenCode | `[opencode]` | 使用 OpenCode 的 provider / model 体系 |
 | Pi | `[pi]` | 使用 Pi 的 provider 和 thinking 配置 |
+| Antigravity CLI | `[antigravity]` | 使用 Google Antigravity（`agy`）和 Gemini / Claude 模型 |
 
 切换引擎时修改 `~/.nectar/config.toml`：
 
 ```toml
 [bot]
-engine = "codex"   # codex | opencode | cursor | claude | pi
+engine = "codex"   # codex | opencode | cursor | claude | pi | antigravity
 ```
 
 然后重启服务：
@@ -69,6 +70,28 @@ backend = "stream-json"
 该模式使用 `--input-format stream-json` 保持进程存活，`/steer` 会向同一进程追加用户消息。显式设置 `backend = "print"` 可回退到旧的一次性模式，但不支持插话。
 
 `auto_approve = true` 会映射为 `--dangerously-skip-permissions`，适合无人值守的 bot 场景；关闭时使用 `permission_mode`。
+
+## Antigravity CLI
+
+安装并登录 Antigravity CLI：
+
+```bash
+agy
+# 首次启动按提示完成 Google 登录
+agy -p "Reply with exactly OK" --output-format json
+```
+
+Nectar 通过 `agy -p --output-format stream-json` 执行任务，并用 `--conversation <id>` 续接会话。`auto_approve = true` 映射为 `--dangerously-skip-permissions`；`sandbox = true` 会启用终端沙箱。当前不支持 `/steer`：headless stream-json 的每个输入是一个完整 turn，没有运行中插话语义。
+
+```toml
+[antigravity]
+path = "agy"
+# model = "gemini-4-carbon-high"
+effort = "high"
+auto_approve = true
+```
+
+如果服务环境找不到 `agy`，把 `[antigravity].path` 设置为绝对路径。未登录时 CLI 会报 `authentication required`，用运行 Nectar 的同一系统用户先执行一次 `agy` 登录。
 
 ## Cursor Agent CLI
 
@@ -126,6 +149,6 @@ RPC backend 使用 `pi --mode rpc`，`/steer` 会发送 Pi 原生的 `steer` 命
 - **`command not found`**：确认引擎 CLI 在当前 shell 的 `PATH` 中；服务模式下建议在配置里使用绝对路径。
 - **登录失效**：先在终端重新登录对应 CLI，再重启 Nectar 服务。
 - **一直停在 Working**：用上面的验证命令手动运行一次，确认不是引擎本身在等待审批、模型或网络。
-- **权限不足**：Cursor 需要 `--trust`，Claude 需要 `auto_approve` 或合适的 `permission_mode`，Pi 需要 `trust_workspace`。
+- **权限不足**：Cursor 需要 `--trust`，Claude 需要 `auto_approve` 或合适的 `permission_mode`，Pi 需要 `trust_workspace`，Antigravity 需要 `auto_approve` 或 `permissions.allow` 规则。
 
 返回：[中文 README](../../README.zh-CN.md) · [配置参考](config.md) · [命令参考](commands.md)

@@ -508,6 +508,48 @@ func TestLoadRejectsInvalidPiThinking(t *testing.T) {
 	}
 }
 
+func TestAntigravityDefaultsAndSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	source := "[bot]\nengine = \"antigravity\"\n\n[antigravity]\nmodel = \"gemini-4-carbon-high\"\neffort = \"high\"\nagent = \"reviewer\"\nmode = \"accept_edits\"\nsandbox = true\nauto_approve = false\ncontext_window = 200000\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTIGRAVITY_PATH", "/opt/homebrew/bin/agy")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bot.Engine != "antigravity" {
+		t.Fatalf("bot = %#v", cfg.Bot)
+	}
+	if cfg.Antigravity.Path != "/opt/homebrew/bin/agy" || cfg.Antigravity.MaxOutputBytes <= 0 {
+		t.Fatalf("antigravity defaults = %#v", cfg.Antigravity)
+	}
+	if cfg.Antigravity.WorkingDir == "" || cfg.Antigravity.ContextWindow != 200000 {
+		t.Fatalf("antigravity config = %#v", cfg.Antigravity)
+	}
+	if cfg.Antigravity.Mode != "accept-edits" || !cfg.Antigravity.Sandbox || cfg.Antigravity.AutoApprove {
+		t.Fatalf("antigravity options = %#v", cfg.Antigravity)
+	}
+	timeout, err := cfg.AntigravityTimeout()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if timeout != 30*time.Minute {
+		t.Fatalf("antigravity timeout = %v", timeout)
+	}
+}
+
+func TestLoadRejectsInvalidAntigravityMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[antigravity]\nmode = \"yolo\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid antigravity.mode error")
+	}
+}
+
 func TestInvalidEngine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[bot]\nengine = \"unknown\"\n"), 0o600); err != nil {

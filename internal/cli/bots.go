@@ -159,6 +159,8 @@ func workspaceForEngine(cfg config.Config) string {
 		return cfg.Claude.WorkingDir
 	case "pi":
 		return cfg.Pi.WorkingDir
+	case "antigravity":
+		return cfg.Antigravity.WorkingDir
 	default:
 		return cfg.Codex.WorkingDir
 	}

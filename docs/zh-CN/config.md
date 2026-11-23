@@ -78,7 +78,7 @@ nectar service restart
 ```toml
 [bot]
 name = "Nectar"          # 默认 Nectar
-engine = "codex"         # codex | opencode | cursor | claude | pi
+engine = "codex"         # codex | opencode | cursor | claude | pi | antigravity
 # platform = "feishu"    # feishu | dingtalk | telegram；单平台可省略
 admin_users = []
 allowed_chats = []
@@ -234,6 +234,26 @@ per_chat_workspace = false
 ```
 
 `trust_workspace = true` 允许 Pi 加载项目内的设置、skills、上下文文件和扩展。
+
+### Antigravity CLI
+
+```toml
+[antigravity]
+path = "agy"
+model = ""                    # 例如 gemini-4-carbon-high；空则使用 Antigravity 默认模型
+effort = ""                   # low | medium | high | xhigh | max
+agent = ""                    # 例如 reviewer；空则使用默认 agent
+mode = ""                     # auto | plan | accept-edits
+sandbox = false               # true = 启用终端沙箱
+auto_approve = true           # true = --dangerously-skip-permissions
+working_dir = "~/.nectar/workspace"
+timeout = "30m"               # 同时作为 --print-timeout
+max_output_bytes = 2097152
+context_window = 0            # 0 = 未知，卡片底部省略上下文占比
+per_chat_workspace = false
+```
+
+Nectar 使用 `agy -p --output-format stream-json` 执行任务，并从 `result` 事件读取 `conversation_id`、响应和 token 用量。会话续接使用 `--conversation <id>`。当前不支持 `/steer`。
 
 ## 存储
 

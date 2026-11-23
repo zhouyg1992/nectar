@@ -5,7 +5,7 @@ If you are an AI agent installing Nectar on a user's behalf, follow [AGENT_INSTA
 ## Requirements
 
 - macOS or Linux, amd64 / arm64
-- At least one installed and logged-in engine CLI: Codex, Claude Code, Cursor Agent, OpenCode, or Pi
+- At least one installed and logged-in engine CLI: Codex, Claude Code, Cursor Agent, OpenCode, Pi, or Antigravity
 - Access to GitHub Releases
 - `curl` or `wget`, `tar`, and either `sha256sum` or `shasum`
 
@@ -52,7 +52,7 @@ Direct messages work without a mention; group messages require @Bot.
 --version vX.Y.Z        install a specific release (default: latest)
 --dir DIR               install directory (default: ~/.local/bin)
 --config PATH           config path (default: ~/.nectar/config.toml)
---engine NAME           codex | opencode | cursor | claude | pi
+--engine NAME           codex | opencode | cursor | claude | pi | antigravity
 --platform NAME         feishu | dingtalk | telegram
 --feishu-app-id ID      Feishu app_id
 --feishu-app-secret S   Feishu app_secret

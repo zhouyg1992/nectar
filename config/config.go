@@ -13,20 +13,21 @@ import (
 )
 
 type Config struct {
-	Feishu    FeishuConfig        `toml:"feishu"`
-	DingTalk  DingTalkConfig      `toml:"dingtalk"`
-	Telegram  TelegramConfig      `toml:"telegram"`
-	Codex     CodexConfig         `toml:"codex"`
-	OpenCode  OpenCodeConfig      `toml:"opencode"`
-	Cursor    CursorConfig        `toml:"cursor"`
-	Claude    ClaudeConfig        `toml:"claude"`
-	Pi        PiConfig            `toml:"pi"`
-	Bot       BotConfig           `toml:"bot"`
-	Bots      map[string]BotEntry `toml:"bots"`
-	Storage   StorageConfig       `toml:"storage"`
-	Memory    MemoryConfig        `toml:"memory"`
-	Schedule  ScheduleConfig      `toml:"schedule"`
-	Dashboard DashboardConfig     `toml:"dashboard"`
+	Feishu      FeishuConfig        `toml:"feishu"`
+	DingTalk    DingTalkConfig      `toml:"dingtalk"`
+	Telegram    TelegramConfig      `toml:"telegram"`
+	Codex       CodexConfig         `toml:"codex"`
+	OpenCode    OpenCodeConfig      `toml:"opencode"`
+	Cursor      CursorConfig        `toml:"cursor"`
+	Claude      ClaudeConfig        `toml:"claude"`
+	Pi          PiConfig            `toml:"pi"`
+	Antigravity AntigravityConfig   `toml:"antigravity"`
+	Bot         BotConfig           `toml:"bot"`
+	Bots        map[string]BotEntry `toml:"bots"`
+	Storage     StorageConfig       `toml:"storage"`
+	Memory      MemoryConfig        `toml:"memory"`
+	Schedule    ScheduleConfig      `toml:"schedule"`
+	Dashboard   DashboardConfig     `toml:"dashboard"`
 }
 
 type FeishuConfig struct {
@@ -120,6 +121,21 @@ type PiConfig struct {
 	MaxOutputBytes   int    `toml:"max_output_bytes"`
 	ContextWindow    int    `toml:"context_window"`
 	TrustWorkspace   bool   `toml:"trust_workspace"`
+	PerChatWorkspace bool   `toml:"per_chat_workspace"`
+}
+
+type AntigravityConfig struct {
+	Path             string `toml:"path"`
+	Model            string `toml:"model"`
+	Effort           string `toml:"effort"`
+	Agent            string `toml:"agent"`
+	Mode             string `toml:"mode"`
+	Sandbox          bool   `toml:"sandbox"`
+	AutoApprove      bool   `toml:"auto_approve"`
+	WorkingDir       string `toml:"working_dir"`
+	Timeout          string `toml:"timeout"`
+	MaxOutputBytes   int    `toml:"max_output_bytes"`
+	ContextWindow    int    `toml:"context_window"`
 	PerChatWorkspace bool   `toml:"per_chat_workspace"`
 }
 
@@ -232,6 +248,13 @@ func defaults() Config {
 			MaxOutputBytes: 2 << 20,
 			TrustWorkspace: true,
 		},
+		Antigravity: AntigravityConfig{
+			Path:           "agy",
+			WorkingDir:     filepath.Join(home, ".nectar", "workspace"),
+			Timeout:        "30m",
+			MaxOutputBytes: 2 << 20,
+			AutoApprove:    true,
+		},
 		Bot:     BotConfig{Name: "Nectar", WorkspaceMode: "shared"},
 		Storage: StorageConfig{DataDir: filepath.Join(home, ".nectar")},
 		Memory: MemoryConfig{
@@ -313,6 +336,10 @@ func (c Config) ClaudeTimeout() (time.Duration, error) {
 
 func (c Config) PiTimeout() (time.Duration, error) {
 	return parseTimeout("pi.timeout", c.Pi.Timeout)
+}
+
+func (c Config) AntigravityTimeout() (time.Duration, error) {
+	return parseTimeout("antigravity.timeout", c.Antigravity.Timeout)
 }
 
 func (c Config) ScheduleEnabled() bool {
@@ -468,6 +495,9 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("PI_PATH"); v != "" {
 		cfg.Pi.Path = v
 	}
+	if v := os.Getenv("ANTIGRAVITY_PATH"); v != "" {
+		cfg.Antigravity.Path = v
+	}
 	if v := os.Getenv("NECTAR_ENGINE"); v != "" {
 		cfg.Bot.Engine = v
 	}
@@ -480,6 +510,7 @@ func applyEnv(cfg *Config) {
 		cfg.Cursor.WorkingDir = v
 		cfg.Claude.WorkingDir = v
 		cfg.Pi.WorkingDir = v
+		cfg.Antigravity.WorkingDir = v
 	}
 }
 
@@ -501,6 +532,9 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	if cfg.Pi.WorkingDir, err = expandHome(cfg.Pi.WorkingDir); err != nil {
+		return err
+	}
+	if cfg.Antigravity.WorkingDir, err = expandHome(cfg.Antigravity.WorkingDir); err != nil {
 		return err
 	}
 	if cfg.Storage.DataDir == "" {
@@ -555,6 +589,9 @@ func normalize(cfg *Config) error {
 	if cfg.Pi.WorkingDir == "" {
 		return errors.New("pi.working_dir is required")
 	}
+	if cfg.Antigravity.WorkingDir == "" {
+		return errors.New("antigravity.working_dir is required")
+	}
 	if strings.TrimSpace(cfg.Codex.Path) == "" {
 		cfg.Codex.Path = "codex"
 	}
@@ -579,11 +616,22 @@ func normalize(cfg *Config) error {
 	if strings.TrimSpace(cfg.Pi.Path) == "" {
 		cfg.Pi.Path = "pi"
 	}
+	if strings.TrimSpace(cfg.Antigravity.Path) == "" {
+		cfg.Antigravity.Path = "agy"
+	}
 	switch mode := strings.TrimSpace(cfg.Cursor.Mode); mode {
 	case "", "plan", "ask":
 		cfg.Cursor.Mode = mode
 	default:
 		return fmt.Errorf("unsupported cursor.mode %q (supported: plan, ask)", mode)
+	}
+	switch mode := strings.ToLower(strings.TrimSpace(cfg.Antigravity.Mode)); mode {
+	case "", "auto", "plan", "accept-edits":
+		cfg.Antigravity.Mode = mode
+	case "accept_edits":
+		cfg.Antigravity.Mode = "accept-edits"
+	default:
+		return fmt.Errorf("unsupported antigravity.mode %q (supported: auto, plan, accept-edits)", mode)
 	}
 	switch sandbox := strings.TrimSpace(cfg.Cursor.Sandbox); sandbox {
 	case "", "enabled", "disabled":
@@ -663,9 +711,9 @@ func normalize(cfg *Config) error {
 		engine = "codex"
 	}
 	switch engine {
-	case "codex", "opencode", "cursor", "claude", "pi":
+	case "codex", "opencode", "cursor", "claude", "pi", "antigravity":
 	default:
-		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor, claude, pi)", engine)
+		return fmt.Errorf("unsupported bot.engine %q (supported: codex, opencode, cursor, claude, pi, antigravity)", engine)
 	}
 	cfg.Bot.Engine = engine
 	if cfg.Codex.MaxOutputBytes <= 0 {
@@ -683,6 +731,9 @@ func normalize(cfg *Config) error {
 	if cfg.Pi.MaxOutputBytes <= 0 {
 		return errors.New("pi.max_output_bytes must be positive")
 	}
+	if cfg.Antigravity.MaxOutputBytes <= 0 {
+		return errors.New("antigravity.max_output_bytes must be positive")
+	}
 	if _, err := cfg.Timeout(); err != nil {
 		return err
 	}
@@ -696,6 +747,9 @@ func normalize(cfg *Config) error {
 		return err
 	}
 	if _, err := cfg.PiTimeout(); err != nil {
+		return err
+	}
+	if _, err := cfg.AntigravityTimeout(); err != nil {
 		return err
 	}
 	return nil

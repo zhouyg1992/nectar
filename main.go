@@ -17,6 +17,7 @@ import (
 	"github.com/zhouyg1992/nectar/internal/core/decision"
 	"github.com/zhouyg1992/nectar/internal/dashboard"
 	"github.com/zhouyg1992/nectar/internal/engine"
+	"github.com/zhouyg1992/nectar/internal/engine/antigravity"
 	"github.com/zhouyg1992/nectar/internal/engine/claude"
 	"github.com/zhouyg1992/nectar/internal/engine/codex"
 	"github.com/zhouyg1992/nectar/internal/engine/cursor"
@@ -892,6 +893,41 @@ func setupEngineByName(cfg config.Config, name string) (engineSetup, error) {
 			contextWindow:    cfg.Pi.ContextWindow,
 			workspaceDir:     cfg.Pi.WorkingDir,
 			perChatWorkspace: cfg.Pi.PerChatWorkspace,
+		}, nil
+	case "antigravity":
+		timeout, err := cfg.AntigravityTimeout()
+		if err != nil {
+			return engineSetup{}, err
+		}
+		model := strings.TrimSpace(cfg.Antigravity.Model)
+		if model == "" {
+			model = "antigravity"
+		}
+		return engineSetup{
+			adapter: antigravity.NewAdapter(antigravity.Config{
+				Executable:     cfg.Antigravity.Path,
+				Model:          cfg.Antigravity.Model,
+				Effort:         cfg.Antigravity.Effort,
+				Agent:          cfg.Antigravity.Agent,
+				Mode:           cfg.Antigravity.Mode,
+				Sandbox:        cfg.Antigravity.Sandbox,
+				AutoApprove:    cfg.Antigravity.AutoApprove,
+				WorkingDir:     cfg.Antigravity.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Antigravity.MaxOutputBytes,
+			}),
+			options: engine.EngineOptions{
+				Model:          cfg.Antigravity.Model,
+				Effort:         cfg.Antigravity.Effort,
+				WorkingDir:     cfg.Antigravity.WorkingDir,
+				Timeout:        timeout,
+				MaxOutputBytes: cfg.Antigravity.MaxOutputBytes,
+			},
+			name:             "antigravity",
+			model:            model,
+			contextWindow:    cfg.Antigravity.ContextWindow,
+			workspaceDir:     cfg.Antigravity.WorkingDir,
+			perChatWorkspace: cfg.Antigravity.PerChatWorkspace,
 		}, nil
 	default:
 		return engineSetup{}, fmt.Errorf("unsupported engine %q", name)

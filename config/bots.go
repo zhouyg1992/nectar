@@ -120,7 +120,7 @@ func (c Config) resolveBotEntry(key string, entry BotEntry) (ResolvedBot, error)
 		engine = "codex"
 	}
 	switch engine {
-	case "codex", "opencode", "cursor", "claude", "pi":
+	case "codex", "opencode", "cursor", "claude", "pi", "antigravity":
 	default:
 		return ResolvedBot{}, fmt.Errorf("bot %q has unsupported engine %q", id, engine)
 	}
@@ -304,6 +304,7 @@ func applyEngineWorkspace(cfg *Config, workspace string) {
 	cfg.Cursor.WorkingDir = workspace
 	cfg.Claude.WorkingDir = workspace
 	cfg.Pi.WorkingDir = workspace
+	cfg.Antigravity.WorkingDir = workspace
 }
 
 func applyEngineModel(cfg *Config, engineName, model string) {
@@ -318,6 +319,8 @@ func applyEngineModel(cfg *Config, engineName, model string) {
 		cfg.Claude.Model = model
 	case "pi":
 		cfg.Pi.Model = model
+	case "antigravity":
+		cfg.Antigravity.Model = model
 	}
 }
 

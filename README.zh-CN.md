@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>让多个编程 Agent 在同一个仓库里并行工作。</strong><br>
-  在飞书 / 钉钉 / Telegram 里使用 Codex、Claude Code、Cursor Agent、OpenCode 或 Pi：每个会话独立工作区，失败教训先审核再注入，任务运行中随时插话。
+  在飞书 / 钉钉 / Telegram 里使用 Codex、Claude Code、Cursor Agent、OpenCode、Pi 或 Antigravity：每个会话独立工作区，失败教训先审核再注入，任务运行中随时插话。
 </p>
 
 <p align="center">
@@ -50,7 +50,7 @@ Nectar 把聊天消息交给本机的编程 Agent 执行，再把过程和结果
 
 ### 1. 准备一个编程 Agent
 
-任选其一，安装并完成登录：**Codex、Claude Code、Cursor Agent、OpenCode 或 Pi**。安装器会检测本机已安装的引擎。
+任选其一，安装并完成登录：**Codex、Claude Code、Cursor Agent、OpenCode、Pi 或 Antigravity**。安装器会检测本机已安装的引擎。
 
 → [各引擎安装与登录验证](docs/zh-CN/engines.md)
 
@@ -145,6 +145,7 @@ nectar service restart
 | Cursor Agent CLI | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Claude Code | ✅ 已支持 | `-p --output-format stream-json` / `--resume` |
 | Pi | ✅ 已支持 | `--mode json` / `--session` |
+| Antigravity CLI | ✅ 已支持 | `-p --output-format stream-json` / `--conversation` |
 | Kimi | 🚧 计划中 | 见 [Roadmap](docs/zh-CN/roadmap.md) |
 
 ## 命令
