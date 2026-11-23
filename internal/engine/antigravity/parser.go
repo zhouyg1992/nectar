@@ -95,9 +95,10 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 
 	total := 0
 	conversationID := ""
-	deltaText := ""
+	var deltaText strings.Builder
 	var lastStepUsage *rawUsage
 	seenTools := make(map[string]bool)
+	seenResults := make(map[string]bool)
 	sentDone := false
 
 	emitSession := func(id string) {
@@ -137,17 +138,17 @@ func Parse(r io.Reader, emit func(engine.Event), maxOutputBytes int) error {
 				lastStepUsage = step.Usage
 			}
 			if step.StepType == "agent_response" && step.TextDelta != "" {
-				deltaText += step.TextDelta
+				deltaText.WriteString(step.TextDelta)
 				emit(engine.Event{Type: engine.EventTextDelta, Text: step.TextDelta})
 			}
-			emitToolStep(step, seenTools, emit)
+			emitToolStep(step, seenTools, seenResults, emit)
 		case "result":
 			if event.Result == nil {
 				continue
 			}
 			result := event.Result
 			emitSession(result.ConversationID)
-			if err := emitResult(result, deltaText, emit); err != nil {
+			if err := emitResult(result, deltaText.String(), emit); err != nil {
 				return err
 			}
 			if meta := usageMeta(lastStepUsage, result.Usage); meta != nil {
@@ -192,7 +193,7 @@ func emitResult(result *rawResult, deltaText string, emit func(engine.Event)) er
 	return nil
 }
 
-func emitToolStep(step *rawStepUpdate, seen map[string]bool, emit func(engine.Event)) {
+func emitToolStep(step *rawStepUpdate, seenTools, seenResults map[string]bool, emit func(engine.Event)) {
 	if step.StepType != "tool" || step.ToolInfo == nil {
 		return
 	}
@@ -206,8 +207,8 @@ func emitToolStep(step *rawStepUpdate, seen map[string]bool, emit func(engine.Ev
 	}
 
 	key := fmt.Sprintf("%d|%s", step.StepIndex, name)
-	if !seen[key] {
-		seen[key] = true
+	if !seenTools[key] {
+		seenTools[key] = true
 		emit(engine.Event{
 			Type: engine.EventToolCall,
 			Text: toolSummary(name, info.Parameters),
@@ -237,6 +238,10 @@ func emitToolStep(step *rawStepUpdate, seen map[string]bool, emit func(engine.Ev
 	if step.State != "DONE" && status != "error" {
 		return
 	}
+	if seenResults[key] {
+		return
+	}
+	seenResults[key] = true
 	emit(engine.Event{
 		Type: engine.EventToolResult,
 		Text: text,

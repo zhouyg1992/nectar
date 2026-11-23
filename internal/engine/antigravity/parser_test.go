@@ -144,3 +144,35 @@ func TestParseRejectsMalformedJSON(t *testing.T) {
 		t.Fatal("expected malformed JSON error")
 	}
 }
+
+func TestParseDeduplicatesToolCallsAndErrorResults(t *testing.T) {
+	events := parseLines(t,
+		`{"event":"step_update","step_update":{"conversation_id":"c1","step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"false"},"error":{"type":"ExecError","message":"exit status 1"}}}}`,
+		`{"event":"step_update","step_update":{"conversation_id":"c1","step_index":2,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"false"},"error":{"type":"ExecError","message":"exit status 1"}}}}`,
+		`{"event":"result","result":{"conversation_id":"c1","status":"SUCCESS","response":"done"}}`,
+	)
+
+	var calls, results int
+	for _, ev := range events {
+		switch ev.Type {
+		case engine.EventToolCall:
+			calls++
+		case engine.EventToolResult:
+			results++
+			if ev.Meta["status"] != "error" || ev.Text != "exit status 1" {
+				t.Fatalf("unexpected tool result = %#v", ev)
+			}
+		}
+	}
+	if calls != 1 || results != 1 {
+		t.Fatalf("calls=%d results=%d, want 1 and 1", calls, results)
+	}
+}
+
+func TestParseRejectsOutputOverLimit(t *testing.T) {
+	line := `{"event":"result","result":{"status":"SUCCESS","response":"hello"}}`
+	err := Parse(strings.NewReader(line), func(engine.Event) {}, 10)
+	if err == nil || !strings.Contains(err.Error(), "exceeded") {
+		t.Fatalf("err = %v, want exceeded limit error", err)
+	}
+}

@@ -633,6 +633,12 @@ func normalize(cfg *Config) error {
 	default:
 		return fmt.Errorf("unsupported antigravity.mode %q (supported: auto, plan, accept-edits)", mode)
 	}
+	switch effort := strings.ToLower(strings.TrimSpace(cfg.Antigravity.Effort)); effort {
+	case "", "low", "medium", "high", "xhigh", "max":
+		cfg.Antigravity.Effort = effort
+	default:
+		return fmt.Errorf("unsupported antigravity.effort %q (supported: low, medium, high, xhigh, max)", effort)
+	}
 	switch sandbox := strings.TrimSpace(cfg.Cursor.Sandbox); sandbox {
 	case "", "enabled", "disabled":
 		cfg.Cursor.Sandbox = sandbox

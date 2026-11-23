@@ -550,6 +550,16 @@ func TestLoadRejectsInvalidAntigravityMode(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidAntigravityEffort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[antigravity]\neffort = \"ultra\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected invalid antigravity.effort error")
+	}
+}
+
 func TestInvalidEngine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[bot]\nengine = \"unknown\"\n"), 0o600); err != nil {

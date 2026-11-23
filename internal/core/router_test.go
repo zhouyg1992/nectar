@@ -1185,6 +1185,7 @@ func TestRouterHelpCardUsesEngineDisplayName(t *testing.T) {
 		{engine: "cursor", want: "Cursor Agent"},
 		{engine: "claude", want: "Claude Code"},
 		{engine: "pi", want: "Pi"},
+		{engine: "antigravity", want: "Antigravity"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.engine, func(t *testing.T) {
