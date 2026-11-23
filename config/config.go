@@ -238,7 +238,7 @@ func defaults() Config {
 			MaxItems:             6,
 			MaxChars:             1500,
 			DefaultScope:         "bot",
-			MaxCandidatesPerTurn: 2,
+			MaxCandidatesPerTurn: 1,
 		},
 		Schedule: ScheduleConfig{
 			StartupGrace:  "5m",
@@ -328,7 +328,7 @@ func (c Config) MemoryAutoLearnFailures() bool {
 }
 
 func (c Config) MemoryRuleExtract() bool {
-	return c.Memory.RuleExtract == nil || *c.Memory.RuleExtract
+	return c.Memory.RuleExtract != nil && *c.Memory.RuleExtract
 }
 
 func (c Config) MemoryAgentSelfOrganize() bool {
@@ -341,7 +341,7 @@ func (c Config) MemoryFeedbackEnabled() bool {
 
 func (c Config) MemoryMaxCandidatesPerTurn() int {
 	if c.Memory.MaxCandidatesPerTurn <= 0 {
-		return 2
+		return 1
 	}
 	return c.Memory.MaxCandidatesPerTurn
 }
@@ -513,7 +513,7 @@ func normalize(cfg *Config) error {
 		cfg.Memory.MaxChars = 1500
 	}
 	if cfg.Memory.MaxCandidatesPerTurn <= 0 {
-		cfg.Memory.MaxCandidatesPerTurn = 2
+		cfg.Memory.MaxCandidatesPerTurn = 1
 	}
 	cfg.Memory.DefaultScope = strings.ToLower(strings.TrimSpace(cfg.Memory.DefaultScope))
 	if cfg.Memory.DefaultScope == "" {

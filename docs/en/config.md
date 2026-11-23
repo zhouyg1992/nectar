@@ -253,15 +253,15 @@ default_scope = "bot"         # bot | chat | project; bot shares across every ch
 max_items = 6                 # maximum memories injected per turn
 max_chars = 1500              # maximum memory context characters per turn
 auto_learn_failures = true    # record failures as pending candidates for review
-rule_extract = true           # extract candidates from ordinary turns without an external model
+rule_extract = false          # only explicit "remember / from now on" phrases; opt-in
 agent_self_organize = true    # let the agent skill search/write memory when needed
 feedback_enabled = true       # use useful/harmful feedback as a small ranking signal
-max_candidates_per_turn = 2   # maximum rule-extracted candidates per turn
+max_candidates_per_turn = 1   # maximum rule-extracted candidates per turn
 ```
 
 Memories are stored in `~/.nectar/memory/memory.json`. By default `/remember` writes bot-scoped memory shared by every chat handled by the same bot. Set `default_scope = "chat"` to isolate memories by chat, or use `/remember chat <text>` for one entry. `/remember project` writes project-scoped memory. Failure lessons start as `candidate` and only join retrieval after `/memory approve <id>`.
 
-Retrieval uses local BM25 with Chinese bigrams; it does not require embeddings or an external model. `rule_extract` only extracts explicit, durable-looking sentences and skips questions and one-off task state. Injected memories and explicit feedback are appended to `~/.nectar/memory/feedback.jsonl` for ranking and audit.
+Retrieval uses local BM25 with Chinese bigrams; it does not require embeddings or an external model. `rule_extract` is off by default; when enabled it only extracts explicit "remember / from now on / always / never again" phrases and skips questions, checklists, acceptance criteria, and one-off task state. Use `/remember project` or the agent skill for project facts. Unreviewed candidates move from the pending list to archived after 14 days. Injected memories and explicit feedback are appended to `~/.nectar/memory/feedback.jsonl` for ranking and audit.
 
 Writing bot-scoped memory requires an admin user; an empty `admin_users` list removes that restriction.
 

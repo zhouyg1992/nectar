@@ -139,7 +139,7 @@ func NewRouter(
 		cfg.MemoryDefaultScope = "bot"
 	}
 	if cfg.MemoryMaxCandidates <= 0 {
-		cfg.MemoryMaxCandidates = 2
+		cfg.MemoryMaxCandidates = 1
 	}
 	if logger == nil {
 		logger = slog.Default()

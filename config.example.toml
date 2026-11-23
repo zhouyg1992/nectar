@@ -276,16 +276,18 @@ max_chars = 1500
 # Record failed runs as pending memory candidates. Candidates are not injected
 # until an admin approves them with /memory approve <id>.
 auto_learn_failures = true
-# Extract durable-looking statements from normal turns into candidates without
-# calling an external model. Questions and one-off task state are skipped.
-rule_extract = true
+# Extract only explicit "remember this / from now on" statements into candidates
+# without calling an external model. Task descriptions, checklists, questions,
+# and bare corrections are skipped. Explicit /remember and the agent skill are
+# the preferred paths for durable memories.
+rule_extract = false
 # Let the agent skill decide when to search and write memory. This is
 # instruction-driven, not a per-turn background model call.
 agent_self_organize = true
 # Record useful/harmful feedback and use it as a small ranking signal.
 feedback_enabled = true
-# Maximum rule-extracted candidates per turn.
-max_candidates_per_turn = 2
+# Maximum rule-extracted candidates per turn. Rule extraction is opt-in.
+max_candidates_per_turn = 1
 
 # ---------------------------------------------------------------------------
 # Scheduled tasks

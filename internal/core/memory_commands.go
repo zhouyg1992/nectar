@@ -231,12 +231,55 @@ func (r *Router) extractRuleMemories(msg platform.Message, prompt, projectRoot s
 		return
 	}
 	candidates := memory.ExtractRuleCandidates(prompt, r.cfg.MemoryMaxCandidates)
+	if len(candidates) == 0 {
+		return
+	}
+	pending, err := r.memories.List(r.ctx, memory.ListOptions{
+		Status:   memory.StatusCandidate,
+		Scope:    memory.ScopeChat,
+		ScopeIDs: []string{scopeID},
+	})
+	if err != nil {
+		r.logger.Warn("list pending memory candidates failed", "error", err)
+	}
+	active, err := r.memories.List(r.ctx, memory.ListOptions{
+		Status:   memory.StatusActive,
+		ScopeIDs: []string{scopeID},
+	})
+	if err != nil {
+		r.logger.Warn("list active memories failed", "error", err)
+	}
 	for _, candidate := range candidates {
 		content, locality := memory.NormalizeContent(projectRoot, candidate.Content)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
-		_, err := r.memories.Put(r.ctx, memory.Memory{
+		if existing, ok := findSimilarMemory(active, content); ok {
+			r.logger.Debug("rule memory candidate already active", "memory_id", existing.ID)
+			continue
+		}
+		if existing, ok := findSimilarMemory(pending, content); ok {
+			merged, err := r.memories.Put(r.ctx, memory.Memory{
+				Kind:       existing.Kind,
+				Scope:      existing.Scope,
+				ScopeID:    existing.ScopeID,
+				ProjectID:  existing.ProjectID,
+				Content:    existing.Content,
+				Locality:   existing.Locality,
+				Tags:       candidate.Tags,
+				Source:     "rule:" + msg.Channel + "/" + msg.ChatID,
+				Evidence:   candidate.Evidence,
+				Confidence: candidate.Confidence,
+				Status:     memory.StatusCandidate,
+			})
+			if err != nil {
+				r.logger.Warn("merge rule memory candidate failed", "error", err)
+			} else {
+				pending = replaceMemory(pending, merged)
+			}
+			continue
+		}
+		item, err := r.memories.Put(r.ctx, memory.Memory{
 			Kind:       candidate.Kind,
 			Scope:      memory.ScopeChat,
 			ScopeID:    scopeID,
@@ -250,8 +293,29 @@ func (r *Router) extractRuleMemories(msg platform.Message, prompt, projectRoot s
 		})
 		if err != nil {
 			r.logger.Warn("rule memory candidate failed", "error", err)
+			continue
+		}
+		pending = append(pending, item)
+	}
+}
+
+func findSimilarMemory(items []memory.Memory, content string) (memory.Memory, bool) {
+	for _, item := range items {
+		if memory.SimilarContent(item.Content, content) {
+			return item, true
 		}
 	}
+	return memory.Memory{}, false
+}
+
+func replaceMemory(items []memory.Memory, replacement memory.Memory) []memory.Memory {
+	for i := range items {
+		if items[i].ID == replacement.ID {
+			items[i] = replacement
+			return items
+		}
+	}
+	return append(items, replacement)
 }
 
 func (r *Router) handleForget(msg platform.Message, id string) {
